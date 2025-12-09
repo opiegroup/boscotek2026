@@ -72,35 +72,17 @@ export const checkSession = async (): Promise<User | null> => {
 // --- DB SEEDING UTILITY (Crucial for first run) ---
 
 export const seedDatabase = async () => {
-  console.log("Starting DB Seed...");
-  
-  // 1. Seed Products
-  // We store the full JSON object in a 'data' column for flexibility
-  for (const prod of SEED_CATALOG) {
-    const { error } = await supabase
-      .from('products')
-      .upsert({ 
-        id: prod.id, 
-        name: prod.name, 
-        base_price: prod.basePrice,
-        data: prod 
-      }, { onConflict: 'id' });
-    
-    if (error) console.error("Error seeding product:", prod.name, error);
-  }
+  console.log("Starting DB Seed via Edge Function...");
+  const { error } = await supabase.functions.invoke('seed-catalog', {
+    body: {
+      products: SEED_CATALOG,
+      interiors: SEED_INTERIORS
+    }
+  });
 
-  // 2. Seed Interiors
-  for (const interior of SEED_INTERIORS) {
-    const { error } = await supabase
-      .from('drawer_interiors')
-      .upsert({ 
-        id: interior.id,
-        type: interior.type,
-        price: interior.price,
-        data: interior
-      }, { onConflict: 'id' });
-
-    if (error) console.error("Error seeding interior:", interior.id, error);
+  if (error) {
+    console.error("Seed function error:", error);
+    throw error;
   }
 
   console.log("Database Seeded Successfully.");
@@ -422,36 +404,32 @@ export const submitQuote = async (
   const gst = subtotal * 0.1;
   const total = subtotal + gst;
 
-  // Get next reference
-  const { count } = await supabase.from('quotes').select('*', { count: 'exact', head: true });
-  const reference = generateQuoteRef(count || 0);
+  const { data, error } = await supabase.functions.invoke('submit-quote', {
+    body: {
+      customer,
+      items,
+      totals: { subtotal, gst, total }
+    }
+  });
 
-  const newQuote: any = {
-    reference,
-    status: 'new',
-    customer_data: customer, // Mapped to JSONB column in Supabase
-    items_data: items,       // Mapped to JSONB column
-    totals: { subtotal, gst, total }
-  };
-
-  const { data, error } = await supabase.from('quotes').insert(newQuote).select().single();
-  
   if (error) {
     console.error("Quote Submit Error", error);
     throw error;
   }
 
-  // Helper to map DB snake_case back to camelCase types if needed, 
-  // but simpler to stick to JSONB retrieval
+  if (!data) {
+    throw new Error("No data returned from submit-quote function");
+  }
+
   return {
-    id: data.id,
-    reference: data.reference,
-    createdAt: data.created_at,
-    updatedAt: data.created_at,
-    status: data.status,
-    customer: data.customer_data,
-    items: data.items_data,
-    totals: data.totals
+    id: (data as any).id,
+    reference: (data as any).reference,
+    createdAt: (data as any).created_at,
+    updatedAt: (data as any).created_at,
+    status: (data as any).status,
+    customer: (data as any).customer_data,
+    items: (data as any).items_data,
+    totals: (data as any).totals
   };
 };
 
