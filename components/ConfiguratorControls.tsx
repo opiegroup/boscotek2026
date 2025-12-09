@@ -3,6 +3,8 @@ import React, { useMemo, useState } from 'react';
 import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet } from '../types';
 import { resolvePartitionCode } from '../data/catalog';
 import { useCatalog } from '../contexts/CatalogContext';
+import { calculateUsedHeight, filterInteriorsForDrawer, normalizeDrawerStack, summarizeDrawers } from '../services/drawerUtils';
+import { CheckboxField, ColorField, QtyListField, RadioField, SelectField } from './fields/OptionFields';
 
 interface ConfiguratorControlsProps {
   product: ProductDefinition;
@@ -51,58 +53,6 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
     };
   };
 
-  // Helper to filter partitions dynamically based on current selections
-  const getDynamicPartitionOptions = (widthMm: number, depthMm: number, drawerHeight: number) => {
-    const isDeep = depthMm > 700;
-    const depthType = isDeep ? 'D' : 'S';
-
-    return interiors.filter(p => {
-      // 1. Check visibility toggle (Admin)
-      if (p.isVisible === false) return false;
-
-      // 2. Match Dimensions
-      if (p.width_mm !== widthMm) return false;
-      if (p.depth_type !== depthType) return false;
-      
-      // 3. Match Height Capability
-      if (!p.supported_drawer_heights_mm.includes(drawerHeight)) return false;
-
-      return true;
-    });
-  };
-
-  // Helper: Sort Drawers (Smallest Top -> Largest Bottom)
-  // This means Ascending order of height in the list (Index 0 = Top)
-  const sortDrawers = (drawers: DrawerConfiguration[], group: OptionGroup): DrawerConfiguration[] => {
-     return [...drawers].sort((a, b) => {
-        const hA = group.options.find(o => o.id === a.id)?.meta?.front || 0;
-        const hB = group.options.find(o => o.id === b.id)?.meta?.front || 0;
-        return hA - hB; // Ascending
-     });
-  };
-
-  // Helper: Generate Text Summary
-  const getDrawerSummary = (drawers: DrawerConfiguration[], group?: OptionGroup) => {
-     if (!drawers.length) return 'Empty';
-     if (!group) return `${drawers.length} Drawers`;
-
-     const counts: Record<number, number> = {};
-     let totalHeight = 0;
-
-     drawers.forEach(d => {
-        const opt = group.options.find(o => o.id === d.id);
-        const h = opt?.meta?.front || 0;
-        counts[h] = (counts[h] || 0) + 1;
-        totalHeight += h;
-     });
-
-     const parts = Object.entries(counts)
-        .sort(([h1], [h2]) => Number(h2) - Number(h1)) // Descending for text summary usually looks better
-        .map(([h, c]) => `${c}×${h}mm`);
-     
-     return `${parts.join(', ')} (${totalHeight}mm)`;
-  };
-
   const SectionTitle = ({ title, step }: { title: string, step: number }) => (
     <h3 className="text-amber-500 text-sm font-bold uppercase tracking-wider mb-3 mt-6 border-b border-zinc-700 pb-1 flex justify-between">
       <span>{step}. {title}</span>
@@ -133,8 +83,9 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
 
      const drawerHeight = drawerOpt.meta?.front || 100;
      
-     let width = 710;
-     let depth = 755;
+    let width = 710;
+    let depth = 755;
+    let depthType: 'S' | 'D' = 'D';
      
      if (editingCabinet) {
         // Hardcode for BTCD.850.560 as per requirement
@@ -144,9 +95,10 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
         const dims = getCabinetDimensions();
         width = dims.width;
         depth = dims.depth;
-     }
-     
-     const allOptions = getDynamicPartitionOptions(width, depth, drawerHeight);
+    }
+    
+    depthType = depth > 700 ? 'D' : 'S';
+    const allOptions = filterInteriorsForDrawer(interiors, width, depthType, drawerHeight);
      const tabOptions = allOptions.filter(o => o.type === activeTab);
 
      const handleSelectInterior = (partId: string) => {
@@ -249,64 +201,13 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
      );
   };
 
-  // --- SUB-COMPONENT: QUANTITY LIST BUILDER (For Accessories) ---
-  const QuantityListBuilder = ({ group }: { group: OptionGroup }) => {
-     const values = (config.selections[group.id] as Record<string, number>) || {};
-
-     const handleQtyChange = (itemId: string, delta: number) => {
-        const currentQty = values[itemId] || 0;
-        const newQty = Math.max(0, currentQty + delta);
-        
-        const newValues = { ...values, [itemId]: newQty };
-        if (newQty === 0) delete newValues[itemId];
-        
-        onChange(group.id, newValues);
-     };
-
-     return (
-        <div className="space-y-2">
-           {group.options.map(opt => {
-              const qty = values[opt.id] || 0;
-              return (
-                 <div key={opt.id} className={`flex items-center justify-between p-3 rounded border transition-colors ${qty > 0 ? 'bg-zinc-800 border-amber-500/50' : 'bg-zinc-900 border-zinc-700'}`}>
-                    <div className="flex-1">
-                       <div className={`text-sm font-medium ${qty > 0 ? 'text-white' : 'text-zinc-400'}`}>{opt.label}</div>
-                       <div className="text-xs text-amber-500 font-bold">+${opt.priceDelta} ea</div>
-                    </div>
-                    
-                    <div className="flex items-center gap-3 bg-zinc-950 rounded px-2 py-1 border border-zinc-800">
-                       <button 
-                          onClick={() => handleQtyChange(opt.id, -1)}
-                          className={`w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-zinc-800 ${qty === 0 ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-200'}`}
-                          disabled={qty === 0}
-                       >
-                          -
-                       </button>
-                       <span className={`w-4 text-center text-sm font-mono font-bold ${qty > 0 ? 'text-amber-500' : 'text-zinc-500'}`}>{qty}</span>
-                       <button 
-                          onClick={() => handleQtyChange(opt.id, 1)}
-                          className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-zinc-800 text-zinc-200"
-                       >
-                          +
-                       </button>
-                    </div>
-                 </div>
-              );
-           })}
-        </div>
-     );
-  };
-
   // --- SUB-COMPONENT: DRAWER STACK BUILDER ---
   const DrawerStackBuilder = ({ group, currentConfig, currentProduct, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, currentProduct: ProductDefinition, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
     const capacity = getCabinetCapacity(currentProduct, currentConfig);
     
     const currentUsage = useMemo(() => {
-       return currentConfig.customDrawers.reduce((total, drawer) => {
-         const drawerOpt = group.options.find(o => o.id === drawer.id);
-         return total + (drawerOpt?.meta?.front || 0);
-       }, 0);
-    }, [currentConfig.customDrawers, group.options]);
+       return calculateUsedHeight(currentConfig.customDrawers, group);
+    }, [currentConfig.customDrawers, group]);
 
     const remaining = capacity - currentUsage;
     const usagePercent = Math.min(100, (currentUsage / capacity) * 100);
@@ -317,7 +218,7 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
       if (remaining >= (drawerOpt.meta?.front || 0)) {
          let newStack = [...currentConfig.customDrawers, { id: drawerId }];
          // AUTO SORT: Smallest at TOP (Index 0), Largest at BOTTOM (Index N)
-         newStack = sortDrawers(newStack, group);
+         newStack = normalizeDrawerStack(newStack, group);
          
          if (onDrawerStackChange) onDrawerStackChange(newStack);
       }
@@ -444,7 +345,7 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
      
      let finalDrawers = editingCabinet.configuration.customDrawers;
      if (group) {
-        finalDrawers = sortDrawers(finalDrawers, group);
+        finalDrawers = normalizeDrawerStack(finalDrawers, group);
      }
 
      const finalCabinet = {
@@ -569,7 +470,11 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
               )}
               
               {group.type === 'qty_list' && (
-                 <QuantityListBuilder group={group} />
+                <QtyListField 
+                  group={group} 
+                  values={(config.selections[group.id] as Record<string, number>) || {}} 
+                  onChange={(vals) => onChange(group.id, vals)} 
+                />
               )}
 
               {/* INDUSTRIAL WORKBENCH SPECIFIC: EMBEDDED CABINET TRIGGER */}
@@ -623,10 +528,12 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                                 >
                                    <div className="text-xs font-bold text-white mb-1">Left Cabinet</div>
                                    <div className="text-[10px] text-zinc-400">
-                                      {config.embeddedCabinets?.find(c => c.placement === 'left') 
-                                         ? getDrawerSummary(config.embeddedCabinets.find(c => c.placement === 'left')!.configuration.customDrawers, drawerGroup)
-                                         : 'Click to configure'
-                                      }
+                                     {(() => {
+                                       const leftCab = config.embeddedCabinets?.find(c => c.placement === 'left');
+                                       if (!leftCab) return 'Click to configure';
+                                       if (!drawerGroup) return 'Drawer set';
+                                       return summarizeDrawers(leftCab.configuration.customDrawers, drawerGroup);
+                                     })()}
                                    </div>
                                    {config.embeddedCabinets?.find(c => c.placement === 'left') && (
                                       <div className="absolute top-2 right-2 text-amber-500 text-xs font-bold">✓</div>
@@ -645,10 +552,12 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                                 >
                                    <div className="text-xs font-bold text-white mb-1">Right Cabinet</div>
                                    <div className="text-[10px] text-zinc-400">
-                                      {config.embeddedCabinets?.find(c => c.placement === 'right') 
-                                         ? getDrawerSummary(config.embeddedCabinets.find(c => c.placement === 'right')!.configuration.customDrawers, drawerGroup)
-                                         : 'Click to configure'
-                                      }
+                                     {(() => {
+                                       const rightCab = config.embeddedCabinets?.find(c => c.placement === 'right');
+                                       if (!rightCab) return 'Click to configure';
+                                       if (!drawerGroup) return 'Drawer set';
+                                       return summarizeDrawers(rightCab.configuration.customDrawers, drawerGroup);
+                                     })()}
                                    </div>
                                    {config.embeddedCabinets?.find(c => c.placement === 'right') && (
                                       <div className="absolute top-2 right-2 text-amber-500 text-xs font-bold">✓</div>
@@ -667,57 +576,22 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                 !(product.id === 'prod-workbench-industrial' && group.id === 'under_bench') && (
                  <>
                     {group.type === 'radio' && (
-                      <div className="grid grid-cols-1 gap-2">
-                        {visibleOptions.map((opt) => (
-                          <label
-                            key={opt.id}
-                            className={`
-                              flex items-center p-3 rounded-md cursor-pointer border transition-all
-                              ${config.selections[group.id] === opt.id 
-                                ? 'bg-zinc-800 border-amber-500' 
-                                : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'}
-                            `}
-                          >
-                            <input
-                              type="radio"
-                              name={group.id}
-                              value={opt.id}
-                              checked={config.selections[group.id] === opt.id}
-                              onChange={() => onChange(group.id, opt.id)}
-                              className="sr-only"
-                            />
-                            <div className="flex-1">
-                               <div className="flex justify-between items-center">
-                                  <span className={`font-bold mr-2 ${config.selections[group.id] === opt.id ? 'text-amber-500' : 'text-zinc-500'}`}>
-                                    {opt.label}
-                                  </span>
-                                  {opt.priceDelta && opt.priceDelta > 0 ? (
-                                    <span className="text-xs text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">+$ {opt.priceDelta}</span>
-                                  ) : null}
-                               </div>
-                               {opt.description && config.selections[group.id] === opt.id && (
-                                  <div className="text-xs text-zinc-400 mt-1">{opt.description}</div>
-                               )}
-                            </div>
-                          </label>
-                        ))}
-                      </div>
+                      <RadioField 
+                        group={group} 
+                        options={visibleOptions} 
+                        value={config.selections[group.id] as string} 
+                        onChange={(val) => onChange(group.id, val)} 
+                      />
                     )}
 
                     {group.type === 'select' && (
                       <div className="space-y-2">
-                        <select
-                          value={config.selections[group.id] as string || ''}
-                          onChange={(e) => onChange(group.id, e.target.value)}
-                          className="w-full bg-zinc-800 text-zinc-100 border border-zinc-600 rounded p-3 text-sm focus:border-amber-500 focus:outline-none"
-                        >
-                          <option value="" disabled>Select an option</option>
-                          {visibleOptions.map(opt => (
-                            <option key={opt.id} value={opt.id}>
-                              {opt.label} {opt.priceDelta && opt.priceDelta > 0 ? `(+$${opt.priceDelta})` : ''}
-                            </option>
-                          ))}
-                        </select>
+                        <SelectField 
+                          group={group} 
+                          options={visibleOptions} 
+                          value={(config.selections[group.id] as string) || ''} 
+                          onChange={(val) => onChange(group.id, val)} 
+                        />
                         {group.id === 'hanging_kits' && config.selections[group.id] && config.selections[group.id] !== 'none' && (
                            <div className="text-xs text-zinc-400 mt-2 bg-zinc-800 p-2 rounded border border-zinc-700">
                                ℹ️ {group.options.find(o => o.id === config.selections[group.id])?.description}
@@ -736,51 +610,27 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                        <div className="space-y-2">
                          {visibleOptions.map(opt => (
                            <div key={opt.id}>
-                             <label
-                                className={`
-                                  flex items-center p-3 rounded-md cursor-pointer border transition-all select-none
-                                  ${config.selections[group.id] === true ? 'bg-zinc-800 border-amber-500' : 'bg-transparent border-zinc-700 hover:border-zinc-500'}
-                                `}
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={config.selections[group.id] === true}
-                                  onChange={(e) => onChange(group.id, e.target.checked)}
-                                  className="w-5 h-5 accent-amber-500 rounded bg-zinc-700 border-zinc-600 mr-3"
-                                />
-                                <div className="flex-1">
-                                  <span className="block text-sm font-medium text-zinc-200">{opt.label}</span>
+                             <CheckboxField 
+                               option={opt} 
+                               checked={config.selections[group.id] === true} 
+                               onChange={(checked) => onChange(group.id, checked)} 
+                             />
+                             {group.id === 'mobility' && opt.id === 'castors' && config.selections[group.id] === true && (
+                                <div className="mt-2 text-xs text-yellow-500 bg-yellow-900/20 p-2 rounded border border-yellow-700/50">
+                                   ⚠️ <strong>Load rating reduced</strong> when mobile. Contact Opie for critical load applications.
                                 </div>
-                                {opt.priceDelta && opt.priceDelta > 0 && <span className="text-xs text-amber-500 font-bold">+${opt.priceDelta}</span>}
-                              </label>
-                              {group.id === 'mobility' && opt.id === 'castors' && config.selections[group.id] === true && (
-                                 <div className="mt-2 text-xs text-yellow-500 bg-yellow-900/20 p-2 rounded border border-yellow-700/50">
-                                    ⚠️ <strong>Load rating reduced</strong> when mobile. Contact Opie for critical load applications.
-                                 </div>
-                              )}
+                             )}
                            </div>
                          ))}
                        </div>
                     )}
 
                     {group.type === 'color' && (
-                      <div className="flex flex-wrap gap-2">
-                        {visibleOptions.map((opt) => (
-                          <button
-                            key={opt.id}
-                            onClick={() => onChange(group.id, opt.id)}
-                            title={opt.label}
-                            className={`
-                              w-8 h-8 rounded-full border-2 transition-all shadow-sm
-                              ${config.selections[group.id] === opt.id ? 'border-amber-500 scale-110' : 'border-zinc-600 hover:border-zinc-400'}
-                            `}
-                            style={{ backgroundColor: opt.value as string }}
-                          />
-                        ))}
-                        <div className="w-full text-xs text-zinc-500 mt-1 pl-1 font-mono">
-                          {group.options.find(o => o.id === config.selections[group.id])?.label}
-                        </div>
-                      </div>
+                      <ColorField 
+                        options={visibleOptions} 
+                        value={(config.selections[group.id] as string) || ''} 
+                        onChange={(val) => onChange(group.id, val)} 
+                      />
                     )}
                  </>
               )}

@@ -3,6 +3,8 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { supabase } from "./supabaseClient";
 import { ImportBatch, ImportItem, User, ImportStatus, ProductDefinition, DrawerInteriorOption, QuoteRequest, PricingResult, Quote, QuoteLineItem, CustomerDetails, QuoteStatus } from "../types";
 import { CATALOG as SEED_CATALOG, INTERIOR_OPTIONS as SEED_INTERIORS, resolvePartitionCode } from '../data/catalog';
+import { seedCatalog } from "./catalogApi";
+import { submitQuoteFunction } from "./quotesApi";
 
 const resolveGeminiApiKey = (): string | undefined => {
   if (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) {
@@ -73,12 +75,7 @@ export const checkSession = async (): Promise<User | null> => {
 
 export const seedDatabase = async () => {
   console.log("Starting DB Seed via Edge Function...");
-  const { error } = await supabase.functions.invoke('seed-catalog', {
-    body: {
-      products: SEED_CATALOG,
-      interiors: SEED_INTERIORS
-    }
-  });
+  const { error } = await seedCatalog(SEED_CATALOG, SEED_INTERIORS);
 
   if (error) {
     console.error("Seed function error:", error);
@@ -404,13 +401,7 @@ export const submitQuote = async (
   const gst = subtotal * 0.1;
   const total = subtotal + gst;
 
-  const { data, error } = await supabase.functions.invoke('submit-quote', {
-    body: {
-      customer,
-      items,
-      totals: { subtotal, gst, total }
-    }
-  });
+  const { data, error } = await submitQuoteFunction(customer, items, { subtotal, gst, total });
 
   if (error) {
     console.error("Quote Submit Error", error);
