@@ -1,0 +1,5 @@
+{
+  "name": "Boscotek Workbench Configurator v1",
+  "description": "A modular, embeddable React configurator for industrial workbenches featuring a 3D preview placeholder, real-time pricing, and reference code generation.",
+  "requestFramePermissions": []
+}

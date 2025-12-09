@@ -1,0 +1,827 @@
+
+import React, { useState, useRef, useMemo, useEffect } from 'react';
+import { Canvas, useFrame } from '@react-three/fiber';
+import { OrbitControls, Grid, ContactShadows, Environment, Float, Center, Text, useTexture } from '@react-three/drei';
+import * as THREE from 'three';
+import { ConfigurationState, ProductDefinition, DrawerConfiguration, EmbeddedCabinet } from '../types';
+import { getPartitionById } from '../data/catalog';
+
+// Fix for missing React Three Fiber types in JSX
+declare module 'react' {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      mesh: any;
+      boxGeometry: any;
+      meshStandardMaterial: any;
+      lineSegments: any;
+      edgesGeometry: any;
+      lineBasicMaterial: any;
+      cylinderGeometry: any;
+      planeGeometry: any;
+      circleGeometry: any;
+      meshBasicMaterial: any;
+      ambientLight: any;
+      directionalLight: any;
+      color: any;
+      [elemName: string]: any;
+    }
+  }
+}
+
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      group: any;
+      mesh: any;
+      boxGeometry: any;
+      meshStandardMaterial: any;
+      lineSegments: any;
+      edgesGeometry: any;
+      lineBasicMaterial: any;
+      cylinderGeometry: any;
+      planeGeometry: any;
+      circleGeometry: any;
+      meshBasicMaterial: any;
+      ambientLight: any;
+      directionalLight: any;
+      color: any;
+      [elemName: string]: any;
+    }
+  }
+}
+
+// --- TYPES & INTERFACES ---
+
+interface Viewer3DProps {
+  config: ConfigurationState;
+  product: ProductDefinition;
+  activeDrawerIndex: number | null;
+}
+
+type BackgroundMode = 'dark' | 'light' | 'photo';
+
+// --- HELPER: MATERIAL MAP ---
+const getMaterialColor = (id: string, type: 'frame' | 'facia' | 'worktop', product?: ProductDefinition, groupId?: string): string => {
+  if (type === 'worktop') {
+    if (id === 'top-oak' || id === 'iw-top-hardwood') return '#d97706'; 
+    if (id === 'top-ss' || id === 'iw-top-ss') return '#e4e4e7'; 
+    if (id === 'top-mild2' || id === 'iw-top-mild') return '#27272a'; 
+    if (id === 'top-mild3') return '#3f3f46'; 
+    if (id === 'top-galv') return '#9da6b0'; 
+    if (id === 'iw-top-formica') return '#f3f4f6'; 
+    if (id === 'iw-top-masonite') return '#7c5e42'; 
+    if (id === 'iw-top-duraloid') return '#525252'; 
+    return '#a1a1aa'; 
+  }
+  
+  if ((type === 'frame' || type === 'facia') && product && groupId) {
+     const group = product.groups.find(g => g.id === groupId);
+     const option = group?.options.find(o => o.id === id);
+     if (option && typeof option.value === 'string' && option.value.startsWith('#')) {
+        return option.value;
+     }
+  }
+
+  // Fallbacks
+  if (type === 'frame' || type === 'facia') {
+    if (id === 'col-mg') return '#373737';
+    if (id === 'col-sg') return '#E6E8E6';
+    if (id === 'col-blue-wedge') return '#5f7895';
+    if (id === 'col-charcoal') return '#363636';
+    if (id === 'col-black') return '#1a1a1a';
+    if (id === 'col-grey') return '#9ca3af';
+    if (id === 'col-white') return '#f3f4f6';
+    if (id === 'col-red') return '#b91c1c';
+    return '#999';
+  }
+  return '#999';
+};
+
+// ==========================================
+// 1. REUSABLE TEXTURES & MATERIALS
+// ==========================================
+
+const PegboardTexture = (color: string) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const ctx = canvas.getContext('2d');
+  if (ctx) {
+    ctx.fillStyle = color; 
+    ctx.fillRect(0, 0, 128, 128);
+    
+    // Draw Holes
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; 
+    const spacing = 16;
+    const radius = 2.5;
+    
+    for(let x = 8; x < 128; x += spacing) {
+      for(let y = 8; y < 128; y += spacing) {
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+};
+
+// ==========================================
+// 2. REUSABLE HD CABINET RENDERER
+// ==========================================
+
+const HollowBin = ({ width, height, depth, color }: { width: number, height: number, depth: number, color: string }) => {
+   const wallThick = 0.003;
+   const floorThick = 0.003;
+   const w = width - 0.004; 
+   const d = depth - 0.004;
+   const h = height - 0.005; 
+   
+   return (
+      <group position={[0, -height/2 + h/2, 0]}>
+         <mesh position={[0, -h/2 + floorThick/2, 0]}><boxGeometry args={[w, floorThick, d]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+         <mesh position={[0, 0, d/2 - wallThick/2]}><boxGeometry args={[w, h, wallThick]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+         <mesh position={[0, 0, -d/2 + wallThick/2]}><boxGeometry args={[w, h, wallThick]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+         <mesh position={[-w/2 + wallThick/2, 0, 0]}><boxGeometry args={[wallThick, h, d - wallThick*2]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+         <mesh position={[w/2 - wallThick/2, 0, 0]}><boxGeometry args={[wallThick, h, d - wallThick*2]} /><meshStandardMaterial color={color} roughness={0.5} /></mesh>
+      </group>
+   );
+};
+
+const PartitionGrid = ({ width, depth, height, rows, cols, showBins = false }: { width: number, depth: number, height: number, rows: number, cols: number, showBins?: boolean }) => {
+   const cellW = width / cols;
+   const cellD = depth / rows;
+   const wallThick = 0.002;
+   const creamColor = '#E8E8D8'; 
+   const binColor = '#2563eb'; 
+   const h = height - 0.01;
+
+   return (
+      <group position={[0, -height/2 + h/2, 0]}>
+         <mesh position={[0, 0, depth/2]}><boxGeometry args={[width, h, wallThick]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         <mesh position={[0, 0, -depth/2]}><boxGeometry args={[width, h, wallThick]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         <mesh position={[width/2, 0, 0]}><boxGeometry args={[wallThick, h, depth]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         <mesh position={[-width/2, 0, 0]}><boxGeometry args={[wallThick, h, depth]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         {Array.from({ length: rows - 1 }).map((_, i) => (
+             <mesh key={`r-${i}`} position={[0, 0, -depth/2 + (i+1)*cellD]}><boxGeometry args={[width, h, wallThick]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         ))}
+         {Array.from({ length: cols - 1 }).map((_, i) => (
+             <mesh key={`c-${i}`} position={[-width/2 + (i+1)*cellW, 0, 0]}><boxGeometry args={[wallThick, h, depth]} /><meshStandardMaterial color={creamColor} metalness={0.2} /></mesh>
+         ))}
+         {showBins && Array.from({ length: rows }).map((_, r) => 
+            Array.from({ length: cols }).map((_, c) => {
+               const isBinSlot = (r + c) % 2 === 1; 
+               if (!isBinSlot) return null;
+               return (
+                  <group key={`b-${r}-${c}`} position={[(c - cols/2 + 0.5) * cellW, 0, (r - rows/2 + 0.5) * cellD]}>
+                     <HollowBin width={cellW} depth={cellD} height={h * 0.9} color={binColor} />
+                  </group>
+               );
+            })
+         )}
+      </group>
+   );
+};
+
+const DrawerInterior = ({ interiorId, width, depth, height }: { interiorId?: string, width: number, depth: number, height: number }) => {
+   if (!interiorId) return null;
+   const interior = getPartitionById(interiorId);
+   if (!interior) return null;
+   const type = interior.type;
+   let rows = 3;
+   let cols = 3;
+   if (interior.cell_width_mm && interior.cell_depth_mm) {
+      const usableWidthMm = (width * 1000) + 10; 
+      const usableDepthMm = (depth * 1000) + 10;
+      cols = Math.floor(usableWidthMm / interior.cell_width_mm);
+      rows = Math.floor(usableDepthMm / interior.cell_depth_mm);
+   } else {
+      if (interior.layout_description.includes('75mm x 75mm')) { cols = Math.round(width / 0.075); rows = Math.round(depth / 0.075); } 
+      else if (interior.layout_description.includes('150mm')) { cols = Math.round(width / 0.15); rows = Math.round(depth / 0.15); }
+   }
+   if (cols < 1) cols = 1; if (rows < 1) rows = 1;
+   const cellW = width / cols;
+   const cellD = depth / rows;
+   
+   if (type === 'bin_set') {
+      const binColor = '#2563eb'; 
+      return (
+         <group position={[0, 0, 0]}>
+            {Array.from({ length: rows }).map((_, r) => 
+               Array.from({ length: cols }).map((_, c) => (
+                  <group key={`${r}-${c}`} position={[(c - cols/2 + 0.5) * cellW, 0, (r - rows/2 + 0.5) * cellD]}>
+                     <HollowBin width={cellW} depth={cellD} height={height * 0.8} color={binColor} />
+                  </group>
+               ))
+            )}
+         </group>
+      );
+   }
+   if (type === 'mixed_set') return <PartitionGrid width={width} depth={depth} height={height} rows={rows} cols={cols} showBins={true} />;
+   return <PartitionGrid width={width} depth={depth} height={height} rows={rows} cols={cols} showBins={false} />;
+};
+
+const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }: any) => {
+   const groupRef = useRef<THREE.Group>(null);
+   const gap = 0.004;
+   const faciaThick = 0.02;
+   const boxThick = 0.01;
+   const targetZ = isOpen ? depth * 0.6 : 0; 
+
+   useFrame((state, delta) => {
+      if (groupRef.current) {
+         groupRef.current.position.z = THREE.MathUtils.lerp(groupRef.current.position.z, targetZ, delta * 10);
+      }
+   });
+
+   const faciaMat = isGhost 
+      ? <meshStandardMaterial color={faciaColor} transparent opacity={0.05} depthWrite={false} roughness={0.1} />
+      : <meshStandardMaterial color={faciaColor} roughness={0.4} metalness={0.1} />;
+   const handleMat = isGhost
+      ? <meshStandardMaterial color="#e4e4e7" transparent opacity={0.05} depthWrite={false} />
+      : <meshStandardMaterial color="#e4e4e7" metalness={0.8} roughness={0.2} />;
+   const boxMat = isGhost
+      ? <meshStandardMaterial color="#71717a" transparent opacity={0.03} depthWrite={false} />
+      : <meshStandardMaterial color="#71717a" />;
+
+   return (
+      <group ref={groupRef}>
+         <mesh position={[0, 0, depth/2 - faciaThick/2]} castShadow={!isGhost}><boxGeometry args={[width - gap*2, height - gap*2, faciaThick]} />{faciaMat}</mesh>
+         <mesh position={[0, height/2 - 0.03, depth/2 + 0.005]}><boxGeometry args={[width - 0.1, 0.015, 0.01]} />{handleMat}</mesh>
+         <group position={[0, 0, -0.01]}> 
+            <mesh position={[0, -height/2 + boxThick/2 + gap, 0]}><boxGeometry args={[width - 0.05, boxThick, depth - 0.02]} />{boxMat}</mesh>
+            <mesh position={[0, 0, -depth/2 + boxThick/2]}><boxGeometry args={[width - 0.05, height - 0.02, boxThick]} />{boxMat}</mesh>
+            <mesh position={[-width/2 + 0.025 + boxThick/2, 0, 0]}><boxGeometry args={[boxThick, height - 0.02, depth - 0.02]} />{boxMat}</mesh>
+            <mesh position={[width/2 - 0.025 - boxThick/2, 0, 0]}><boxGeometry args={[boxThick, height - 0.02, depth - 0.02]} />{boxMat}</mesh>
+         </group>
+         {!isGhost && <DrawerInterior interiorId={config.interiorId} width={width - 0.06} depth={depth - 0.04} height={height - 0.02} />}
+      </group>
+   );
+};
+
+export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex }: any) => {
+  const plinthHeight = 0.05; 
+  const carcassThickness = 0.02; 
+  const apertureHeight = height - plinthHeight - carcassThickness; 
+  const isGhost = activeDrawerIndex !== null;
+  const shellMaterial = isGhost ? <meshStandardMaterial color={frameColor} transparent opacity={0.05} roughness={0.1} depthWrite={false} /> : <meshStandardMaterial color={frameColor} roughness={0.5} />;
+  const plinthMaterial = isGhost ? <meshStandardMaterial color="#1a1a1a" transparent opacity={0.05} /> : <meshStandardMaterial color="#1a1a1a" roughness={0.8} />;
+
+  const drawerStack = useMemo(() => {
+     const group = product.groups.find((grp: any) => grp.type === 'drawer_stack');
+     let totalStackHeight = 0;
+     config.customDrawers.forEach((d: any) => {
+        const o = group?.options.find((opt: any) => opt.id === d.id);
+        const hMm = o?.meta?.front || 100;
+        totalStackHeight += (hMm / 1000);
+     });
+     const verticalGap = Math.max(0, apertureHeight - totalStackHeight);
+     const startY = plinthHeight + (verticalGap / 2);
+     let currentY = startY; 
+     const stack = [];
+     const reversedDrawers = [...config.customDrawers].reverse();
+     for (let i = 0; i < reversedDrawers.length; i++) {
+        const d = reversedDrawers[i];
+        const originalIndex = config.customDrawers.length - 1 - i;
+        const o = group?.options.find((opt: any) => opt.id === d.id);
+        const hMm = o?.meta?.front || 100;
+        const h = hMm / 1000;
+        stack.push({ ...d, height: h, y: currentY + h/2, originalIndex });
+        currentY += h;
+     }
+     return stack;
+  }, [config.customDrawers, product, apertureHeight]);
+
+  return (
+    <group>
+      <group>
+         <mesh position={[0, height - carcassThickness/2, 0]} castShadow={!isGhost} receiveShadow><boxGeometry args={[width, carcassThickness, depth]} />{shellMaterial}</mesh>
+         <mesh position={[0, plinthHeight/2, -0.02]} castShadow={!isGhost} receiveShadow><boxGeometry args={[width, plinthHeight, depth - 0.05]} />{plinthMaterial}</mesh>
+         <mesh position={[0, height/2 + plinthHeight/2, -depth/2 + carcassThickness/2]} receiveShadow><boxGeometry args={[width, height - plinthHeight, carcassThickness]} />{shellMaterial}</mesh>
+         <mesh position={[-width/2 + carcassThickness/2, height/2 + plinthHeight/2, 0]} receiveShadow><boxGeometry args={[carcassThickness, height - plinthHeight, depth]} />{shellMaterial}</mesh>
+         <mesh position={[width/2 - carcassThickness/2, height/2 + plinthHeight/2, 0]} receiveShadow><boxGeometry args={[carcassThickness, height - plinthHeight, depth]} />{shellMaterial}</mesh>
+      </group>
+      <group position={[0, 0, 0]}>
+         {drawerStack.map((d, i) => {
+            const isActive = d.originalIndex === activeDrawerIndex;
+            const isDrawerGhost = isGhost && !isActive;
+            return <group key={i} position={[0, d.y, 0]}><Drawer3D config={d} width={width - carcassThickness*2 - 0.005} height={d.height} depth={depth - 0.05} faciaColor={faciaColor} isOpen={isActive} isGhost={isDrawerGhost} /></group>;
+         })}
+      </group>
+    </group>
+  );
+};
+
+// ==========================================
+// 3. WORKBENCH VISUALIZER COMPONENTS
+// ==========================================
+
+const WORKBENCH_LEG_SIZE = 0.06;
+const CASTOR_HEIGHT = 0.12;
+const FOOT_HEIGHT = 0.05; 
+
+const LevellingFoot = () => (
+  <group>
+    <mesh position={[0, 0.035, 0]}><cylinderGeometry args={[0.012, 0.012, 0.05, 8]} /><meshStandardMaterial color="#e4e4e7" metalness={0.8} roughness={0.3} /></mesh>
+    <mesh position={[0, 0.025, 0]}><cylinderGeometry args={[0.02, 0.02, 0.015, 6]} /><meshStandardMaterial color="#d4d4d8" metalness={0.7} roughness={0.3} /></mesh>
+    <mesh position={[0, 0.012, 0]}><cylinderGeometry args={[0.035, 0.04, 0.01, 16]} /><meshStandardMaterial color="#d4d4d8" metalness={0.6} roughness={0.3} /></mesh>
+    <mesh position={[0, 0.004, 0]}><cylinderGeometry args={[0.04, 0.04, 0.008, 16]} /><meshStandardMaterial color="#18181b" roughness={0.9} /></mesh>
+  </group>
+);
+
+const WorkbenchFrame = ({ width, height, depth, castors, colorHex, variant = 'heavy' }: { width: number, height: number, depth: number, castors: boolean, colorHex: string, variant?: 'heavy' | 'industrial' }) => {
+  const legOffset = castors ? CASTOR_HEIGHT : FOOT_HEIGHT;
+  const legMeshHeight = height - legOffset;
+  const legCenterY = legOffset + (legMeshHeight / 2);
+  const materialProps = { color: colorHex, roughness: 0.4, metalness: 0.1 };
+  const depthPos = (dir: 1 | -1) => dir * (depth / 2 - WORKBENCH_LEG_SIZE / 2);
+  const isIndustrial = variant === 'industrial';
+
+  return (
+    <group>
+      {/* 4 LEGS */}
+      {[[width / 2 - WORKBENCH_LEG_SIZE / 2, depthPos(1)], [-width / 2 + WORKBENCH_LEG_SIZE / 2, depthPos(1)], [width / 2 - WORKBENCH_LEG_SIZE / 2, depthPos(-1)], [-width / 2 + WORKBENCH_LEG_SIZE / 2, depthPos(-1)]].map((pos, i) => (
+        <group key={i} position={[pos[0] as number, 0, pos[1] as number]}>
+           <mesh position={[0, legCenterY, 0]} castShadow receiveShadow><boxGeometry args={[WORKBENCH_LEG_SIZE, legMeshHeight, WORKBENCH_LEG_SIZE]} /><meshStandardMaterial {...materialProps} /></mesh>
+           {castors ? (
+              <group position={[0, 0, 0]}>
+                 <mesh position={[0, CASTOR_HEIGHT - 0.02, 0]}><boxGeometry args={[0.06, 0.04, 0.06]} /><meshStandardMaterial color="#3f3f46" /></mesh>
+                 <mesh position={[0, CASTOR_HEIGHT/2 - 0.01, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.05, 0.05, 0.04, 16]} /><meshStandardMaterial color="#18181b" /></mesh>
+                 <mesh position={[0, CASTOR_HEIGHT/2 - 0.01, 0]} rotation={[0, 0, Math.PI / 2]}><cylinderGeometry args={[0.02, 0.02, 0.045, 16]} /><meshStandardMaterial color="#71717a" /></mesh>
+              </group>
+           ) : <LevellingFoot />}
+        </group>
+      ))}
+      <mesh position={[0, height - WORKBENCH_LEG_SIZE/2, depthPos(1)]}><boxGeometry args={[width, WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE]} /><meshStandardMaterial {...materialProps} /></mesh>
+      <mesh position={[0, height - WORKBENCH_LEG_SIZE/2, depthPos(-1)]}><boxGeometry args={[width, WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE]} /><meshStandardMaterial {...materialProps} /></mesh>
+      <mesh position={[width/2 - WORKBENCH_LEG_SIZE/2, height - WORKBENCH_LEG_SIZE/2, 0]}><boxGeometry args={[WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE, depth - WORKBENCH_LEG_SIZE*2]} /><meshStandardMaterial {...materialProps} /></mesh>
+      <mesh position={[-width/2 + WORKBENCH_LEG_SIZE/2, height - WORKBENCH_LEG_SIZE/2, 0]}><boxGeometry args={[WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE, depth - WORKBENCH_LEG_SIZE*2]} /><meshStandardMaterial {...materialProps} /></mesh>
+      {!isIndustrial && <mesh position={[0, 0.2 + (castors ? 0.05 : 0), depthPos(-1)]}><boxGeometry args={[width - 0.1, WORKBENCH_LEG_SIZE*0.8, WORKBENCH_LEG_SIZE*0.8]} /><meshStandardMaterial {...materialProps} /></mesh>}
+      {isIndustrial && (
+         <group position={[0, legOffset + 0.15, 0]}>
+            <mesh position={[-width/2 + WORKBENCH_LEG_SIZE/2, 0, 0]} castShadow><boxGeometry args={[WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE, depth - WORKBENCH_LEG_SIZE*2]} /><meshStandardMaterial {...materialProps} /></mesh>
+            <mesh position={[width/2 - WORKBENCH_LEG_SIZE/2, 0, 0]} castShadow><boxGeometry args={[WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE, depth - WORKBENCH_LEG_SIZE*2]} /><meshStandardMaterial {...materialProps} /></mesh>
+            <mesh position={[0, 0, 0]} castShadow><boxGeometry args={[width - WORKBENCH_LEG_SIZE*2, WORKBENCH_LEG_SIZE, WORKBENCH_LEG_SIZE]} /><meshStandardMaterial {...materialProps} /></mesh>
+         </group>
+      )}
+    </group>
+  );
+};
+
+const WorkbenchWorktop = ({ width, depth, height, materialId }: { width: number, depth: number, height: number, materialId: string }) => {
+  const thickness = 0.04;
+  const y = height + thickness / 2;
+  const color = getMaterialColor(materialId, 'worktop');
+  return <mesh position={[0, y, 0]} castShadow receiveShadow><boxGeometry args={[width + 0.04, thickness, depth + 0.04]} /><meshStandardMaterial color={color} roughness={0.6} metalness={materialId.includes('ss') ? 0.8 : 0.1} /></mesh>;
+};
+
+// --- ABOVE BENCH PANELS ---
+
+const PegboardPanel = ({ width, height, color }: { width: number, height: number, color: string }) => {
+  const pegTex = useMemo(() => PegboardTexture(color), [color]);
+  pegTex.repeat.set(width * 16, height * 16); 
+  
+  return (
+    <mesh castShadow receiveShadow>
+      <boxGeometry args={[width, height, 0.015]} />
+      <meshStandardMaterial color={color} map={pegTex} roughness={0.4} />
+    </mesh>
+  );
+};
+
+const LouvrePanel = ({ width, height, color }: { width: number, height: number, color: string }) => {
+  const rows = Math.floor(height / 0.05); // 50mm spacing
+  return (
+    <group>
+      <mesh>
+        <boxGeometry args={[width, height, 0.01]} />
+        <meshStandardMaterial color={color} roughness={0.3} metalness={0.2} />
+      </mesh>
+      {/* Pressed slots */}
+      {Array.from({ length: rows }).map((_, i) => (
+        <mesh key={i} position={[0, -height/2 + (i * 0.05) + 0.025, 0.005]}>
+           <boxGeometry args={[width - 0.04, 0.005, 0.005]} />
+           <meshStandardMaterial color="#1f2937" />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+const ShelfTray = ({ width }: { width: number }) => (
+  <group>
+    <mesh position={[0, 0, 0]}>
+      <boxGeometry args={[width, 0.01, 0.25]} />
+      <meshStandardMaterial color="#e4e4e7" roughness={0.4} metalness={0.3} />
+    </mesh>
+    {/* Lip */}
+    <mesh position={[0, 0.015, 0.125]}>
+      <boxGeometry args={[width, 0.03, 0.002]} />
+      <meshStandardMaterial color="#e4e4e7" roughness={0.4} metalness={0.3} />
+    </mesh>
+  </group>
+);
+
+const MonitorStand = ({ height }: { height: number }) => {
+  return (
+    <group position={[0, height, -0.2]}>
+       <mesh position={[0, 0.01, 0]}><boxGeometry args={[0.2, 0.02, 0.15]} /><meshStandardMaterial color="#1a1a1a" /></mesh>
+       <mesh position={[0, 0.2, 0.05]}><cylinderGeometry args={[0.02, 0.02, 0.4]} /><meshStandardMaterial color="#1a1a1a" /></mesh>
+       <group position={[0, 0.4, 0.05]} rotation={[-0.1, 0, 0]}>
+          <mesh><boxGeometry args={[0.5, 0.3, 0.03]} /><meshStandardMaterial color="#1a1a1a" /></mesh>
+          <mesh position={[0, 0, 0.02]}><planeGeometry args={[0.48, 0.28]} /><meshStandardMaterial color="#000" roughness={0.2} /></mesh>
+       </group>
+    </group>
+  );
+};
+
+const AccessoryKitOverlay = ({ kitType, height, depth }: { kitType: string, height: number, depth: number }) => {
+  if (kitType === 'none') return null;
+  const zPos = -depth / 2 + 0.08;
+  const startY = height + 0.6;
+  
+  const Tool = ({ x, y, color, scale = [1,1,1] }: any) => (
+      <mesh position={[x, y, zPos]} scale={scale} castShadow>
+          <boxGeometry args={[0.05, 0.15, 0.02]} />
+          <meshStandardMaterial color={color} />
+      </mesh>
+  );
+
+  return (
+    <group>
+        {kitType === 'red' && (
+            <>
+                <Tool x={-0.3} y={startY} color="#ef4444" />
+                <Tool x={-0.2} y={startY + 0.1} color="#ef4444" scale={[0.5, 0.8, 1]} />
+                <Tool x={-0.1} y={startY - 0.1} color="#9ca3af" scale={[1.5, 0.2, 1]} />
+                <Tool x={0.2} y={startY + 0.05} color="#ef4444" />
+            </>
+        )}
+        {kitType === 'green' && (
+            <>
+                <Tool x={-0.4} y={startY} color="#22c55e" />
+                <Tool x={-0.3} y={startY + 0.1} color="#22c55e" scale={[0.5, 0.8, 1]} />
+                <Tool x={-0.2} y={startY - 0.1} color="#9ca3af" scale={[1.5, 0.2, 1]} />
+                <Tool x={0.0} y={startY + 0.2} color="#22c55e" />
+                <Tool x={0.2} y={startY} color="#22c55e" scale={[0.8, 0.8, 1]} />
+                <Tool x={0.4} y={startY + 0.1} color="#9ca3af" scale={[0.2, 1.5, 1]} />
+            </>
+        )}
+    </group>
+  );
+};
+
+const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId, frameColor, faciaColor, position, inclineAngle, kitSelection, accSelection, embeddedCabinets, product, activeDrawerIndex }: any) => {
+  const shelfHeight = 0.22; 
+  const shelfThick = 0.02;
+  const drawerUnitWidth = 0.56;
+  const hasPower = aboveBenchId.includes('power') || aboveBenchId === 'P' || aboveBenchId === 'SP';
+  const isIndustrialAbove = aboveBenchId.startsWith('iw-');
+  
+  // COMPONENTS
+  const Undershelf = ({ w, x }: { w?: number, x?: number }) => <mesh position={[x || 0, shelfHeight, 0]} receiveShadow><boxGeometry args={[w || width - 0.15, shelfThick, depth - 0.2]} /><meshStandardMaterial color="#a1a1aa" /></mesh>;
+  
+  const DrawerUnit = ({ x, drawerCount, suspended = false }: any) => {
+     const uHeight = drawerCount * 0.15 + 0.05;
+     const yPos = suspended ? (height - uHeight/2 - 0.05) : (height - uHeight/2 - 0.05); 
+     return (
+        <group position={[x, yPos, 0]}>
+           <mesh castShadow><boxGeometry args={[drawerUnitWidth, uHeight, depth - 0.1]} /><meshStandardMaterial color={frameColor} roughness={0.5} /></mesh>
+           {[...Array(drawerCount)].map((_, i) => (
+              <group key={i} position={[0, uHeight/2 - 0.05 - (i * 0.15) - 0.075, (depth - 0.1)/2 + 0.01]}>
+                 <mesh><boxGeometry args={[drawerUnitWidth - 0.04, 0.14, 0.01]} /><meshStandardMaterial color={faciaColor} /></mesh>
+                 <mesh position={[0, 0.06, 0.01]}><boxGeometry args={[drawerUnitWidth - 0.04, 0.015, 0.005]} /><meshStandardMaterial color="#C0C0C0" metalness={0.8} /></mesh>
+              </group>
+           ))}
+        </group>
+     )
+  }
+
+  const CabinetUnit = ({ x }: any) => {
+     const uHeight = 0.7;
+     return (
+        <group position={[x, height - uHeight/2 - 0.05, 0]}>
+           <mesh castShadow><boxGeometry args={[drawerUnitWidth, uHeight, depth - 0.1]} /><meshStandardMaterial color={frameColor} /></mesh>
+           {[...Array(5)].map((_, i) => (
+                <group key={i} position={[0, 0.3 - (i * 0.14), (depth-0.1)/2 + 0.01]}>
+                   <mesh><boxGeometry args={[drawerUnitWidth - 0.04, 0.13, 0.01]} /><meshStandardMaterial color={faciaColor} /></mesh>
+                   <mesh position={[0, 0.05, 0.01]}><boxGeometry args={[drawerUnitWidth - 0.04, 0.015, 0.005]} /><meshStandardMaterial color="#C0C0C0" metalness={0.8} /></mesh>
+                </group>
+             ))}
+        </group>
+     )
+  }
+
+  const CupboardUnit = ({ x }: any) => {
+     const uHeight = 0.7; 
+     return (
+        <group position={[x, height - uHeight/2 - 0.05, 0]}>
+           <mesh castShadow><boxGeometry args={[drawerUnitWidth, uHeight, depth - 0.1]} /><meshStandardMaterial color={frameColor} /></mesh>
+           <group position={[0, 0, (depth - 0.1)/2 + 0.01]}>
+              <mesh><boxGeometry args={[drawerUnitWidth - 0.04, uHeight - 0.04, 0.01]} /><meshStandardMaterial color={faciaColor} /></mesh>
+              <mesh position={[-0.15, uHeight/2 - 0.06, 0.02]}><boxGeometry args={[0.12, 0.02, 0.03]} /><meshStandardMaterial color="#111" /></mesh>
+           </group>
+        </group>
+     )
+  }
+
+  const renderUnder = () => {
+    // ... Logic for under bench options ...
+    // Reuse existing logic from previous block
+    const flushLeft = -width/2 + WORKBENCH_LEG_SIZE + drawerUnitWidth/2;
+    const flushRight = width/2 - WORKBENCH_LEG_SIZE - drawerUnitWidth/2;
+    let singlePos = (position === 'left' || position === 'pos-left') ? flushLeft : flushRight;
+    if (position === 'center' || position === 'pos-center') singlePos = 0;
+
+    if (underBenchId.startsWith('B') && underBenchId !== 'B0') {
+        const OneDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={1} suspended />;
+        const TwoDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={2} suspended />;
+        const ThreeDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={3} suspended />;
+        const Cab = ({x}:any) => <CabinetUnit x={x} />;
+        const Cup = ({x}:any) => <CupboardUnit x={x} />;
+        const Shelf = () => <Undershelf />;
+
+        switch(underBenchId) {
+            case 'B1': return <OneDrw x={singlePos} />;
+            case 'B2': return <TwoDrw x={singlePos} />;
+            case 'B3': return <ThreeDrw x={singlePos} />;
+            case 'B4': case 'B28': return <Cab x={singlePos} />;
+            case 'B5': return <Cup x={singlePos} />;
+            case 'B6': return <group><Cab x={flushLeft} /><OneDrw x={flushRight} /></group>;
+            case 'B7': return <group><Cup x={flushLeft} /><OneDrw x={flushRight} /></group>;
+            case 'B12': return <group><ThreeDrw x={flushLeft} /><ThreeDrw x={flushRight} /></group>;
+            case 'B13': return <group><Cab x={flushLeft} /><Cup x={flushRight} /></group>;
+            case 'B14': return <Shelf />;
+            case 'B15': case 'B18': return <group><Shelf /><OneDrw x={singlePos} /></group>;
+            case 'B16': return <group><Shelf /><TwoDrw x={singlePos} /></group>;
+            case 'B17': return <group><Shelf /><ThreeDrw x={singlePos} /></group>;
+            case 'B19': return <group><Shelf /><OneDrw x={flushLeft} /><TwoDrw x={flushRight} /></group>;
+            case 'B20': return <group><Shelf /><OneDrw x={flushLeft} /><ThreeDrw x={flushRight} /></group>;
+            case 'B21': case 'B22': return <group><Shelf /><Cab x={singlePos} /></group>;
+            case 'B23': case 'B24': return <group><Shelf /><Cup x={singlePos} /></group>;
+            case 'B25': return <group><Shelf /><Cab x={flushLeft} /><Cup x={flushRight} /></group>;
+            case 'B26': return <group><Shelf /><Cab x={flushLeft} /><Cab x={flushRight} /></group>;
+            case 'B27': return <group><Shelf /><Cup x={flushLeft} /><Cup x={flushRight} /></group>;
+            default: return null;
+        }
+    }
+    
+    // Industrial logic
+    if (underBenchId.startsWith('iw-')) {
+       // Shared components already defined (DrawerUnit, Cab, Cup, Shelf)
+       const US = () => <Undershelf />;
+       const HUS = () => <Undershelf w={width/2 - 0.05} x={-width/4} />; // Approximate Half Shelf on Left
+       
+       switch(underBenchId) {
+          case 'iw-ub-shelf': return <US />;
+          case 'iw-ub-half-shelf': return <HUS />;
+          case 'iw-ub-drawer-1': return <DrawerUnit x={singlePos} drawerCount={1} suspended />;
+          case 'iw-ub-door-1': return <CupboardUnit x={singlePos} />;
+          case 'iw-ub-cabinet-1': return <CabinetUnit x={singlePos} />;
+          
+          case 'iw-ub-drawer-2': return <group><DrawerUnit x={flushLeft} drawerCount={1} suspended /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+          case 'iw-ub-door-2': return <group><CupboardUnit x={flushLeft} /><CupboardUnit x={flushRight} /></group>;
+          case 'iw-ub-cabinet-2': return <group><CabinetUnit x={flushLeft} /><CabinetUnit x={flushRight} /></group>;
+          
+          case 'iw-ub-cabinet-door': return <group><CabinetUnit x={flushLeft} /><CupboardUnit x={flushRight} /></group>;
+          case 'iw-ub-cabinet-drawer': return <group><CabinetUnit x={flushLeft} /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+          case 'iw-ub-door-drawer': return <group><CupboardUnit x={flushLeft} /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+
+          case 'iw-ub-shelf-drawer': return <group><US /><DrawerUnit x={singlePos} drawerCount={1} suspended /></group>;
+          case 'iw-ub-drawers-2-shelf': return <group><US /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+          
+          case 'iw-ub-drawer-half-shelf': return <group><HUS /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+          case 'iw-ub-shelf-cabinet': return <group><HUS /><CabinetUnit x={flushRight} /></group>;
+          case 'iw-ub-shelf-door': return <group><HUS /><CupboardUnit x={flushRight} /></group>;
+          
+          case 'iw-ub-half-shelf-drawer-cabinet': return <group><HUS /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><CabinetUnit x={flushRight} /></group>;
+          case 'iw-ub-half-shelf-drawer-cupboard': return <group><HUS /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><CupboardUnit x={flushRight} /></group>;
+       }
+    }
+    return null;
+  };
+
+  const renderAbove = () => {
+    if (!aboveBenchId || aboveBenchId === 'T0' || aboveBenchId === 'iw-ab-none') return null;
+    
+    const postH = 1.1; // Increased for clearer gap
+    const postMat = <meshStandardMaterial color={frameColor} />;
+    
+    // Industrial Shelf Logic (Single bay)
+    if (isIndustrialAbove) {
+       return (
+          <group position={[0, height, 0]}>
+             <mesh position={[-width/2 + 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+             <mesh position={[width/2 - 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+             <mesh position={[0, postH - 0.02, -depth/2 + 0.03]}><boxGeometry args={[width, 0.04, 0.04]} />{postMat}</mesh>
+             
+             {(aboveBenchId.includes('shelf') || aboveBenchId === 'P' || aboveBenchId === 'SP') && (
+                <group position={[0, 0, -depth/2 + 0.15]}>
+                   {aboveBenchId.includes('shelf') && <mesh position={[0, postH, 0]}><boxGeometry args={[width - 0.1, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
+                   {hasPower && (
+                      <group position={[0, 0.15, -0.12]}>
+                         <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+                         {[-0.3, -0.1, 0.1, 0.3].map((x, i) => <mesh key={i} position={[x, 0, 0.021]}><planeGeometry args={[0.08, 0.05]} /><meshBasicMaterial color="#f0f0f0" /></mesh>)}
+                      </group>
+                   )}
+                </group>
+             )}
+          </group>
+       );
+    }
+
+    // HEAVY DUTY T-SERIES (3-POST SYSTEM for T1-T8)
+    const isTSeries = aboveBenchId.startsWith('T') && aboveBenchId !== 'T9' && aboveBenchId !== 'T10';
+    
+    // Special T9/T10 Logic
+    if (aboveBenchId === 'T9' || aboveBenchId === 'T10') {
+       const isInclined = aboveBenchId === 'T10';
+       const angle = (isInclined && inclineAngle) ? (inclineAngle === 30 ? Math.PI/6 : inclineAngle === 15 ? Math.PI/12 : 0) : 0;
+       return (
+          <group position={[0, height, 0]}>
+             <mesh position={[-width/2 + 0.1, postH/2, -depth/2 + 0.03]}><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+             <mesh position={[width/2 - 0.1, postH/2, -depth/2 + 0.03]}><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+             <group position={[0, postH * 0.8, -depth/2 + 0.15]} rotation={[angle, 0, 0]}>
+                <mesh><boxGeometry args={[width - 0.2, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>
+                {isInclined && <mesh position={[0, 0.03, 0.125]}><boxGeometry args={[width - 0.2, 0.04, 0.005]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
+             </group>
+          </group>
+       )
+    }
+
+    // STANDARD T-SERIES CONFIGURATION (T1 - T8)
+    // Structure: 3 Posts. Shelves are FULL WIDTH. Panels are SPLIT (L/R).
+    // Layers: Top (Shelf), Upper Panel, Lower Panel.
+    
+    // UPDATED: bayWidth calculation to close gaps. width - 0.06 aligns panels to edges of posts roughly (20mm offset on each side for post half-width + margin)
+    const bayWidth = (width - 0.06) / 2; // Width of one bay
+    const shelfWidth = width - 0.1;
+    
+    // Y-Levels (from bottom of posts = benchtop)
+    const yTop = 1.05;
+    const yUpper = 0.85;
+    // UPDATED: yLower raised to 0.55 so top of this panel (0.70) meets bottom of upper panel (0.70)
+    const yLower = 0.55; 
+
+    let shelves: number[] = [];
+    let panels: { y: number, left: string, right: string }[] = [];
+
+    switch(aboveBenchId) {
+       case 'T1': shelves = [1.05, 0.7, 0.35]; break;
+       case 'T2': shelves = [1.05, 0.8, 0.55, 0.3]; break;
+       case 'T3': 
+          shelves = [1.05, 0.75]; 
+          panels = [{ y: yLower, left: 'peg', right: 'peg' }];
+          break;
+       case 'T4': 
+          shelves = [1.05, 0.75]; 
+          panels = [{ y: yLower, left: 'louvre', right: 'louvre' }];
+          break;
+       case 'T5':
+          shelves = [1.05, 0.75];
+          panels = [{ y: yLower, left: 'peg', right: 'louvre' }];
+          break;
+       case 'T6':
+          shelves = [1.05];
+          panels = [
+             { y: yUpper, left: 'peg', right: 'peg' },
+             { y: yLower, left: 'peg', right: 'peg' }
+          ];
+          break;
+       case 'T7':
+          shelves = [1.05];
+          panels = [
+             { y: yUpper, left: 'louvre', right: 'louvre' },
+             { y: yLower, left: 'louvre', right: 'louvre' }
+          ];
+          break;
+       case 'T8':
+          shelves = [1.05];
+          panels = [
+             { y: yUpper, left: 'peg', right: 'peg' },
+             { y: yLower, left: 'louvre', right: 'louvre' }
+          ];
+          break;
+    }
+
+    const renderPanel = (type: string, y: number, xOffset: number) => {
+       if (type === 'peg') return <group position={[xOffset, y, 0]}><PegboardPanel width={bayWidth} height={0.3} color={frameColor} /></group>; 
+       if (type === 'louvre') return <group position={[xOffset, y, 0]}><LouvrePanel width={bayWidth} height={0.3} color={frameColor} /></group>;
+       return null;
+    };
+
+    return (
+        <group position={[0, height, 0]}>
+            {/* 3 POSTS */}
+            <mesh position={[-width/2 + 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+            <mesh position={[width/2 - 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+            <mesh position={[0, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
+            
+            {/* Top Crossbar */}
+            <mesh position={[0, postH - 0.02, -depth/2 + 0.03]}><boxGeometry args={[width, 0.04, 0.04]} />{postMat}</mesh>
+
+            {/* FULL WIDTH SHELVES */}
+            {shelves.map((y, i) => (
+               <group key={`s-${i}`} position={[0, y, -depth/2 + 0.15]}>
+                  <ShelfTray width={shelfWidth} />
+               </group>
+            ))}
+
+            {/* PANELS (In Bays) */}
+            <group position={[0, 0, -depth/2 + 0.05]}>
+               {panels.map((row, i) => (
+                  <group key={`p-${i}`}>
+                     {renderPanel(row.left, row.y, -width/4)}
+                     {renderPanel(row.right, row.y, width/4)}
+                  </group>
+               ))}
+            </group>
+        </group>
+    );
+  };
+
+  return (
+    <group>
+        {renderUnder()}
+        {renderAbove()}
+        {accSelection && accSelection['acc-monitor'] > 0 && <MonitorStand height={height} />}
+        {kitSelection && <AccessoryKitOverlay kitType={kitSelection.includes('red') ? 'red' : kitSelection.includes('green') ? 'green' : 'none'} height={height} depth={depth} />}
+    </group>
+  );
+};
+
+export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) => {
+    const [bgMode, setBgMode] = useState<BackgroundMode>('dark');
+    const controlsRef = useRef<any>(null);
+
+    const widthOption = product.groups.find(g => g.id === 'width' || g.id === 'size')?.options.find(o => o.id === config.selections['width'] || o.id === config.selections['size']);
+    const width = widthOption?.meta?.width || (widthOption?.value as number) / 1000 || 1.8;
+    const depthOption = product.groups.find(g => g.id === 'series')?.options.find(o => o.id === config.selections['series']);
+    const depth = depthOption?.meta?.depth || 0.75;
+    const heightOption = product.groups.find(g => g.id === 'height' || g.id === 'bench_height')?.options.find(o => o.id === config.selections['height'] || o.id === config.selections['bench_height']);
+    const height = heightOption?.meta?.height || (heightOption?.value as number) / 1000 || 0.9;
+    
+    const castors = config.selections['mobility'] === true;
+    const worktopId = config.selections['worktop'];
+    const frameColorId = config.selections['color'] || config.selections['housing_color'];
+    const frameColor = getMaterialColor(frameColorId, 'frame', product, 'color');
+    const faciaColorId = config.selections['drawer_facia'] || config.selections['facia_color'];
+    const faciaColor = getMaterialColor(faciaColorId, 'facia', product, 'drawer_facia');
+
+    const underBenchId = config.selections['under_bench'];
+    const aboveBenchId = config.selections['above_bench'];
+    const position = config.selections['under_bench_pos'];
+    const inclineAngle = config.selections['shelf_incline'];
+    const kitSelection = config.selections['hanging_kits'];
+    const accSelection = config.selections['individual_accessories'];
+
+    const targetY = height / 2;
+    const isIndustrial = product.id === 'prod-workbench-industrial';
+
+    return (
+       <div className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
+         <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 42 }}>
+           {bgMode === 'photo' ? <Environment preset="warehouse" background blur={0.6} /> : <Environment preset="city" />}
+           {bgMode === 'dark' && <color attach="background" args={['#18181b']} />}
+           {bgMode === 'light' && <color attach="background" args={['#e4e4e7']} />}
+           <ambientLight intensity={bgMode === 'photo' ? 1.0 : 0.8} />
+           <directionalLight position={[5, 8, 5]} intensity={bgMode === 'photo' ? 2.0 : 1.5} castShadow shadow-bias={-0.0001} />
+           <directionalLight position={[-3, 4, -2]} intensity={0.6} />
+           {bgMode !== 'photo' && <Grid position={[0, -0.01, 0]} args={[10.5, 10.5]} cellSize={0.5} cellThickness={0.5} cellColor={bgMode === 'light' ? '#a1a1aa' : '#3f3f46'} sectionSize={1} sectionThickness={1} sectionColor={bgMode === 'light' ? '#71717a' : '#52525b'} fadeDistance={5} fadeStrength={1} infiniteGrid />}
+           <group position={[0, 0, 0]}>
+              <Center bottom>
+                 {product.id === 'prod-hd-cabinet' ? (
+                    <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} />
+                 ) : (
+                    <group>
+                       <WorkbenchFrame width={width} height={height} depth={depth} castors={castors} colorHex={frameColor} variant={isIndustrial ? 'industrial' : 'heavy'} />
+                       {worktopId && <WorkbenchWorktop width={width} depth={depth} height={height} materialId={worktopId} />}
+                       <WorkbenchAccessories width={width} depth={depth} height={height} underBenchId={underBenchId} aboveBenchId={aboveBenchId} frameColor={frameColor} faciaColor={faciaColor} position={position} inclineAngle={inclineAngle} kitSelection={kitSelection} accSelection={accSelection} embeddedCabinets={config.embeddedCabinets} product={product} activeDrawerIndex={activeDrawerIndex} />
+                    </group>
+                 )}
+              </Center>
+           </group>
+           <ContactShadows position={[0, -0.001, 0]} opacity={0.4} scale={10} blur={2.5} far={4} />
+           <OrbitControls ref={controlsRef} makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 1.9} target={[0, targetY, 0]} />
+         </Canvas>
+         <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded border border-zinc-700 text-xs text-zinc-300 font-mono pointer-events-none select-none z-10"><span className="text-amber-500 font-bold">LIVE PREVIEW</span> <span className="mx-2">|</span> {product.name}</div>
+         <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex bg-black/50 backdrop-blur-md rounded border border-zinc-700 p-1 gap-1 z-10 shadow-lg">
+            <button onClick={() => setBgMode('dark')} className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bgMode === 'dark' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Dark</button>
+            <button onClick={() => setBgMode('light')} className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bgMode === 'light' ? 'bg-zinc-200 text-black' : 'text-zinc-400 hover:text-white'}`}>Light</button>
+            <button onClick={() => setBgMode('photo')} className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bgMode === 'photo' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Photo</button>
+            <div className="w-px bg-zinc-600 mx-1"></div>
+            <button onClick={() => controlsRef.current?.reset()} className="px-3 py-1 text-xs font-medium rounded transition-colors text-zinc-300 hover:text-white hover:bg-zinc-700" title="Reset Camera View">Recenter</button>
+         </div>
+         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end pointer-events-none select-none">
+            <div className="text-[10px] text-zinc-500 bg-black/20 p-2 rounded backdrop-blur-sm">LMB: Rotate • RMB: Pan • Scroll: Zoom</div>
+            <div className="text-[10px] text-amber-500/80 bg-black/40 p-2 rounded backdrop-blur-sm border border-amber-900/30 max-w-xs text-right">
+               ⚠️ Renderings are approximations only.<br/>Refer to catalog for accurate details.
+            </div>
+         </div>
+       </div>
+    );
+}

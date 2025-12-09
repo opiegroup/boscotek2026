@@ -1,0 +1,795 @@
+
+import React, { useMemo, useState } from 'react';
+import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet } from '../types';
+import { resolvePartitionCode } from '../data/catalog';
+import { useCatalog } from '../contexts/CatalogContext';
+
+interface ConfiguratorControlsProps {
+  product: ProductDefinition;
+  config: ConfigurationState;
+  onChange: (groupId: string, value: any) => void;
+  onCustomDrawerChange?: (stack: DrawerConfiguration[]) => void;
+  onBack: () => void;
+  activeDrawerIndex: number | null;
+  onSelectDrawer: (index: number | null) => void;
+  // New props for Embedded Cabinets
+  onEmbeddedCabinetChange?: (cabinets: EmbeddedCabinet[]) => void;
+}
+
+const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({ 
+  product, 
+  config, 
+  onChange, 
+  onCustomDrawerChange, 
+  onBack,
+  activeDrawerIndex,
+  onSelectDrawer,
+  onEmbeddedCabinetChange
+}) => {
+  
+  const { interiors, products } = useCatalog();
+  
+  // State for Embedded Cabinet Config Modal
+  const [editingCabinet, setEditingCabinet] = useState<EmbeddedCabinet | null>(null);
+
+  // Helper to extract Cabinet Dimensions
+  const getCabinetDimensions = () => {
+    const wGroup = product.groups.find(g => g.id === 'width');
+    const dGroup = product.groups.find(g => g.id === 'series');
+    
+    const wId = config.selections['width'];
+    const dId = config.selections['series'];
+
+    const wOpt = wGroup?.options.find(o => o.id === wId);
+    const dOpt = dGroup?.options.find(o => o.id === dId);
+
+    return {
+      width: (wOpt?.value as number) || 710,
+      depth: (dOpt?.value as number) || 605,
+      widthCode: wOpt?.code,
+      depthCode: dOpt?.code
+    };
+  };
+
+  // Helper to filter partitions dynamically based on current selections
+  const getDynamicPartitionOptions = (widthMm: number, depthMm: number, drawerHeight: number) => {
+    const isDeep = depthMm > 700;
+    const depthType = isDeep ? 'D' : 'S';
+
+    return interiors.filter(p => {
+      // 1. Check visibility toggle (Admin)
+      if (p.isVisible === false) return false;
+
+      // 2. Match Dimensions
+      if (p.width_mm !== widthMm) return false;
+      if (p.depth_type !== depthType) return false;
+      
+      // 3. Match Height Capability
+      if (!p.supported_drawer_heights_mm.includes(drawerHeight)) return false;
+
+      return true;
+    });
+  };
+
+  // Helper: Sort Drawers (Smallest Top -> Largest Bottom)
+  // This means Ascending order of height in the list (Index 0 = Top)
+  const sortDrawers = (drawers: DrawerConfiguration[], group: OptionGroup): DrawerConfiguration[] => {
+     return [...drawers].sort((a, b) => {
+        const hA = group.options.find(o => o.id === a.id)?.meta?.front || 0;
+        const hB = group.options.find(o => o.id === b.id)?.meta?.front || 0;
+        return hA - hB; // Ascending
+     });
+  };
+
+  // Helper: Generate Text Summary
+  const getDrawerSummary = (drawers: DrawerConfiguration[], group?: OptionGroup) => {
+     if (!drawers.length) return 'Empty';
+     if (!group) return `${drawers.length} Drawers`;
+
+     const counts: Record<number, number> = {};
+     let totalHeight = 0;
+
+     drawers.forEach(d => {
+        const opt = group.options.find(o => o.id === d.id);
+        const h = opt?.meta?.front || 0;
+        counts[h] = (counts[h] || 0) + 1;
+        totalHeight += h;
+     });
+
+     const parts = Object.entries(counts)
+        .sort(([h1], [h2]) => Number(h2) - Number(h1)) // Descending for text summary usually looks better
+        .map(([h, c]) => `${c}×${h}mm`);
+     
+     return `${parts.join(', ')} (${totalHeight}mm)`;
+  };
+
+  const SectionTitle = ({ title, step }: { title: string, step: number }) => (
+    <h3 className="text-amber-500 text-sm font-bold uppercase tracking-wider mb-3 mt-6 border-b border-zinc-700 pb-1 flex justify-between">
+      <span>{step}. {title}</span>
+    </h3>
+  );
+
+  const getCabinetCapacity = (prod = product, cfg = config) => {
+    const heightGroupId = 'height';
+    const heightGroup = prod.groups.find(g => g.id === heightGroupId);
+    if (!heightGroup) return 9999;
+    
+    const selectedHeightId = cfg.selections[heightGroupId];
+    const selectedOption = heightGroup.options.find(o => o.id === selectedHeightId);
+    
+    return selectedOption?.meta?.usableHeight || 750;
+  };
+
+  // --- SUB-COMPONENT: DRAWER INTERIOR CONFIG ---
+  const InteriorConfigurator = ({ group, currentConfig, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
+     const [activeTab, setActiveTab] = useState<DrawerInteriorType>('partition_set');
+
+     if (activeDrawerIndex === null) return null;
+     
+     const drawerConfig = currentConfig.customDrawers[activeDrawerIndex];
+     const drawerOpt = group.options.find(o => o.id === drawerConfig.id);
+     
+     if (!drawerOpt) return null;
+
+     const drawerHeight = drawerOpt.meta?.front || 100;
+     
+     let width = 710;
+     let depth = 755;
+     
+     if (editingCabinet) {
+        // Hardcode for BTCD.850.560 as per requirement
+        width = 560;
+        depth = 755; 
+     } else {
+        const dims = getCabinetDimensions();
+        width = dims.width;
+        depth = dims.depth;
+     }
+     
+     const allOptions = getDynamicPartitionOptions(width, depth, drawerHeight);
+     const tabOptions = allOptions.filter(o => o.type === activeTab);
+
+     const handleSelectInterior = (partId: string) => {
+        const newStack = [...currentConfig.customDrawers];
+        newStack[activeDrawerIndex] = { ...newStack[activeDrawerIndex], interiorId: partId };
+        if (onDrawerStackChange) onDrawerStackChange(newStack);
+     };
+
+     const handleClearInterior = () => {
+        const newStack = [...currentConfig.customDrawers];
+        newStack[activeDrawerIndex] = { ...newStack[activeDrawerIndex], interiorId: undefined };
+        if (onDrawerStackChange) onDrawerStackChange(newStack);
+     };
+
+     const Tabs = () => (
+        <div className="flex border-b border-zinc-700 mb-4">
+           {[
+              { id: 'partition_set', label: 'Partitions' },
+              { id: 'bin_set', label: 'Bin Sets' },
+              { id: 'mixed_set', label: 'Mixed Sets' }
+           ].map(tab => (
+              <button
+                 key={tab.id}
+                 onClick={() => setActiveTab(tab.id as DrawerInteriorType)}
+                 className={`flex-1 py-2 text-xs font-bold uppercase tracking-wider border-b-2 transition-colors
+                    ${activeTab === tab.id ? 'border-amber-500 text-amber-500' : 'border-transparent text-zinc-500 hover:text-zinc-300'}
+                 `}
+              >
+                 {tab.label}
+              </button>
+           ))}
+        </div>
+     );
+
+     return (
+        <div className="bg-zinc-800 p-4 rounded-lg border border-amber-500/50 animate-in fade-in zoom-in-95 duration-200">
+           <div className="flex justify-between items-center mb-4 border-b border-zinc-700 pb-2">
+              <h4 className="font-bold text-white flex items-center gap-2">
+                 <span>📂 Drawer {activeDrawerIndex + 1}</span>
+                 <span className="text-xs font-normal text-zinc-400">({drawerOpt.label})</span>
+              </h4>
+              <button onClick={() => onSelectDrawer(null)} className="text-xs text-amber-500 hover:text-white">
+                 Done
+              </button>
+           </div>
+           
+           <p className="text-xs text-zinc-400 mb-4">
+              Configuring for <strong>{width}mm Wide</strong> x <strong>{depth > 700 ? 'Deep' : 'Standard'}</strong> Depth.
+           </p>
+
+           <Tabs />
+
+           <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              <button 
+                 onClick={handleClearInterior}
+                 className={`w-full text-left p-3 rounded border text-xs mb-2 transition-all ${!drawerConfig.interiorId ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}`}
+              >
+                 No Interior (Empty)
+              </button>
+
+              {tabOptions.length === 0 ? (
+                 <div className="text-zinc-500 text-xs text-center py-4 italic bg-zinc-900/50 rounded flex flex-col gap-2">
+                    <span>No {activeTab.replace('_', ' ')}s available for this drawer size ({drawerHeight}mm).</span>
+                    {allOptions.length === 0 && (
+                        <span className="text-red-400">No compatible interiors found for {width}mm width.</span>
+                    )}
+                 </div>
+              ) : (
+                 tabOptions.map(part => {
+                    const isSelected = drawerConfig.interiorId === part.id;
+                    const finalCode = resolvePartitionCode(part, drawerHeight);
+                    
+                    return (
+                       <button
+                          key={part.id}
+                          onClick={() => handleSelectInterior(part.id)}
+                          className={`
+                             w-full text-left p-3 rounded border transition-all flex justify-between items-start group relative overflow-hidden
+                             ${isSelected 
+                                ? 'bg-zinc-700 border-amber-500 text-white shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}
+                          `}
+                       >
+                          <div className="flex-1 pr-2 z-10">
+                             <div className="font-bold text-xs group-hover:text-amber-500 transition-colors mb-0.5">{part.layout_description}</div>
+                             <div className="text-[10px] text-zinc-500 font-mono mb-1">{finalCode}</div>
+                             {part.components_summary && (
+                                <div className="text-[10px] text-zinc-400 leading-tight italic border-t border-zinc-700/50 pt-1 mt-1">{part.components_summary}</div>
+                             )}
+                          </div>
+                          <div className="text-right z-10">
+                             <div className="text-xs font-bold text-amber-500">${part.price}</div>
+                          </div>
+                       </button>
+                    )
+                 })
+              )}
+           </div>
+        </div>
+     );
+  };
+
+  // --- SUB-COMPONENT: QUANTITY LIST BUILDER (For Accessories) ---
+  const QuantityListBuilder = ({ group }: { group: OptionGroup }) => {
+     const values = (config.selections[group.id] as Record<string, number>) || {};
+
+     const handleQtyChange = (itemId: string, delta: number) => {
+        const currentQty = values[itemId] || 0;
+        const newQty = Math.max(0, currentQty + delta);
+        
+        const newValues = { ...values, [itemId]: newQty };
+        if (newQty === 0) delete newValues[itemId];
+        
+        onChange(group.id, newValues);
+     };
+
+     return (
+        <div className="space-y-2">
+           {group.options.map(opt => {
+              const qty = values[opt.id] || 0;
+              return (
+                 <div key={opt.id} className={`flex items-center justify-between p-3 rounded border transition-colors ${qty > 0 ? 'bg-zinc-800 border-amber-500/50' : 'bg-zinc-900 border-zinc-700'}`}>
+                    <div className="flex-1">
+                       <div className={`text-sm font-medium ${qty > 0 ? 'text-white' : 'text-zinc-400'}`}>{opt.label}</div>
+                       <div className="text-xs text-amber-500 font-bold">+${opt.priceDelta} ea</div>
+                    </div>
+                    
+                    <div className="flex items-center gap-3 bg-zinc-950 rounded px-2 py-1 border border-zinc-800">
+                       <button 
+                          onClick={() => handleQtyChange(opt.id, -1)}
+                          className={`w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-zinc-800 ${qty === 0 ? 'text-zinc-600 cursor-not-allowed' : 'text-zinc-200'}`}
+                          disabled={qty === 0}
+                       >
+                          -
+                       </button>
+                       <span className={`w-4 text-center text-sm font-mono font-bold ${qty > 0 ? 'text-amber-500' : 'text-zinc-500'}`}>{qty}</span>
+                       <button 
+                          onClick={() => handleQtyChange(opt.id, 1)}
+                          className="w-6 h-6 flex items-center justify-center rounded text-sm hover:bg-zinc-800 text-zinc-200"
+                       >
+                          +
+                       </button>
+                    </div>
+                 </div>
+              );
+           })}
+        </div>
+     );
+  };
+
+  // --- SUB-COMPONENT: DRAWER STACK BUILDER ---
+  const DrawerStackBuilder = ({ group, currentConfig, currentProduct, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, currentProduct: ProductDefinition, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
+    const capacity = getCabinetCapacity(currentProduct, currentConfig);
+    
+    const currentUsage = useMemo(() => {
+       return currentConfig.customDrawers.reduce((total, drawer) => {
+         const drawerOpt = group.options.find(o => o.id === drawer.id);
+         return total + (drawerOpt?.meta?.front || 0);
+       }, 0);
+    }, [currentConfig.customDrawers, group.options]);
+
+    const remaining = capacity - currentUsage;
+    const usagePercent = Math.min(100, (currentUsage / capacity) * 100);
+
+    const handleAddDrawer = (drawerId: string) => {
+      const drawerOpt = group.options.find(o => o.id === drawerId);
+      if (!drawerOpt) return;
+      if (remaining >= (drawerOpt.meta?.front || 0)) {
+         let newStack = [...currentConfig.customDrawers, { id: drawerId }];
+         // AUTO SORT: Smallest at TOP (Index 0), Largest at BOTTOM (Index N)
+         newStack = sortDrawers(newStack, group);
+         
+         if (onDrawerStackChange) onDrawerStackChange(newStack);
+      }
+    };
+
+    const handleRemoveDrawer = (index: number) => {
+      const newStack = [...currentConfig.customDrawers];
+      newStack.splice(index, 1);
+      if (activeDrawerIndex === index) onSelectDrawer(null);
+      if (onDrawerStackChange) onDrawerStackChange(newStack);
+    };
+
+    if (activeDrawerIndex !== null) {
+       return <InteriorConfigurator group={group} currentConfig={currentConfig} onDrawerStackChange={onDrawerStackChange} />;
+    }
+
+    const visibleDrawerOptions = group.options.filter(o => o.isVisible !== false);
+
+    return (
+      <div className="bg-zinc-800/50 p-4 rounded-lg border border-zinc-700">
+         <div className="mb-4">
+            <div className="flex justify-between text-xs font-mono mb-1">
+               <span className="text-zinc-400">Used: {currentUsage}mm</span>
+               <span className={remaining < 50 ? 'text-red-500' : 'text-green-500'}>
+                 Rem: {remaining}mm / {capacity}mm
+               </span>
+            </div>
+            <div className="h-2 bg-zinc-700 rounded-full overflow-hidden">
+               <div 
+                  className={`h-full transition-all duration-300 ${remaining < 0 ? 'bg-red-500' : 'bg-amber-500'}`} 
+                  style={{ width: `${usagePercent}%` }}
+               />
+            </div>
+         </div>
+         <div className="mb-4">
+            <h4 className="text-xs font-bold text-zinc-500 mb-2 uppercase">Add Drawer Module</h4>
+            <div className="grid grid-cols-3 gap-2">
+               {visibleDrawerOptions.map(opt => {
+                  const h = opt.meta?.front || 0;
+                  const disabled = remaining < h;
+                  return (
+                     <button key={opt.id} onClick={() => handleAddDrawer(opt.id)} disabled={disabled}
+                        className={`px-2 py-2 text-xs font-bold rounded border transition-all flex flex-col items-center justify-center ${disabled ? 'opacity-30 border-zinc-700 cursor-not-allowed text-zinc-600' : 'bg-zinc-800 border-zinc-600 hover:border-amber-500 text-zinc-200 hover:text-white'}`}>
+                        <span>{opt.label.replace(' Drawer', '')}</span>
+                        <span className="font-mono text-[10px] text-zinc-500">{h}mm</span>
+                     </button>
+                  )
+               })}
+            </div>
+         </div>
+         <div>
+            <h4 className="text-xs font-bold text-zinc-500 mb-2 uppercase flex justify-between items-center">
+               <span>Current Stack (Top to Bottom)</span>
+               {currentConfig.customDrawers.length > 0 && (
+                  <button onClick={() => onDrawerStackChange && onDrawerStackChange([])} className="text-[10px] text-red-400 hover:text-red-300 underline">Clear All</button>
+               )}
+            </h4>
+            {currentConfig.customDrawers.length === 0 ? (
+               <div className="text-xs text-zinc-600 text-center py-4 border border-dashed border-zinc-700 rounded">No drawers added.</div>
+            ) : (
+               <div className="space-y-1"> 
+                  {currentConfig.customDrawers.map((drawer, idx) => {
+                     const opt = group.options.find(o => o.id === drawer.id);
+                     const interior = drawer.interiorId ? interiors.find(i => i.id === drawer.interiorId) : null;
+                     return (
+                        <div key={`${drawer.id}-${idx}`} className="flex items-center justify-between bg-zinc-900 border border-zinc-700 p-2 rounded text-xs hover:border-zinc-500 group transition-all">
+                           <div className="flex-1 cursor-pointer" onClick={() => onSelectDrawer(idx)}>
+                              <div className="flex items-center gap-2">
+                                 <div className="w-6 text-center text-zinc-600 font-mono text-[10px]">{idx + 1}</div>
+                                 <div className="w-1 h-6 bg-zinc-700 rounded-full group-hover:bg-amber-500 transition-colors"></div>
+                                 <div className="flex flex-col">
+                                    <span className="font-mono font-bold text-zinc-300 group-hover:text-white">{opt?.meta?.front}mm Front</span>
+                                    {interior ? <span className="text-[10px] text-amber-500 font-medium">{interior.layout_description}</span> : <span className="text-[10px] text-zinc-600">Empty • Click to configure</span>}
+                                 </div>
+                              </div>
+                           </div>
+                           <button onClick={() => handleRemoveDrawer(idx)} className="text-zinc-500 hover:text-red-500 px-2 py-1" title="Remove">×</button>
+                        </div>
+                     );
+                  })} 
+               </div>
+            )}
+         </div>
+      </div>
+    );
+  };
+
+  // --- EMBEDDED CABINET LOGIC ---
+  
+  const openCabinetConfig = (placement: 'left' | 'right') => {
+     // Check if existing embedded config exists
+     const existing = config.embeddedCabinets?.find(c => c.placement === placement);
+     
+     if (existing) {
+        setEditingCabinet(existing);
+     } else {
+        // Initialize new embedded cabinet state
+        setEditingCabinet({
+           id: `emb-${Date.now()}`,
+           placement,
+           configuration: {
+              productId: 'prod-hd-cabinet',
+              selections: {
+                 'series': '755', // D Series
+                 'width': '560', 
+                 'height': '850',
+                 'housing_color': config.selections['color'] || 'col-mg', // Inherit from bench
+                 'facia_color': config.selections['drawer_facia'] || 'col-sg', // Inherit from bench
+              },
+              customDrawers: [], // Start empty
+              notes: '',
+              internalReference: ''
+           }
+        });
+     }
+  };
+
+  const handleEmbeddedSave = () => {
+     if (!editingCabinet) return;
+     
+     // Enforce Sort on Save just in case
+     const hdProduct = products.find(p => p.id === 'prod-hd-cabinet');
+     const group = hdProduct?.groups.find(g => g.type === 'drawer_stack');
+     
+     let finalDrawers = editingCabinet.configuration.customDrawers;
+     if (group) {
+        finalDrawers = sortDrawers(finalDrawers, group);
+     }
+
+     const finalCabinet = {
+        ...editingCabinet,
+        configuration: {
+           ...editingCabinet.configuration,
+           customDrawers: finalDrawers
+        }
+     };
+     
+     const currentEmbedded = config.embeddedCabinets || [];
+     const filtered = currentEmbedded.filter(c => c.placement !== editingCabinet.placement);
+     const newEmbeddedList = [...filtered, finalCabinet];
+     
+     if (onEmbeddedCabinetChange) onEmbeddedCabinetChange(newEmbeddedList);
+     setEditingCabinet(null);
+     onSelectDrawer(null); 
+  };
+
+  const handleEmbeddedCancel = () => {
+     setEditingCabinet(null);
+     onSelectDrawer(null);
+  };
+
+  // --- RENDER ---
+
+  // If in Embedded Modal Mode
+  if (editingCabinet) {
+     const hdProduct = products.find(p => p.id === 'prod-hd-cabinet');
+     if (!hdProduct) return <div>Error: HD Cabinet definition not found.</div>;
+
+     return (
+        <div className="absolute inset-0 bg-zinc-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+           <div className="bg-zinc-900 w-full max-w-lg h-full max-h-[800px] border border-zinc-700 rounded-xl shadow-2xl flex flex-col overflow-hidden">
+              <div className="p-4 border-b border-zinc-800 flex justify-between items-center bg-zinc-800">
+                 <h2 className="text-lg font-bold text-white">Configure {editingCabinet.placement === 'left' ? 'Left' : 'Right'} Cabinet</h2>
+                 <button onClick={handleEmbeddedCancel} className="text-zinc-400 hover:text-white">✕</button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
+                 <p className="text-sm text-zinc-400 mb-4 bg-blue-900/20 p-3 rounded border border-blue-800/50">
+                    <strong>High Density Cabinet (BTCD.850.560)</strong><br/>
+                    850mm High, 560mm Wide, 755mm Deep. <br/>
+                    Configure your drawer stack below.
+                 </p>
+
+                 {hdProduct.groups.filter(g => g.type === 'drawer_stack').map(group => (
+                    <div key={group.id}>
+                       <SectionTitle step={1} title="Drawer Configuration" />
+                       <DrawerStackBuilder 
+                          group={group} 
+                          currentConfig={editingCabinet.configuration} 
+                          currentProduct={hdProduct}
+                          onDrawerStackChange={(newStack) => {
+                             setEditingCabinet({
+                                ...editingCabinet,
+                                configuration: {
+                                   ...editingCabinet.configuration,
+                                   customDrawers: newStack
+                                }
+                             });
+                          }}
+                       />
+                    </div>
+                 ))}
+              </div>
+
+              <div className="p-4 border-t border-zinc-800 bg-zinc-800 flex justify-end gap-3">
+                 <button onClick={handleEmbeddedCancel} className="px-4 py-2 text-sm text-zinc-300 hover:text-white">Cancel</button>
+                 <button onClick={handleEmbeddedSave} className="px-6 py-2 text-sm font-bold bg-amber-500 text-black rounded hover:bg-amber-400">Save Configuration</button>
+              </div>
+           </div>
+        </div>
+     );
+  }
+
+  return (
+    <div className="flex flex-col h-full bg-zinc-900">
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-4 md:p-6 space-y-2 pb-8">
+        
+        <button 
+          onClick={onBack}
+          className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 mb-4 transition-colors"
+        >
+          ← Back to Product List
+        </button>
+
+        <h2 className="text-xl font-bold text-white mb-1">{product.name}</h2>
+        <p className="text-xs text-zinc-400 mb-4">{product.description}</p>
+
+        {product.groups.sort((a,b) => (a.step||0) - (b.step||0)).map((group) => {
+          // --- VISIBILITY CHECKS ---
+          if (group.id === 'under_bench_pos') {
+             const underBenchVal = config.selections['under_bench'];
+             if (!underBenchVal || underBenchVal === 'B0') return null;
+          }
+          if (group.id === 'shelf_incline') {
+             const aboveBenchVal = config.selections['above_bench'];
+             if (!aboveBenchVal || aboveBenchVal === 'T0') return null;
+          }
+          if (group.id === 'hanging_kits' || group.id === 'individual_accessories') {
+             const aboveBenchVal = config.selections['above_bench'];
+             const panelOptions = ['T3', 'T4', 'T5', 'T6', 'T7', 'T8'];
+             if (!panelOptions.includes(aboveBenchVal)) return null;
+          }
+          
+          const visibleOptions = group.options.filter(o => o.isVisible !== false);
+          // Always show drawer_stack group even if options seem weird, logic inside builder handles it.
+          if (visibleOptions.length === 0 && group.type !== 'drawer_stack') return null;
+
+          return (
+            <div key={group.id}>
+              <SectionTitle step={group.step || 1} title={group.label} />
+              
+              {group.type === 'drawer_stack' && (
+                 <DrawerStackBuilder 
+                    group={group} 
+                    currentConfig={config} 
+                    currentProduct={product}
+                    onDrawerStackChange={onCustomDrawerChange}
+                 />
+              )}
+              
+              {group.type === 'qty_list' && (
+                 <QuantityListBuilder group={group} />
+              )}
+
+              {/* INDUSTRIAL WORKBENCH SPECIFIC: EMBEDDED CABINET TRIGGER */}
+              {product.id === 'prod-workbench-industrial' && group.id === 'under_bench' && (
+                 <div className="mb-4">
+                    <div className="space-y-2 mb-3">
+                        <select
+                          value={config.selections[group.id] as string || ''}
+                          onChange={(e) => onChange(group.id, e.target.value)}
+                          className="w-full bg-zinc-800 text-zinc-100 border border-zinc-600 rounded p-3 text-sm focus:border-amber-500 focus:outline-none"
+                        >
+                          <option value="" disabled>Select an option</option>
+                          {visibleOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label} {opt.priceDelta && opt.priceDelta > 0 ? `(+$${opt.priceDelta})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                    </div>
+
+                    {(() => {
+                       const sel = config.selections['under_bench'];
+                       if (!sel) return null;
+                       
+                       const isCabinet = sel.includes('cabinet') || sel.includes('cab');
+                       const isSingle = sel.includes('cabinet-1') || sel.includes('cab1') || sel.includes('shelf_cab') || sel.includes('hs_dr_cab');
+                       const isDual = sel.includes('cabinet-2') || sel.includes('cab2');
+                       const isCabMixed = sel.includes('cabinet-door') || sel.includes('cab_door') || sel.includes('cab_dr') || sel.includes('cabinet-drawer');
+                       
+                       const pos = config.selections['under_bench_pos']; 
+                       const isLeft = pos === 'pos-left' || pos === 'left';
+                       
+                       const showLeft = isDual || isCabMixed || (isSingle && isLeft);
+                       const showRight = isDual || (isSingle && !isLeft);
+
+                       if (!isCabinet) return null;
+
+                       const hdProduct = products.find(p => p.id === 'prod-hd-cabinet');
+                       const drawerGroup = hdProduct?.groups.find(g => g.type === 'drawer_stack');
+
+                       return (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                             {showLeft && (
+                                <button 
+                                   onClick={() => openCabinetConfig('left')}
+                                   className={`p-3 rounded text-left border transition-colors relative overflow-hidden group
+                                      ${config.embeddedCabinets?.find(c => c.placement === 'left') 
+                                         ? 'bg-zinc-800 border-amber-500' 
+                                         : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'}
+                                   `}
+                                >
+                                   <div className="text-xs font-bold text-white mb-1">Left Cabinet</div>
+                                   <div className="text-[10px] text-zinc-400">
+                                      {config.embeddedCabinets?.find(c => c.placement === 'left') 
+                                         ? getDrawerSummary(config.embeddedCabinets.find(c => c.placement === 'left')!.configuration.customDrawers, drawerGroup)
+                                         : 'Click to configure'
+                                      }
+                                   </div>
+                                   {config.embeddedCabinets?.find(c => c.placement === 'left') && (
+                                      <div className="absolute top-2 right-2 text-amber-500 text-xs font-bold">✓</div>
+                                   )}
+                                </button>
+                             )}
+                             
+                             {showRight && (
+                                <button 
+                                   onClick={() => openCabinetConfig('right')}
+                                   className={`p-3 rounded text-left border transition-colors relative overflow-hidden group
+                                      ${config.embeddedCabinets?.find(c => c.placement === 'right') 
+                                         ? 'bg-zinc-800 border-amber-500' 
+                                         : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'}
+                                   `}
+                                >
+                                   <div className="text-xs font-bold text-white mb-1">Right Cabinet</div>
+                                   <div className="text-[10px] text-zinc-400">
+                                      {config.embeddedCabinets?.find(c => c.placement === 'right') 
+                                         ? getDrawerSummary(config.embeddedCabinets.find(c => c.placement === 'right')!.configuration.customDrawers, drawerGroup)
+                                         : 'Click to configure'
+                                      }
+                                   </div>
+                                   {config.embeddedCabinets?.find(c => c.placement === 'right') && (
+                                      <div className="absolute top-2 right-2 text-amber-500 text-xs font-bold">✓</div>
+                                   )}
+                                </button>
+                             )}
+                          </div>
+                       );
+                    })()}
+                 </div>
+              )}
+
+              {activeDrawerIndex === null && group.type !== 'drawer_stack' && group.type !== 'qty_list' && 
+                // Only skip under_bench for industrial (it has custom block above). 
+                // For Heavy Duty, we WANT this standard block to render it.
+                !(product.id === 'prod-workbench-industrial' && group.id === 'under_bench') && (
+                 <>
+                    {group.type === 'radio' && (
+                      <div className="grid grid-cols-1 gap-2">
+                        {visibleOptions.map((opt) => (
+                          <label
+                            key={opt.id}
+                            className={`
+                              flex items-center p-3 rounded-md cursor-pointer border transition-all
+                              ${config.selections[group.id] === opt.id 
+                                ? 'bg-zinc-800 border-amber-500' 
+                                : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'}
+                            `}
+                          >
+                            <input
+                              type="radio"
+                              name={group.id}
+                              value={opt.id}
+                              checked={config.selections[group.id] === opt.id}
+                              onChange={() => onChange(group.id, opt.id)}
+                              className="sr-only"
+                            />
+                            <div className="flex-1">
+                               <div className="flex justify-between items-center">
+                                  <span className={`font-bold mr-2 ${config.selections[group.id] === opt.id ? 'text-amber-500' : 'text-zinc-500'}`}>
+                                    {opt.label}
+                                  </span>
+                                  {opt.priceDelta && opt.priceDelta > 0 ? (
+                                    <span className="text-xs text-zinc-400 bg-zinc-800 px-2 py-0.5 rounded">+$ {opt.priceDelta}</span>
+                                  ) : null}
+                               </div>
+                               {opt.description && config.selections[group.id] === opt.id && (
+                                  <div className="text-xs text-zinc-400 mt-1">{opt.description}</div>
+                               )}
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {group.type === 'select' && (
+                      <div className="space-y-2">
+                        <select
+                          value={config.selections[group.id] as string || ''}
+                          onChange={(e) => onChange(group.id, e.target.value)}
+                          className="w-full bg-zinc-800 text-zinc-100 border border-zinc-600 rounded p-3 text-sm focus:border-amber-500 focus:outline-none"
+                        >
+                          <option value="" disabled>Select an option</option>
+                          {visibleOptions.map(opt => (
+                            <option key={opt.id} value={opt.id}>
+                              {opt.label} {opt.priceDelta && opt.priceDelta > 0 ? `(+$${opt.priceDelta})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        {group.id === 'hanging_kits' && config.selections[group.id] && config.selections[group.id] !== 'none' && (
+                           <div className="text-xs text-zinc-400 mt-2 bg-zinc-800 p-2 rounded border border-zinc-700">
+                               ℹ️ {group.options.find(o => o.id === config.selections[group.id])?.description}
+                           </div>
+                        )}
+                        {group.id === 'under_bench' && ['B1', 'B2', 'B3'].includes(config.selections[group.id]) && (
+                           <div className="text-xs text-yellow-500 bg-yellow-900/20 p-2 rounded border border-yellow-700/50 flex items-start gap-2 mt-2">
+                              <span>⚠️</span>
+                              <span><strong>Required:</strong> If a fixed drawer unit is selected, ensure suitable frame support or under-shelf is added.</span>
+                           </div>
+                        )}
+                      </div>
+                    )}
+
+                    {group.type === 'checkbox' && (
+                       <div className="space-y-2">
+                         {visibleOptions.map(opt => (
+                           <div key={opt.id}>
+                             <label
+                                className={`
+                                  flex items-center p-3 rounded-md cursor-pointer border transition-all select-none
+                                  ${config.selections[group.id] === true ? 'bg-zinc-800 border-amber-500' : 'bg-transparent border-zinc-700 hover:border-zinc-500'}
+                                `}
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={config.selections[group.id] === true}
+                                  onChange={(e) => onChange(group.id, e.target.checked)}
+                                  className="w-5 h-5 accent-amber-500 rounded bg-zinc-700 border-zinc-600 mr-3"
+                                />
+                                <div className="flex-1">
+                                  <span className="block text-sm font-medium text-zinc-200">{opt.label}</span>
+                                </div>
+                                {opt.priceDelta && opt.priceDelta > 0 && <span className="text-xs text-amber-500 font-bold">+${opt.priceDelta}</span>}
+                              </label>
+                              {group.id === 'mobility' && opt.id === 'castors' && config.selections[group.id] === true && (
+                                 <div className="mt-2 text-xs text-yellow-500 bg-yellow-900/20 p-2 rounded border border-yellow-700/50">
+                                    ⚠️ <strong>Load rating reduced</strong> when mobile. Contact Opie for critical load applications.
+                                 </div>
+                              )}
+                           </div>
+                         ))}
+                       </div>
+                    )}
+
+                    {group.type === 'color' && (
+                      <div className="flex flex-wrap gap-2">
+                        {visibleOptions.map((opt) => (
+                          <button
+                            key={opt.id}
+                            onClick={() => onChange(group.id, opt.id)}
+                            title={opt.label}
+                            className={`
+                              w-8 h-8 rounded-full border-2 transition-all shadow-sm
+                              ${config.selections[group.id] === opt.id ? 'border-amber-500 scale-110' : 'border-zinc-600 hover:border-zinc-400'}
+                            `}
+                            style={{ backgroundColor: opt.value as string }}
+                          />
+                        ))}
+                        <div className="w-full text-xs text-zinc-500 mt-1 pl-1 font-mono">
+                          {group.options.find(o => o.id === config.selections[group.id])?.label}
+                        </div>
+                      </div>
+                    )}
+                 </>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  );
+};
+
+export default ConfiguratorControls;
