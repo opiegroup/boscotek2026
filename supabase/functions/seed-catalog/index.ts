@@ -1,13 +1,21 @@
 import { createClient } from "npm:@supabase/supabase-js";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL");
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+// Supabase edge functions reserve SUPABASE_*; use neutral names for secrets.
+const supabaseUrl = Deno.env.get("PROJECT_URL");
+const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY");
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is not set for the function environment.");
 }
 
 const supabase = createClient(supabaseUrl, serviceRoleKey);
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Content-Type": "application/json",
+};
 
 type Product = {
   id: string;
@@ -24,13 +32,17 @@ type Interior = {
 };
 
 export const handler = async (req: Request): Promise<Response> => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 200, headers: corsHeaders });
+  }
+
   try {
     const { products, interiors } = await req.json();
 
     if (!Array.isArray(products) || !Array.isArray(interiors)) {
       return new Response(
         JSON.stringify({ error: "Invalid payload. Expect { products: [], interiors: [] }" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
@@ -50,7 +62,7 @@ export const handler = async (req: Request): Promise<Response> => {
       console.error("Product upsert error:", prodError);
       return new Response(JSON.stringify({ error: prodError.message }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
@@ -70,19 +82,19 @@ export const handler = async (req: Request): Promise<Response> => {
       console.error("Interior upsert error:", intError);
       return new Response(JSON.stringify({ error: intError.message }), {
         status: 500,
-        headers: { "Content-Type": "application/json" },
+        headers: corsHeaders,
       });
     }
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   } catch (err: any) {
     console.error("Unhandled seed error:", err);
     return new Response(JSON.stringify({ error: err?.message || "Unknown error" }), {
       status: 500,
-      headers: { "Content-Type": "application/json" },
+      headers: corsHeaders,
     });
   }
 };
