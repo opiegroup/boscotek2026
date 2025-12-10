@@ -5,6 +5,7 @@ import { OrbitControls, Grid, ContactShadows, Environment, Float, Center, Text, 
 import * as THREE from 'three';
 import { ConfigurationState, ProductDefinition, DrawerConfiguration, EmbeddedCabinet } from '../types';
 import { getPartitionById } from '../data/catalog';
+import SceneControlsOverlay from './SceneControlsOverlay';
 
 // Fix for missing React Three Fiber types in JSX
 declare module 'react' {
@@ -835,7 +836,54 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
 
 export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) => {
     const [bgMode, setBgMode] = useState<BackgroundMode>('dark');
+    const [isSpacePressed, setIsSpacePressed] = useState(false);
     const controlsRef = useRef<any>(null);
+    const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+    // Space-bar pan mode
+    useEffect(() => {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.code === 'Space' && !e.repeat) {
+          e.preventDefault();
+          setIsSpacePressed(true);
+          
+          if (controlsRef.current) {
+            // Disable rotation when space is held
+            controlsRef.current.enableRotate = false;
+            controlsRef.current.enablePan = true;
+          }
+        }
+      };
+
+      const handleKeyUp = (e: KeyboardEvent) => {
+        if (e.code === 'Space') {
+          e.preventDefault();
+          setIsSpacePressed(false);
+          
+          if (controlsRef.current) {
+            // Re-enable rotation when space is released
+            controlsRef.current.enableRotate = true;
+          }
+        }
+      };
+
+      // Prevent space-bar from scrolling page when over canvas
+      const handleKeyPress = (e: KeyboardEvent) => {
+        if (e.code === 'Space' && canvasContainerRef.current?.contains(document.activeElement)) {
+          e.preventDefault();
+        }
+      };
+
+      window.addEventListener('keydown', handleKeyDown);
+      window.addEventListener('keyup', handleKeyUp);
+      window.addEventListener('keypress', handleKeyPress);
+
+      return () => {
+        window.removeEventListener('keydown', handleKeyDown);
+        window.removeEventListener('keyup', handleKeyUp);
+        window.removeEventListener('keypress', handleKeyPress);
+      };
+    }, []);
 
     const widthOption = product.groups.find(g => g.id === 'width' || g.id === 'size')?.options.find(o => o.id === config.selections['width'] || o.id === config.selections['size']);
     const width = widthOption?.meta?.width || (widthOption?.value as number) / 1000 || 1.8;
@@ -867,7 +915,7 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
     const isIndustrial = product.id === 'prod-workbench-industrial';
 
     return (
-       <div className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
+       <div ref={canvasContainerRef} className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
          <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 42 }}>
            {bgMode === 'photo' ? <Environment preset="warehouse" background blur={0.6} /> : <Environment preset="city" />}
            {bgMode === 'dark' && <color attach="background" args={['#18181b']} />}
@@ -877,17 +925,17 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
            <directionalLight position={[-3, 4, -2]} intensity={0.6} />
            {bgMode !== 'photo' && <Grid position={[0, -0.01, 0]} args={[10.5, 10.5]} cellSize={0.5} cellThickness={0.5} cellColor={bgMode === 'light' ? '#a1a1aa' : '#3f3f46'} sectionSize={1} sectionThickness={1} sectionColor={bgMode === 'light' ? '#71717a' : '#52525b'} fadeDistance={5} fadeStrength={1} infiniteGrid />}
            <group position={[0, 0, 0]}>
-              <Center bottom>
-                 {product.id === 'prod-hd-cabinet' ? (
-                    <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} />
-                 ) : (
+              {product.id === 'prod-hd-cabinet' ? (
+                 <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} />
+              ) : (
+                 <Center bottom>
                     <group>
                        <WorkbenchFrame width={width} height={height} depth={depth} castors={castors} colorHex={frameColor} variant={isIndustrial ? 'industrial' : 'heavy'} />
                        {worktopId && <WorkbenchWorktop width={width} depth={depth} height={height} materialId={worktopId} />}
                        <WorkbenchAccessories width={width} depth={depth} height={height} underBenchId={underBenchId} aboveBenchId={aboveBenchId} frameColor={frameColor} faciaColor={faciaColor} position={position} inclineAngle={inclineAngle} kitSelection={kitSelection} accSelection={accSelection} embeddedCabinets={config.embeddedCabinets} product={product} activeDrawerIndex={activeDrawerIndex} />
                     </group>
-                 )}
-              </Center>
+                 </Center>
+              )}
            </group>
            <ContactShadows position={[0, -0.001, 0]} opacity={0.4} scale={10} blur={2.5} far={4} />
            <OrbitControls ref={controlsRef} makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 1.9} target={[0, targetY, 0]} />
@@ -900,12 +948,21 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
             <div className="w-px bg-zinc-600 mx-1"></div>
             <button onClick={() => controlsRef.current?.reset()} className="px-3 py-1 text-xs font-medium rounded transition-colors text-zinc-300 hover:text-white hover:bg-zinc-700" title="Reset Camera View">Recenter</button>
          </div>
-         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end pointer-events-none select-none">
-            <div className="text-[10px] text-zinc-500 bg-black/20 p-2 rounded backdrop-blur-sm">LMB: Rotate • RMB: Pan • Scroll: Zoom</div>
-            <div className="text-[10px] text-amber-500/80 bg-black/40 p-2 rounded backdrop-blur-sm border border-amber-900/30 max-w-xs text-right">
+         <div className="absolute bottom-4 left-4 flex flex-col gap-2 pointer-events-none select-none">
+            <div className="text-[10px] text-zinc-500 bg-black/20 p-2 rounded backdrop-blur-sm">
+              LMB: Rotate • RMB: Pan • Scroll: Zoom
+              {isSpacePressed && <span className="ml-2 text-amber-400">• SPACE: Pan Mode Active</span>}
+            </div>
+         </div>
+         
+         <div className="absolute bottom-4 right-28 pointer-events-none select-none">
+            <div className="text-[10px] text-amber-500/80 bg-black/40 p-2 rounded backdrop-blur-sm border border-amber-900/30 max-w-[200px] text-right">
                ⚠️ Renderings are approximations only.<br/>Refer to catalog for accurate details.
             </div>
          </div>
+         
+         {/* Scene Controls Overlay */}
+         <SceneControlsOverlay controlsRef={controlsRef} />
        </div>
     );
 }
