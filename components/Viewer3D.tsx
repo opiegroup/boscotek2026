@@ -264,52 +264,131 @@ const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }:
 };
 
 export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex }: any) => {
-  const plinthHeight = 0.05; 
-  const carcassThickness = 0.02; 
-  const apertureHeight = height - plinthHeight - carcassThickness; 
+  // Get usable height from product configuration
+  const heightGroup = product.groups.find((g: any) => g.id === 'height');
+  const selectedHeightId = config.selections['height'];
+  const selectedHeightOption = heightGroup?.options.find((o: any) => o.id === selectedHeightId);
+  const usableHeightMeters = (selectedHeightOption?.meta?.usableHeight || 750) / 1000; // Default 750mm if not found
+  
+  // Calculate shell thickness dynamically based on actual vs usable height
+  const totalShellThickness = height - usableHeightMeters;
+  const bottomShellHeight = totalShellThickness * 0.6; // 60% to bottom
+  const topShellHeight = totalShellThickness * 0.4; // 40% to top
+  const apertureHeight = usableHeightMeters; // Use the catalog's usable height directly
   const isGhost = activeDrawerIndex !== null;
-  const shellMaterial = isGhost ? <meshStandardMaterial color={frameColor} transparent opacity={0.05} roughness={0.1} depthWrite={false} /> : <meshStandardMaterial color={frameColor} roughness={0.5} />;
-  const plinthMaterial = isGhost ? <meshStandardMaterial color="#1a1a1a" transparent opacity={0.05} /> : <meshStandardMaterial color="#1a1a1a" roughness={0.8} />;
+  
+  // Unified shell material for entire cabinet body (including plinth/bottom)
+  const shellMaterial = isGhost 
+    ? <meshStandardMaterial color={frameColor} transparent opacity={0.05} roughness={0.1} depthWrite={false} /> 
+    : <meshStandardMaterial color={frameColor} roughness={0.5} />;
 
   const drawerStack = useMemo(() => {
      const group = product.groups.find((grp: any) => grp.type === 'drawer_stack');
-     let totalStackHeight = 0;
-     config.customDrawers.forEach((d: any) => {
-        const o = group?.options.find((opt: any) => opt.id === d.id);
-        const hMm = o?.meta?.front || 100;
-        totalStackHeight += (hMm / 1000);
-     });
-     const verticalGap = Math.max(0, apertureHeight - totalStackHeight);
-     const startY = plinthHeight + (verticalGap / 2);
-     let currentY = startY; 
-     const stack = [];
-     const reversedDrawers = [...config.customDrawers].reverse();
-     for (let i = 0; i < reversedDrawers.length; i++) {
-        const d = reversedDrawers[i];
-        const originalIndex = config.customDrawers.length - 1 - i;
-        const o = group?.options.find((opt: any) => opt.id === d.id);
-        const hMm = o?.meta?.front || 100;
-        const h = hMm / 1000;
-        stack.push({ ...d, height: h, y: currentY + h/2, originalIndex });
-        currentY += h;
+     
+     if (!config.customDrawers || config.customDrawers.length === 0) {
+        return [];
      }
+     
+     // Get drawer data with nominal heights
+     const drawersWithHeights = config.customDrawers.map((d: any, originalIndex: number) => {
+        const o = group?.options.find((opt: any) => opt.id === d.id);
+        const heightMm = o?.meta?.front || 100;
+        return { ...d, heightMm, originalIndex };
+     });
+     
+     // Sort by height DESC (largest first) for bottom-to-top stacking
+     const sortedDrawers = [...drawersWithHeights].sort((a, b) => b.heightMm - a.heightMm);
+     
+     // Validate: sum must not exceed usable height
+     const totalHeightMm = sortedDrawers.reduce((sum, d) => sum + d.heightMm, 0);
+     const usableHeightMm = apertureHeight * 1000; // Convert back to mm
+     
+     if (totalHeightMm > usableHeightMm) {
+        console.warn(`Drawer stack (${totalHeightMm}mm) exceeds usable height (${usableHeightMm}mm)`);
+     }
+     
+     // Build stack from bottom up using ACTUAL nominal heights (no scaling)
+     const stack = [];
+     let currentOffsetMm = 0; // Start at 0mm from internal bottom
+     
+     for (let i = 0; i < sortedDrawers.length; i++) {
+        const d = sortedDrawers[i];
+        const heightMeters = d.heightMm / 1000;
+        
+        // Calculate Y position in world space
+        // Bottom of cabinet internal = bottomShellHeight
+        // Position = bottom + offset + half drawer height (for center positioning)
+        const yPosition = bottomShellHeight + (currentOffsetMm / 1000) + (heightMeters / 2);
+        
+        stack.push({
+           ...d,
+           height: heightMeters,
+           y: yPosition,
+           originalIndex: d.originalIndex
+        });
+        
+        currentOffsetMm += d.heightMm;
+     }
+     
      return stack;
-  }, [config.customDrawers, product, apertureHeight]);
+  }, [config.customDrawers, product, apertureHeight, bottomShellHeight]);
+
+  const sideThickness = 0.02; // Side walls remain consistent
+  const internalHeight = height - bottomShellHeight - topShellHeight;
+  const internalCenterY = bottomShellHeight + internalHeight / 2;
 
   return (
     <group>
       <group>
-         <mesh position={[0, height - carcassThickness/2, 0]} castShadow={!isGhost} receiveShadow><boxGeometry args={[width, carcassThickness, depth]} />{shellMaterial}</mesh>
-         <mesh position={[0, plinthHeight/2, -0.02]} castShadow={!isGhost} receiveShadow><boxGeometry args={[width, plinthHeight, depth - 0.05]} />{plinthMaterial}</mesh>
-         <mesh position={[0, height/2 + plinthHeight/2, -depth/2 + carcassThickness/2]} receiveShadow><boxGeometry args={[width, height - plinthHeight, carcassThickness]} />{shellMaterial}</mesh>
-         <mesh position={[-width/2 + carcassThickness/2, height/2 + plinthHeight/2, 0]} receiveShadow><boxGeometry args={[carcassThickness, height - plinthHeight, depth]} />{shellMaterial}</mesh>
-         <mesh position={[width/2 - carcassThickness/2, height/2 + plinthHeight/2, 0]} receiveShadow><boxGeometry args={[carcassThickness, height - plinthHeight, depth]} />{shellMaterial}</mesh>
+         {/* Top Shell Panel (40% - thinner) */}
+         <mesh position={[0, height - topShellHeight/2, 0]} castShadow={!isGhost} receiveShadow>
+            <boxGeometry args={[width, topShellHeight, depth]} />
+            {shellMaterial}
+         </mesh>
+         
+         {/* Bottom Shell Panel / Plinth (60% - thicker) - FLUSH with cabinet front */}
+         <mesh position={[0, bottomShellHeight/2, 0]} castShadow={!isGhost} receiveShadow>
+            <boxGeometry args={[width, bottomShellHeight, depth]} />
+            {shellMaterial}
+         </mesh>
+         
+         {/* Back Panel (full internal height) */}
+         <mesh position={[0, internalCenterY, -depth/2 + sideThickness/2]} receiveShadow>
+            <boxGeometry args={[width, internalHeight, sideThickness]} />
+            {shellMaterial}
+         </mesh>
+         
+         {/* Left Side Panel (full internal height) */}
+         <mesh position={[-width/2 + sideThickness/2, internalCenterY, 0]} receiveShadow>
+            <boxGeometry args={[sideThickness, internalHeight, depth]} />
+            {shellMaterial}
+         </mesh>
+         
+         {/* Right Side Panel (full internal height) */}
+         <mesh position={[width/2 - sideThickness/2, internalCenterY, 0]} receiveShadow>
+            <boxGeometry args={[sideThickness, internalHeight, depth]} />
+            {shellMaterial}
+         </mesh>
       </group>
+      
+      {/* Drawer Stack - fills 100% of aperture with zero gaps */}
       <group position={[0, 0, 0]}>
          {drawerStack.map((d, i) => {
             const isActive = d.originalIndex === activeDrawerIndex;
             const isDrawerGhost = isGhost && !isActive;
-            return <group key={i} position={[0, d.y, 0]}><Drawer3D config={d} width={width - carcassThickness*2 - 0.005} height={d.height} depth={depth - 0.05} faciaColor={faciaColor} isOpen={isActive} isGhost={isDrawerGhost} /></group>;
+            return (
+               <group key={i} position={[0, d.y, 0]}>
+                  <Drawer3D 
+                     config={d} 
+                     width={width - sideThickness*2 - 0.005} 
+                     height={d.height} 
+                     depth={depth - 0.05} 
+                     faciaColor={faciaColor} 
+                     isOpen={isActive} 
+                     isGhost={isDrawerGhost} 
+                  />
+               </group>
+            );
          })}
       </group>
     </group>
@@ -767,10 +846,15 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
     
     const castors = config.selections['mobility'] === true;
     const worktopId = config.selections['worktop'];
-    const frameColorId = config.selections['color'] || config.selections['housing_color'];
-    const frameColor = getMaterialColor(frameColorId, 'frame', product, 'color');
-    const faciaColorId = config.selections['drawer_facia'] || config.selections['facia_color'];
-    const faciaColor = getMaterialColor(faciaColorId, 'facia', product, 'drawer_facia');
+    
+    // Determine which color group ID is used by this product
+    const frameColorGroupId = product.groups.find(g => g.id === 'color' || g.id === 'housing_color')?.id || 'color';
+    const faciaColorGroupId = product.groups.find(g => g.id === 'drawer_facia' || g.id === 'facia_color')?.id || 'drawer_facia';
+    
+    const frameColorId = config.selections[frameColorGroupId];
+    const frameColor = getMaterialColor(frameColorId, 'frame', product, frameColorGroupId);
+    const faciaColorId = config.selections[faciaColorGroupId];
+    const faciaColor = getMaterialColor(faciaColorId, 'facia', product, faciaColorGroupId);
 
     const underBenchId = config.selections['under_bench'];
     const aboveBenchId = config.selections['above_bench'];

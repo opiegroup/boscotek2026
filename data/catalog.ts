@@ -456,6 +456,7 @@ export const CATALOG: ProductDefinition[] = [
       { id: 'series', label: 'Series (Depth)', type: 'radio', step: 1, options: [{ id: 'series-s', label: 'S Series (605mm Deep)', value: 605, code: 'BTCS', priceDelta: 0, meta: { depth: 0.605 } }, { id: 'series-d', label: 'D Series (755mm Deep)', value: 755, code: 'BTCD', priceDelta: 150, meta: { depth: 0.755 } }] },
       { id: 'width', label: 'Cabinet Width', type: 'radio', step: 1, options: [{ id: 'w-560', label: '560mm', value: 560, code: '560', priceDelta: 0, meta: { width: 0.56 } }, { id: 'w-710', label: '710mm', value: 710, code: '710', priceDelta: 120, meta: { width: 0.71 } }, { id: 'w-1010', label: '1010mm', value: 1010, code: '1010', priceDelta: 250, meta: { width: 1.01 } }] },
       { id: 'height', label: 'Cabinet Height', type: 'select', step: 2, options: [
+        { id: 'h-660', label: '660mm (Standard)', value: 660, code: '660', priceDelta: -100, meta: { height: 0.66, usableHeight: 525 } },
         { id: 'h-850', label: '850mm (Bench Height)', value: 850, code: '850', priceDelta: 0, meta: { height: 0.85, usableHeight: 750 } }, 
         { id: 'h-1000', label: '1000mm', value: 1000, code: '1000', priceDelta: 100, meta: { height: 1.0, usableHeight: 900 } }, 
         { id: 'h-1200', label: '1200mm', value: 1200, code: '1200', priceDelta: 200, meta: { height: 1.2, usableHeight: 1100 } }, 
