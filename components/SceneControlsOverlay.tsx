@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import * as THREE from 'three';
 
 interface SceneControlsOverlayProps {
   controlsRef: React.MutableRefObject<any>;
@@ -18,17 +19,14 @@ const SceneControlsOverlay: React.FC<SceneControlsOverlayProps> = ({ controlsRef
     if (!controlsRef.current) return;
     
     const controls = controlsRef.current;
-    
-    // Get the camera's right and up vectors
     const camera = controls.object;
-    const offset = camera.position.clone().sub(controls.target);
     
     // Calculate pan vectors based on current camera orientation
-    const panLeft = new (window as any).THREE.Vector3();
+    const panLeft = new THREE.Vector3();
     panLeft.setFromMatrixColumn(camera.matrix, 0); // Get X column (right)
     panLeft.multiplyScalar(-deltaX);
     
-    const panUp = new (window as any).THREE.Vector3();
+    const panUp = new THREE.Vector3();
     panUp.setFromMatrixColumn(camera.matrix, 1); // Get Y column (up)
     panUp.multiplyScalar(deltaY);
     
@@ -143,7 +141,7 @@ const SceneControlsOverlay: React.FC<SceneControlsOverlayProps> = ({ controlsRef
   );
 
   return (
-    <div className="absolute bottom-4 right-4 z-10 select-none">
+    <div className="absolute top-4 right-4 z-10 select-none">
       {/* Tooltip */}
       <div className="mb-2 text-right">
         <div className="inline-block bg-zinc-900/95 backdrop-blur-sm border border-zinc-700 rounded px-3 py-1.5 text-[10px] text-zinc-400">

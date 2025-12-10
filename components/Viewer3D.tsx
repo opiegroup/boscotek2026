@@ -948,15 +948,12 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
             <div className="w-px bg-zinc-600 mx-1"></div>
             <button onClick={() => controlsRef.current?.reset()} className="px-3 py-1 text-xs font-medium rounded transition-colors text-zinc-300 hover:text-white hover:bg-zinc-700" title="Reset Camera View">Recenter</button>
          </div>
-         <div className="absolute bottom-4 left-4 flex flex-col gap-2 pointer-events-none select-none">
+         <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end pointer-events-none select-none">
             <div className="text-[10px] text-zinc-500 bg-black/20 p-2 rounded backdrop-blur-sm">
               LMB: Rotate • RMB: Pan • Scroll: Zoom
               {isSpacePressed && <span className="ml-2 text-amber-400">• SPACE: Pan Mode Active</span>}
             </div>
-         </div>
-         
-         <div className="absolute bottom-4 right-28 pointer-events-none select-none">
-            <div className="text-[10px] text-amber-500/80 bg-black/40 p-2 rounded backdrop-blur-sm border border-amber-900/30 max-w-[200px] text-right">
+            <div className="text-[10px] text-amber-500/80 bg-black/40 p-2 rounded backdrop-blur-sm border border-amber-900/30 max-w-xs text-right">
                ⚠️ Renderings are approximations only.<br/>Refer to catalog for accurate details.
             </div>
          </div>
