@@ -5,7 +5,7 @@
 -- 1. BIM LEADS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS bim_leads (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   company TEXT,
@@ -32,7 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_bim_leads_config_id ON bim_leads(config_id);
 -- 2. CONFIGURATIONS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS configurations (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   product_type TEXT NOT NULL,
   dimensions_json JSONB NOT NULL,
   drawer_stack_json JSONB,
@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_configurations_geometry_hash ON configurations(ge
 -- 3. BIM EXPORTS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS bim_exports (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID REFERENCES bim_leads(id) ON DELETE CASCADE,
   config_id UUID REFERENCES configurations(id) ON DELETE CASCADE,
   ifc_url TEXT,
@@ -91,7 +91,7 @@ CREATE INDEX IF NOT EXISTS idx_bim_exports_export_type ON bim_exports(export_typ
 -- 4. EXPORT ANALYTICS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS export_analytics (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   event_type TEXT NOT NULL,
   lead_id UUID REFERENCES bim_leads(id),
   config_id UUID REFERENCES configurations(id),
