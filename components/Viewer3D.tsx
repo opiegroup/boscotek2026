@@ -845,7 +845,11 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
     // Space-bar pan mode
     useEffect(() => {
       const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.code === 'Space' && !e.repeat) {
+        // Don't intercept space if user is typing in an input field
+        const target = e.target as HTMLElement;
+        const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        
+        if (e.code === 'Space' && !e.repeat && !isTyping) {
           e.preventDefault();
           setIsSpacePressed(true);
           
@@ -858,7 +862,11 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
       };
 
       const handleKeyUp = (e: KeyboardEvent) => {
-        if (e.code === 'Space') {
+        // Don't intercept space if user is typing in an input field
+        const target = e.target as HTMLElement;
+        const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        
+        if (e.code === 'Space' && !isTyping) {
           e.preventDefault();
           setIsSpacePressed(false);
           
@@ -871,7 +879,10 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
 
       // Prevent space-bar from scrolling page when over canvas
       const handleKeyPress = (e: KeyboardEvent) => {
-        if (e.code === 'Space' && canvasContainerRef.current?.contains(document.activeElement)) {
+        const target = e.target as HTMLElement;
+        const isTyping = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable;
+        
+        if (e.code === 'Space' && !isTyping && canvasContainerRef.current?.contains(document.activeElement)) {
           e.preventDefault();
         }
       };

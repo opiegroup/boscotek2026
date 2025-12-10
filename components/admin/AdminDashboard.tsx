@@ -4,6 +4,7 @@ import { useCatalog } from '../../contexts/CatalogContext';
 import { login, checkSession, logout, uploadFile, runAiExtraction, approveItem, getCurrentUser, getImportHistory, updateBatchStatus, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
 import { ImportBatch, ImportItem, ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
 import BoscotekLogo from '../BoscotekLogo';
+import BIMLeadsManager from './BIMLeadsManager';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -24,7 +25,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
   // View State
-  // 0: Dashboard, 1: Pricing/Options, 2: Import (Upload), 5: Reports/History, 6: Quotes
+  // 0: Dashboard, 1: Pricing/Options, 2: Import (Upload), 5: Reports/History, 6: Quotes, 7: BIM Leads
   const [activeStep, setActiveStep] = useState<number>(0); 
   const [uploadFileRef, setUploadFileRef] = useState<File | null>(null);
   const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
@@ -257,6 +258,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         <nav className="flex-1 p-4 space-y-2">
           <button onClick={() => setActiveStep(0)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 0 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Dashboard</button>
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
+          <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads & Exports</button>
           <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Pricing & Options</button>
           <button onClick={() => setActiveStep(2)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 2 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>New Import (AI)</button>
           <button onClick={() => setActiveStep(5)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 5 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Reports / History</button>
@@ -519,6 +521,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                 </div>
              </div>
            </div>
+        )}
+
+        {/* BIM LEADS & EXPORTS */}
+        {activeStep === 7 && (
+          <BIMLeadsManager />
         )}
 
         {/* AI IMPORT / HISTORY STEPS (Simplified for brevity as they match previous logic) */}

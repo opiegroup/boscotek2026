@@ -1,0 +1,215 @@
+import React, { useState } from 'react';
+import { ConfigurationState, ProductDefinition, PricingResult, ExportType } from '../types';
+import LeadCaptureModal from './LeadCaptureModal';
+import { requestExport, getCachedLead, initializeSession } from '../services/bimExportApi';
+
+interface ExportButtonsProps {
+  configuration: ConfigurationState;
+  product: ProductDefinition;
+  pricing: PricingResult;
+  referenceCode: string;
+}
+
+export const ExportButtons: React.FC<ExportButtonsProps> = ({
+  configuration,
+  product,
+  pricing,
+  referenceCode
+}) => {
+  const [showLeadModal, setShowLeadModal] = useState(false);
+  const [currentExportType, setCurrentExportType] = useState<ExportType>('BIM');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  // Initialize session on mount
+  React.useEffect(() => {
+    initializeSession();
+  }, []);
+
+  const handleExportRequest = (exportType: ExportType) => {
+    // Always show modal for now to ensure it works
+    // TODO: Re-enable caching after testing
+    setCurrentExportType(exportType);
+    setShowLeadModal(true);
+    
+    /* Cache logic disabled for testing
+    // Check if lead was recently captured
+    const cachedLead = getCachedLead();
+    
+    if (cachedLead) {
+      // Lead exists, proceed directly to export
+      handleExport(exportType, cachedLead);
+    } else {
+      // Show lead capture modal
+      setCurrentExportType(exportType);
+      setShowLeadModal(true);
+    }
+    */
+  };
+
+  const handleExport = async (exportType: ExportType, leadData?: any) => {
+    setIsExporting(true);
+    setExportStatus(null);
+    
+    try {
+      const response = await requestExport({
+        configuration,
+        product,
+        pricing,
+        referenceCode,
+        lead: leadData,
+        exportType
+      });
+
+      if (response.success) {
+        setExportStatus({ success: true, message: 'Export generated successfully! Files downloading...' });
+        
+        // Helper to trigger download
+        const downloadFile = (url: string, filename: string) => {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          // Clean up blob URLs after download
+          if (url.startsWith('blob:')) {
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+          }
+        };
+        
+        const baseFilename = `Boscotek_${product.id}_${referenceCode}`;
+        
+        // Download files
+        if (exportType === 'IFC' && response.ifcUrl) {
+          downloadFile(response.ifcUrl, `${baseFilename}.ifc`);
+        } else if (exportType === 'DATA' && response.dataUrls) {
+          if (response.dataUrls.csv) downloadFile(response.dataUrls.csv, `${baseFilename}.csv`);
+          if (response.dataUrls.json) downloadFile(response.dataUrls.json, `${baseFilename}.json`);
+          if (response.dataUrls.txt) downloadFile(response.dataUrls.txt, `${baseFilename}.txt`);
+        } else if (exportType === 'SPEC_PACK') {
+          if (response.ifcUrl) downloadFile(response.ifcUrl, `${baseFilename}.ifc`);
+          if (response.dataUrls?.csv) downloadFile(response.dataUrls.csv, `${baseFilename}.csv`);
+          if (response.dataUrls?.json) downloadFile(response.dataUrls.json, `${baseFilename}.json`);
+          if (response.dataUrls?.txt) downloadFile(response.dataUrls.txt, `${baseFilename}.txt`);
+        }
+      } else {
+        setExportStatus({ success: false, message: response.error || 'Export failed' });
+      }
+    } catch (error: any) {
+      setExportStatus({ success: false, message: error.message });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleLeadSubmit = async (leadData: any) => {
+    // Close modal first
+    setShowLeadModal(false);
+    // Small delay to let modal close gracefully
+    await new Promise(resolve => setTimeout(resolve, 300));
+    // Then proceed with export
+    await handleExport(currentExportType, leadData);
+  };
+
+  return (
+    <div className="space-y-3">
+      <h3 className="text-sm font-bold uppercase text-zinc-400 border-b border-zinc-800 pb-1">
+        Export Options
+      </h3>
+
+      {/* Status Message */}
+      {exportStatus && (
+        <div className={`p-3 rounded border text-xs ${exportStatus.success ? 'bg-green-900/20 border-green-500 text-green-400' : 'bg-red-900/20 border-red-500 text-red-400'}`}>
+          {exportStatus.message}
+        </div>
+      )}
+
+      {/* Export Buttons */}
+      <div className="space-y-2">
+        {/* BIM (IFC) Export */}
+        <button
+          onClick={() => handleExportRequest('IFC')}
+          disabled={isExporting}
+          className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+        >
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <div className="text-left">
+              <div className="font-bold text-sm">Download BIM (IFC)</div>
+              <div className="text-xs text-blue-200">3D model for Revit, ArchiCAD, Navisworks</div>
+            </div>
+          </div>
+          <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Data Export */}
+        <button
+          onClick={() => handleExportRequest('DATA')}
+          disabled={isExporting}
+          className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-green-600 to-green-700 hover:from-green-500 hover:to-green-600 text-white rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
+        >
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <div className="text-left">
+              <div className="font-bold text-sm">Export Data</div>
+              <div className="text-xs text-green-200">CSV, JSON, Excel formats</div>
+            </div>
+          </div>
+          <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+
+        {/* Complete Spec Pack */}
+        <button
+          onClick={() => handleExportRequest('SPEC_PACK')}
+          disabled={isExporting}
+          className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-black rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed group font-bold"
+        >
+          <div className="flex items-center gap-3">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+            </svg>
+            <div className="text-left">
+              <div className="font-bold text-sm">Complete Specification Pack</div>
+              <div className="text-xs text-black/70">BIM + Data + Spec Sheet</div>
+            </div>
+          </div>
+          <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Loading Indicator */}
+      {isExporting && (
+        <div className="flex items-center justify-center gap-2 p-3 bg-zinc-800/50 rounded border border-zinc-700">
+          <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xs text-zinc-400">Generating export...</span>
+        </div>
+      )}
+
+      {/* Info Text */}
+      <div className="bg-zinc-800/30 border border-zinc-700/50 rounded p-3 text-[10px] text-zinc-500 leading-relaxed">
+        <strong className="text-zinc-400">Note:</strong> All exports include complete product specifications, dimensions, materials, and pricing information. BIM files are compatible with major architectural and engineering software.
+      </div>
+
+      {/* Lead Capture Modal */}
+      <LeadCaptureModal
+        isOpen={showLeadModal}
+        onClose={() => setShowLeadModal(false)}
+        onSubmit={handleLeadSubmit}
+        exportType={currentExportType === 'IFC' ? 'BIM' : currentExportType === 'DATA' ? 'DATA' : 'SPEC_PACK'}
+      />
+    </div>
+  );
+};
+
+export default ExportButtons;

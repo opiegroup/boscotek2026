@@ -222,3 +222,112 @@ export interface QuoteRequest {
   embeddedCabinets?: EmbeddedCabinet[];
   customerType?: string;
 }
+
+// --- BIM EXPORT TYPES ---
+
+export type LeadRole = 'Architect' | 'Builder' | 'Designer' | 'Engineer' | 'Buyer' | 'Other';
+
+export interface BIMLeadData {
+  name: string;
+  email: string;
+  company?: string;
+  role: LeadRole;
+  projectName?: string;
+  projectLocation?: string;
+  consent: boolean;
+}
+
+export interface BIMLead extends BIMLeadData {
+  id: string;
+  configId?: string;
+  timestamp: string;
+  ipAddress?: string;
+  sessionId?: string;
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConfigurationRecord {
+  id: string;
+  productType: string;
+  dimensionsJson: {
+    width: number;
+    height: number;
+    depth: number;
+  };
+  drawerStackJson?: DrawerConfiguration[];
+  partitionDataJson?: any;
+  accessoriesJson?: any;
+  colourOptionsJson?: any;
+  priceJson?: PricingResult;
+  fullConfigJson: ConfigurationState;
+  referenceCode?: string;
+  geometryHash?: string;
+  leadId?: string;
+  timestamp: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type ExportType = 'IFC' | 'DATA' | 'SPEC_PACK' | 'ALL';
+export type ExportStatus = 'pending' | 'processing' | 'completed' | 'failed';
+
+export interface BIMExport {
+  id: string;
+  leadId?: string;
+  configId?: string;
+  ifcUrl?: string;
+  dataExportUrl?: string;
+  csvExportUrl?: string;
+  xlsxExportUrl?: string;
+  jsonExportUrl?: string;
+  specPackUrl?: string;
+  geometryHash?: string;
+  exportType: ExportType;
+  fileSizeBytes?: number;
+  generationTimeMs?: number;
+  status: ExportStatus;
+  errorMessage?: string;
+  timestamp: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExportAnalytics {
+  id: string;
+  eventType: string;
+  leadId?: string;
+  configId?: string;
+  productType?: string;
+  exportFormat?: string;
+  userAgent?: string;
+  ipAddress?: string;
+  sessionId?: string;
+  metadata?: any;
+  timestamp: string;
+  createdAt: string;
+}
+
+export interface ExportRequest {
+  configuration: ConfigurationState;
+  product: ProductDefinition;
+  pricing: PricingResult;
+  referenceCode: string;
+  lead?: BIMLeadData;
+  exportType: ExportType;
+}
+
+export interface ExportResponse {
+  success: boolean;
+  exportId?: string;
+  ifcUrl?: string;
+  dataUrls?: {
+    csv?: string;
+    xlsx?: string;
+    json?: string;
+    txt?: string;
+  };
+  specPackUrl?: string;
+  error?: string;
+}

@@ -1,6 +1,7 @@
 
 import React from 'react';
 import { ConfigurationState, PricingResult, ProductDefinition } from '../types';
+import ExportButtons from './ExportButtons';
 
 interface SummaryPanelProps {
   product: ProductDefinition;
@@ -130,6 +131,16 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
                );
              })}
           </dl>
+        </div>
+
+        {/* Export Options */}
+        <div className="mb-6">
+          <ExportButtons
+            configuration={config}
+            product={product}
+            pricing={pricing}
+            referenceCode={referenceCode}
+          />
         </div>
 
         {/* Pricing Estimate */}
