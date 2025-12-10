@@ -145,9 +145,16 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
               </button>
            </div>
            
-           <p className="text-xs text-zinc-400 mb-4">
-              Configuring for <strong>{width}mm Wide</strong> x <strong>{depth > 700 ? 'Deep' : 'Standard'}</strong> Depth.
-           </p>
+           <div className="mb-4 space-y-1">
+              <p className="text-xs text-zinc-400">
+                 Configuring for <strong>{width}mm Wide</strong> x <strong>{depth > 700 ? 'Deep' : 'Standard'}</strong> Depth.
+              </p>
+              <div className="flex items-center gap-2 bg-zinc-900/50 px-2 py-1.5 rounded border border-zinc-700/50">
+                 <span className="text-[10px] text-zinc-500 uppercase font-bold">Load Capacity:</span>
+                 <span className="text-xs text-amber-500 font-bold">{drawerOpt?.meta?.loadCapacity || 200}kg</span>
+                 <span className="text-[10px] text-zinc-600">• Full Extension Runner</span>
+              </div>
+           </div>
 
            <Tabs />
 

@@ -456,13 +456,21 @@ export const CATALOG: ProductDefinition[] = [
       { id: 'series', label: 'Series (Depth)', type: 'radio', step: 1, options: [{ id: 'series-s', label: 'S Series (605mm Deep)', value: 605, code: 'BTCS', priceDelta: 0, meta: { depth: 0.605 } }, { id: 'series-d', label: 'D Series (755mm Deep)', value: 755, code: 'BTCD', priceDelta: 150, meta: { depth: 0.755 } }] },
       { id: 'width', label: 'Cabinet Width', type: 'radio', step: 1, options: [{ id: 'w-560', label: '560mm', value: 560, code: '560', priceDelta: 0, meta: { width: 0.56 } }, { id: 'w-710', label: '710mm', value: 710, code: '710', priceDelta: 120, meta: { width: 0.71 } }, { id: 'w-1010', label: '1010mm', value: 1010, code: '1010', priceDelta: 250, meta: { width: 1.01 } }] },
       { id: 'height', label: 'Cabinet Height', type: 'select', step: 2, options: [
-        { id: 'h-660', label: '660mm (Standard)', value: 660, code: '660', priceDelta: -100, meta: { height: 0.66, usableHeight: 525 } },
+        { id: 'h-660', label: '660mm (Standard)', value: 660, code: '700', priceDelta: -100, meta: { height: 0.66, usableHeight: 525 } },
         { id: 'h-850', label: '850mm (Bench Height)', value: 850, code: '850', priceDelta: 0, meta: { height: 0.85, usableHeight: 750 } }, 
         { id: 'h-1000', label: '1000mm', value: 1000, code: '1000', priceDelta: 100, meta: { height: 1.0, usableHeight: 900 } }, 
         { id: 'h-1200', label: '1200mm', value: 1200, code: '1200', priceDelta: 200, meta: { height: 1.2, usableHeight: 1100 } }, 
         { id: 'h-1450', label: '1450mm (Eye Level)', value: 1450, code: '1450', priceDelta: 350, meta: { height: 1.45, usableHeight: 1350 } }
       ] },
-      { id: 'config', label: 'Drawer Configuration', type: 'drawer_stack', step: 3, description: 'Build your custom stack.', options: [{ id: 'dr-75', label: '75mm Drawer', value: '75', code: '75', priceDelta: 120, meta: { front: 75, usable: 50 } }, { id: 'dr-100', label: '100mm Drawer', value: '100', code: '100', priceDelta: 140, meta: { front: 100, usable: 75 } }, { id: 'dr-125', label: '125mm Drawer', value: '125', code: '125', priceDelta: 150, meta: { front: 125, usable: 100 } }, { id: 'dr-150', label: '150mm Drawer', value: '150', code: '150', priceDelta: 160, meta: { front: 150, usable: 125 } }, { id: 'dr-200', label: '200mm Drawer', value: '200', code: '200', priceDelta: 190, meta: { front: 200, usable: 175 } }, { id: 'dr-250', label: '250mm Drawer', value: '250', code: '250', priceDelta: 220, meta: { front: 250, usable: 225 } }, { id: 'dr-300', label: '300mm Drawer', value: '300', code: '300', priceDelta: 240, meta: { front: 300, usable: 275 } }] },
+      { id: 'config', label: 'Drawer Configuration', type: 'drawer_stack', step: 3, description: 'Build your custom stack.', options: [
+        { id: 'dr-75', label: '75mm Drawer', value: '75', code: '75', priceDelta: 120, meta: { front: 75, usable: 50, loadCapacity: 200 } }, 
+        { id: 'dr-100', label: '100mm Drawer', value: '100', code: '100', priceDelta: 140, meta: { front: 100, usable: 75, loadCapacity: 200 } }, 
+        { id: 'dr-125', label: '125mm Drawer', value: '125', code: '125', priceDelta: 150, meta: { front: 125, usable: 100, loadCapacity: 200 } }, 
+        { id: 'dr-150', label: '150mm Drawer', value: '150', code: '150', priceDelta: 160, meta: { front: 150, usable: 125, loadCapacity: 200 } }, 
+        { id: 'dr-200', label: '200mm Drawer', value: '200', code: '200', priceDelta: 190, meta: { front: 200, usable: 175, loadCapacity: 200 } }, 
+        { id: 'dr-250', label: '250mm Drawer', value: '250', code: '250', priceDelta: 220, meta: { front: 250, usable: 225, loadCapacity: 200 } }, 
+        { id: 'dr-300', label: '300mm Drawer', value: '300', code: '300', priceDelta: 240, meta: { front: 300, usable: 275, loadCapacity: 200 } }
+      ] },
       { id: 'housing_color', label: 'Housing / Cavity Colour', type: 'color', step: 4, defaultValue: 'col-mg', description: 'Select the cabinet shell colour.', options: COLORS },
       { id: 'facia_color', label: 'Drawer Facia Colour', type: 'color', step: 5, defaultValue: 'col-sg', description: 'Select the drawer front colour.', options: COLORS }
     ]

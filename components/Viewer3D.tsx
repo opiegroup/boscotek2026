@@ -264,7 +264,7 @@ const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }:
    );
 };
 
-export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex }: any) => {
+export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex, showFullExtension = false }: any) => {
   // Get usable height from product configuration
   const heightGroup = product.groups.find((g: any) => g.id === 'height');
   const selectedHeightId = config.selections['height'];
@@ -377,6 +377,7 @@ export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.
          {drawerStack.map((d, i) => {
             const isActive = d.originalIndex === activeDrawerIndex;
             const isDrawerGhost = isGhost && !isActive;
+            const shouldOpen = showFullExtension || isActive;
             return (
                <group key={i} position={[0, d.y, 0]}>
                   <Drawer3D 
@@ -385,7 +386,7 @@ export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.
                      height={d.height} 
                      depth={depth - 0.05} 
                      faciaColor={faciaColor} 
-                     isOpen={isActive} 
+                     isOpen={shouldOpen} 
                      isGhost={isDrawerGhost} 
                   />
                </group>
@@ -837,6 +838,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
 export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) => {
     const [bgMode, setBgMode] = useState<BackgroundMode>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
+    const [showFullExtension, setShowFullExtension] = useState(false);
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
 
@@ -926,7 +928,7 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
            {bgMode !== 'photo' && <Grid position={[0, -0.01, 0]} args={[10.5, 10.5]} cellSize={0.5} cellThickness={0.5} cellColor={bgMode === 'light' ? '#a1a1aa' : '#3f3f46'} sectionSize={1} sectionThickness={1} sectionColor={bgMode === 'light' ? '#71717a' : '#52525b'} fadeDistance={5} fadeStrength={1} infiniteGrid />}
            <group position={[0, 0, 0]}>
               {product.id === 'prod-hd-cabinet' ? (
-                 <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} />
+                 <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} showFullExtension={showFullExtension} />
               ) : (
                  <Center bottom>
                     <group>
@@ -947,6 +949,18 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
             <button onClick={() => setBgMode('photo')} className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bgMode === 'photo' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Photo</button>
             <div className="w-px bg-zinc-600 mx-1"></div>
             <button onClick={() => controlsRef.current?.reset()} className="px-3 py-1 text-xs font-medium rounded transition-colors text-zinc-300 hover:text-white hover:bg-zinc-700" title="Reset Camera View">Recenter</button>
+            {product.id === 'prod-hd-cabinet' && (
+              <>
+                <div className="w-px bg-zinc-600 mx-1"></div>
+                <button 
+                  onClick={() => setShowFullExtension(!showFullExtension)} 
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${showFullExtension ? 'bg-amber-500 text-black' : 'text-zinc-300 hover:text-white hover:bg-zinc-700'}`} 
+                  title="Show Full Extension Runners"
+                >
+                  {showFullExtension ? '🔓 Extended' : 'Full Extension'}
+                </button>
+              </>
+            )}
          </div>
          <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end pointer-events-none select-none">
             <div className="text-[10px] text-zinc-500 bg-black/20 p-2 rounded backdrop-blur-sm">
