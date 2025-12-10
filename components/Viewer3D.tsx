@@ -231,7 +231,7 @@ const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }:
    const gap = 0.004;
    const faciaThick = 0.02;
    const boxThick = 0.01;
-   const targetZ = isOpen ? depth * 0.6 : 0; 
+   const targetZ = isOpen ? depth * 0.95 : 0; // Full extension no-tip drawer system 
 
    useFrame((state, delta) => {
       if (groupRef.current) {
@@ -240,19 +240,19 @@ const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }:
    });
 
    const faciaMat = isGhost 
-      ? <meshStandardMaterial color={faciaColor} transparent opacity={0.05} depthWrite={false} roughness={0.1} />
+      ? <meshStandardMaterial color={faciaColor} transparent={true} opacity={0.15} depthWrite={false} roughness={0.3} side={THREE.DoubleSide} />
       : <meshStandardMaterial color={faciaColor} roughness={0.4} metalness={0.1} />;
    const handleMat = isGhost
-      ? <meshStandardMaterial color="#e4e4e7" transparent opacity={0.05} depthWrite={false} />
+      ? <meshStandardMaterial color="#e4e4e7" transparent={true} opacity={0.15} depthWrite={false} side={THREE.DoubleSide} />
       : <meshStandardMaterial color="#e4e4e7" metalness={0.8} roughness={0.2} />;
    const boxMat = isGhost
-      ? <meshStandardMaterial color="#71717a" transparent opacity={0.03} depthWrite={false} />
+      ? <meshStandardMaterial color="#71717a" transparent={true} opacity={0.1} depthWrite={false} side={THREE.DoubleSide} />
       : <meshStandardMaterial color="#71717a" />;
 
    return (
       <group ref={groupRef}>
          <mesh position={[0, 0, depth/2 - faciaThick/2]} castShadow={!isGhost}><boxGeometry args={[width - gap*2, height - gap*2, faciaThick]} />{faciaMat}</mesh>
-         <mesh position={[0, height/2 - 0.03, depth/2 + 0.005]}><boxGeometry args={[width - 0.1, 0.015, 0.01]} />{handleMat}</mesh>
+         <mesh position={[0, height/2 - 0.015, depth/2 + 0.008]}><boxGeometry args={[width - gap*2, 0.02, 0.015]} />{handleMat}</mesh>
          <group position={[0, 0, -0.01]}> 
             <mesh position={[0, -height/2 + boxThick/2 + gap, 0]}><boxGeometry args={[width - 0.05, boxThick, depth - 0.02]} />{boxMat}</mesh>
             <mesh position={[0, 0, -depth/2 + boxThick/2]}><boxGeometry args={[width - 0.05, height - 0.02, boxThick]} />{boxMat}</mesh>
@@ -280,7 +280,7 @@ export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.
   
   // Unified shell material for entire cabinet body (including plinth/bottom)
   const shellMaterial = isGhost 
-    ? <meshStandardMaterial color={frameColor} transparent opacity={0.05} roughness={0.1} depthWrite={false} /> 
+    ? <meshStandardMaterial color={frameColor} transparent={true} opacity={0.15} roughness={0.3} depthWrite={false} side={THREE.DoubleSide} /> 
     : <meshStandardMaterial color={frameColor} roughness={0.5} />;
 
   const drawerStack = useMemo(() => {
@@ -835,7 +835,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
 };
 
 export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) => {
-    const [bgMode, setBgMode] = useState<BackgroundMode>('dark');
+    const [bgMode, setBgMode] = useState<BackgroundMode>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
