@@ -1,34 +1,117 @@
 # Boscotek Configurator - AI Coding Rules
 
-## IFC Export Guidelines
+## IFC Export Guidelines (Full Specification - LOD 200-300)
 
-When working with IFC (Industry Foundation Classes) export code:
+When working with IFC (Industry Foundation Classes) export code, follow the complete specification:
 
-### Critical Rules
+### Section 1: Critical Rules (No Floats)
 
-1. **NEVER pass null for IfcProject.RepresentationContexts**
+1. **NEVER pass null/float for IfcProject.RepresentationContexts**
    - Must be a LIST of IfcGeometricRepresentationContext entities
-   - Example: `[geometricContext]` NOT `null`
+   - Example: `[geometricContext]` NOT `null` or `0.0`
 
-2. **NEVER pass null for IfcProject.UnitsInContext**
+2. **NEVER pass null/float for IfcProject.UnitsInContext**
    - Must be an IfcUnitAssignment entity reference
-   - Example: `unitAssignment` NOT `null`
+   - Example: `unitAssignment` NOT `null` or `1.0`
 
 3. **ALWAYS create complete spatial hierarchy**
    - Required: IfcProject → IfcSite → IfcBuilding → IfcBuildingStorey → Products
    - NEVER skip IfcBuildingStorey
    - NEVER place products directly in IfcBuilding
 
-4. **Distinguish entity references from coordinates**
-   - Coordinates: `[0., 0., 0.]` (floats with dots)
-   - Entity references: `[#10, #11, #12]` (with # prefix)
-   - Single numbers in parameters are ALWAYS entity references: `#100`
+4. **ObjectPlacement must ALWAYS be an entity**
+   - Use IfcLocalPlacement, NEVER a float or primitive
+   - Example: `productLocalPlacement` NOT `0.0`
 
-5. **Creation order matters**
-   - Create units BEFORE project
-   - Create contexts BEFORE project
-   - Create spatial hierarchy BEFORE products
-   - Create geometry BEFORE products
+5. **Relationship attributes must be entity references**
+   - RelatingObject, RelatedObjects → entity references
+   - RelatingStructure, RelatedElements → entity references
+   - NEVER floats or primitives
+
+### Section 2: Units (Millimeters)
+
+```typescript
+// CORRECT - Use millimeters as per specification
+const lengthUnit = createEntity('IFCSIUNIT', '*', 'LENGTHUNIT', '.MILLI.', 'METRE');
+
+// Convert all dimensions to millimeters
+const dimensions = {
+  width: dimensionsMeters.width * 1000,
+  height: dimensionsMeters.height * 1000,
+  depth: dimensionsMeters.depth * 1000
+};
+```
+
+### Section 3: IFC Header
+
+```typescript
+// Include CoordinationView4 and Opie Manufacturing Group
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView4]'), '2;1');
+FILE_NAME('...', '...', ('Boscotek Configurator'), ('Opie Manufacturing Group'), ...);
+```
+
+### Section 4: Product Type Mapping
+
+```typescript
+// Set ObjectType to full Boscotek configuration code
+const productInstance = createEntity(
+  'IFCFURNISHINGELEMENT',
+  referenceCode,                    // GlobalId
+  ownerHistoryId,
+  product.name,                     // Name
+  product.description,              // Description
+  referenceCode,                    // ObjectType (FULL CODE: BTCS.700.560...)
+  productLocalPlacement,
+  bodyRepresentation,
+  null
+);
+```
+
+### Section 5: Property Sets (Pset_BoscotekCabinet)
+
+Always include these properties:
+- ✅ BoscotekCode (IfcIdentifier)
+- ✅ Family (IfcLabel)
+- ✅ Manufacturer: "Boscotek"
+- ✅ OwnerOrganisation: "Opie Manufacturing Group"
+- ✅ Width, Depth, Height (IfcLengthMeasure in mm)
+- ✅ NumberOfDrawers (IfcInteger)
+- ✅ DrawerConfigurationCode (IfcLabel)
+- ✅ UDLDrawerCapacity, UDLCabinetCapacity (IfcLabel)
+- ✅ MaterialBody, MaterialFronts (IfcLabel)
+- ✅ FinishBody, FinishFronts (IfcLabel with descriptive names)
+- ✅ BasePrice, TotalPrice (IfcMonetaryMeasure)
+- ✅ URLProductPage (IfcText)
+
+### Section 6: Assembly (Drawers)
+
+```typescript
+// Drawers must be aggregated under cabinet using IfcRelAggregates
+const drawerIds = addDrawerGeometry(...);
+if (drawerIds.length > 0) {
+  createEntity('IFCRELAGGREGATES', 
+    'CabinetDrawerAssembly', 
+    ownerHistoryId, 
+    'Cabinet with Drawers', 
+    null, 
+    productInstance,  // Parent (cabinet)
+    drawerIds         // Children (drawers)
+  );
+}
+```
+
+### Section 7: Creation Order
+
+1. OwnerHistory
+2. Units (with .MILLI. prefix)
+3. Geometric Context
+4. Project (with contexts and units)
+5. Site, Building, Storey
+6. Aggregation relationships (Project→Site→Building→Storey)
+7. Products
+8. Spatial containment (Products→Storey)
+9. Property sets
+10. Assemblies (Cabinet→Drawers)
 
 ### IFC Entity Reference Rules
 

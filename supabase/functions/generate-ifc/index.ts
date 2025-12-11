@@ -14,18 +14,25 @@ function generateIFCContent(configData: any): string {
   const { configuration, product, pricing, referenceCode } = configData;
   const timestamp = new Date().toISOString();
   
-  // Extract dimensions
-  const dimensions = configData.dimensions || {
+  // Extract dimensions (Section 5: Convert to MILLIMETERS)
+  const dimensionsMeters = configData.dimensions || {
     width: 0.56,
     height: 0.85,
     depth: 0.75
   };
+  
+  // Convert to millimeters (IFC units are now in mm)
+  const dimensions = {
+    width: dimensionsMeters.width * 1000,
+    height: dimensionsMeters.height * 1000,
+    depth: dimensionsMeters.depth * 1000
+  };
 
-  // IFC Header
+  // IFC Header (Section 2: Enhanced with CoordinationView4 and detailed metadata)
   const ifcHeader = `ISO-10303-21;
 HEADER;
-FILE_DESCRIPTION(('ViewDefinition [CoordinationView]'), '2;1');
-FILE_NAME('${referenceCode}.ifc', '${timestamp}', ('Boscotek Configurator'), ('Boscotek'), 'Boscotek Configurator v1.0', 'Boscotek Configurator', 'IFC4');
+FILE_DESCRIPTION(('ViewDefinition [CoordinationView4]'), '2;1');
+FILE_NAME('${referenceCode}.ifc', '${timestamp}', ('Boscotek Configurator'), ('Opie Manufacturing Group'), 'Boscotek Configurator v1.0', 'Boscotek Configurator', 'IFC4');
 FILE_SCHEMA(('IFC4'));
 ENDSEC;
 
@@ -78,13 +85,14 @@ DATA;`;
   // 1. Owner History
   const ownerHistoryId = createEntity('IFCOWNERHISTORY', null, null, null, 'NOCHANGE', null, null, null, Date.now());
   
-  // 2. Units (MUST be created BEFORE project)
-  const lengthUnit = createEntity('IFCSIUNIT', '*', 'LENGTHUNIT', null, 'METRE');
+  // 2. Units (Section 5: Use MILLIMETRES as per spec)
+  const lengthUnit = createEntity('IFCSIUNIT', '*', 'LENGTHUNIT', '.MILLI.', 'METRE');
   const areaUnit = createEntity('IFCSIUNIT', '*', 'AREAUNIT', null, 'SQUARE_METRE');
   const volumeUnit = createEntity('IFCSIUNIT', '*', 'VOLUMEUNIT', null, 'CUBIC_METRE');
-  const massUnit = createEntity('IFCSIUNIT', '*', 'MASSUNIT', null, 'GRAM');
+  const massUnit = createEntity('IFCSIUNIT', '*', 'MASSUNIT', '.KILO.', 'GRAM');
+  const angleUnit = createEntity('IFCSIUNIT', '*', 'PLANEANGLEUNIT', null, 'RADIAN');
   
-  const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit]);
+  const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit, angleUnit]);
   
   // 3. Geometric Representation Context (MUST be created BEFORE project)
   const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', null, 'Model', 3, 1.E-5, null, null);
@@ -114,7 +122,7 @@ DATA;`;
   // Create cabinet/workbench body
   const bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext);
   
-  // 7. Product Instance
+  // 7. Product Instance (Section 6 & 7: Add ObjectType with full Boscotek code)
   let productIfcType = 'IFCFURNISHINGELEMENT';
   if (product.id.includes('cabinet')) {
     productIfcType = 'IFCFURNISHINGELEMENT'; // IFC4 doesn't have specific cabinet type
@@ -126,10 +134,10 @@ DATA;`;
     ownerHistoryId,
     product.name,
     product.description,
-    null,
+    referenceCode,          // ObjectType = Full Boscotek configuration code (e.g., BTCS.700.560.75.200.250.MG.SG)
     productLocalPlacement,  // This is now a proper entity reference, not a float
     bodyRepresentation,
-    null
+    null                    // Tag
   );
   
   // 8. Add to building storey (NOT building directly)
@@ -139,9 +147,14 @@ DATA;`;
   // 9. Property Sets (Metadata)
   addPropertySets(productInstance, configuration, product, pricing, referenceCode, createEntity, ownerHistoryId);
   
-  // 10. Drawers (if HD Cabinet)
+  // 10. Drawers (Section 9: Proper aggregation and assembly)
   if (configuration.customDrawers && configuration.customDrawers.length > 0) {
-    addDrawerGeometry(configuration.customDrawers, product, dimensions, productInstance, createEntity, ownerHistoryId, geometricContext, productLocalPlacement);
+    const drawerIds = addDrawerGeometry(configuration.customDrawers, product, dimensions, productInstance, createEntity, ownerHistoryId, geometricContext, productLocalPlacement);
+    
+    // Section 9: Aggregate drawers under cabinet using IfcRelAggregates
+    if (drawerIds.length > 0) {
+      createEntity('IFCRELAGGREGATES', 'CabinetDrawerAssembly', ownerHistoryId, 'Cabinet with Drawers', null, productInstance, drawerIds);
+    }
   }
 
   // Close IFC file
@@ -183,7 +196,7 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
 }
 
 /**
- * Add drawer geometry to IFC
+ * Add drawer geometry to IFC (Section 9: Return drawer IDs for aggregation)
  */
 function addDrawerGeometry(
   drawers: any[],
@@ -194,21 +207,25 @@ function addDrawerGeometry(
   ownerHistoryId: number,
   contextId: number,
   parentPlacement: number
-): void {
+): number[] {
+  const drawerIds: number[] = [];
+  
   // Create individual drawer elements with proper placement
   drawers.forEach((drawer: any, index: number) => {
-    // Create drawer placement (offset vertically)
-    const drawerPoint = createEntity('IFCCARTESIANPOINT', [0., 0., drawer.y || (index * 0.1)]);
+    // Dimensions in millimeters (consistent with Section 5)
+    const drawerWidth = cabinetDimensions.width - 40;  // 40mm clearance
+    const drawerDepth = cabinetDimensions.depth - 50;  // 50mm clearance
+    const drawerHeight = (drawer.height || 0.15) * 1000; // Convert to mm
+    const drawerY = (drawer.y || (index * 100)) * 1000; // Position in mm
+    
+    // Create drawer placement (offset vertically from cabinet)
+    const drawerPoint = createEntity('IFCCARTESIANPOINT', [0., 0., drawerY]);
     const drawerZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
     const drawerXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
     const drawerAxis = createEntity('IFCAXIS2PLACEMENT3D', drawerPoint, drawerZDir, drawerXDir);
     const drawerPlacement = createEntity('IFCLOCALPLACEMENT', parentPlacement, drawerAxis);
     
-    // Create simple box for drawer
-    const drawerWidth = cabinetDimensions.width - 0.04;
-    const drawerDepth = cabinetDimensions.depth - 0.05;
-    const drawerHeight = drawer.height || 0.15;
-    
+    // Create drawer geometry
     const dExtrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
     const dOrigin = createEntity('IFCCARTESIANPOINT', [-drawerWidth/2, -drawerDepth/2, 0.]);
     const dZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
@@ -224,25 +241,57 @@ function addDrawerGeometry(
     const dShapeRep = createEntity('IFCSHAPEREPRESENTATION', contextId, 'Body', 'SweptSolid', [dSolid]);
     const dProdDefShape = createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [dShapeRep]);
     
-    // Create drawer element
+    // Create drawer element (Section 9)
     const drawerElement = createEntity(
       'IFCFURNISHINGELEMENT',
       `Drawer-${index + 1}`,
       ownerHistoryId,
       `Drawer ${index + 1}`,
-      null,
-      null,
-      drawerPlacement,  // Proper entity reference
+      `Drawer Height ${drawerHeight.toFixed(0)}mm`, // Description with drawer specs
+      `Drawer-${index + 1}`,                        // ObjectType
+      drawerPlacement,                              // Proper entity reference
       dProdDefShape,
-      null
+      null                                          // Tag
     );
     
-    // Could add property for drawer interior here if needed
+    drawerIds.push(drawerElement);
+    
+    // Add drawer-specific properties
+    addDrawerProperties(drawerElement, drawer, index, createEntity, ownerHistoryId);
   });
+  
+  return drawerIds;
 }
 
 /**
- * Add property sets (metadata) to IFC
+ * Add drawer-specific property sets (Section 9, 10)
+ */
+function addDrawerProperties(
+  drawerId: number,
+  drawer: any,
+  index: number,
+  createEntity: Function,
+  ownerHistoryId: number
+): void {
+  const properties: number[] = [];
+  
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerNumber', null, createEntity('IFCINTEGER', index + 1), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeight', null, createEntity('IFCLENGTHMEASURE', (drawer.height || 0.15) * 1000), null));
+  
+  if (drawer.interior) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerInterior', null, createEntity('IFCLABEL', drawer.interior), null));
+  }
+  
+  if (drawer.capacity) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LoadCapacity', null, createEntity('IFCLABEL', drawer.capacity), null));
+  }
+  
+  const pset = createEntity('IFCPROPERTYSET', `Pset_Drawer_${index + 1}`, ownerHistoryId, null, null, properties);
+  createEntity('IFCRELDEFINESBYPROPERTIES', `DrawerPropsRel_${index + 1}`, ownerHistoryId, null, null, [drawerId], pset);
+}
+
+/**
+ * Add comprehensive property sets (Section 10, 11: Metadata per specification)
  */
 function addPropertySets(
   elementId: number,
@@ -253,33 +302,112 @@ function addPropertySets(
   createEntity: Function,
   ownerHistoryId: number
 ): void {
-  // Boscotek Custom Properties
   const properties: number[] = [];
   
-  // Product Information
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Manufacturer', null, createEntity('IFCTEXT', 'Boscotek'), null));
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductFamily', null, createEntity('IFCTEXT', product.name), null));
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ConfigurationCode', null, createEntity('IFCTEXT', referenceCode), null));
+  // Section 10.2: Standard Properties - Pset_BoscotekCabinet
+  
+  // Core Identification
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BoscotekCode', null, createEntity('IFCIDENTIFIER', referenceCode), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Family', null, createEntity('IFCLABEL', product.name), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Manufacturer', null, createEntity('IFCLABEL', 'Boscotek'), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'OwnerOrganisation', null, createEntity('IFCLABEL', 'Opie Manufacturing Group'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AustralianMade', null, createEntity('IFCBOOLEAN', '.T.'), null));
   
-  // Pricing
+  // Dimensions (in millimeters as per Section 5)
+  if (configuration.dimensions) {
+    const dims = configuration.dimensions;
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null, createEntity('IFCLENGTHMEASURE', dims.width * 1000), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Depth', null, createEntity('IFCLENGTHMEASURE', dims.depth * 1000), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', dims.height * 1000), null));
+  }
+  
+  // Drawer Configuration
+  if (configuration.customDrawers && configuration.customDrawers.length > 0) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', configuration.customDrawers.length), null));
+    
+    // Drawer configuration code (e.g., "75.200.250" for drawer heights)
+    const drawerHeights = configuration.customDrawers.map((d: any) => (d.height * 1000).toFixed(0)).join('.');
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', drawerHeights), null));
+  }
+  
+  // Load Ratings (Section 10.2)
+  if (configuration.selections) {
+    const sel = configuration.selections;
+    
+    // UDL Capacities
+    if (sel.drawerCapacity || product.specifications?.drawerUDL) {
+      const drawerUDL = sel.drawerCapacity || product.specifications?.drawerUDL || '80 kg';
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLDrawerCapacity', null, createEntity('IFCLABEL', drawerUDL), null));
+    }
+    
+    if (sel.cabinetCapacity || product.specifications?.cabinetUDL) {
+      const cabinetUDL = sel.cabinetCapacity || product.specifications?.cabinetUDL || '300 kg';
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLCabinetCapacity', null, createEntity('IFCLABEL', cabinetUDL), null));
+    }
+    
+    // Materials and Finishes (Section 10.2, 11)
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialBody', null, createEntity('IFCLABEL', 'Steel'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialFronts', null, createEntity('IFCLABEL', 'Steel'), null));
+    
+    // Map color codes to finish descriptions
+    if (sel.bodyColor) {
+      const finishBody = mapColorCodeToFinish(sel.bodyColor);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', finishBody), null));
+    }
+    
+    if (sel.frontColor) {
+      const finishFronts = mapColorCodeToFinish(sel.frontColor);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', finishFronts), null));
+    }
+  }
+  
+  // Pricing (Section 11)
   if (pricing) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BasePrice', null, createEntity('IFCMONETARYMEASURE', pricing.basePrice), null));
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalPrice', null, createEntity('IFCMONETARYMEASURE', pricing.totalPrice), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Currency', null, createEntity('IFCLABEL', 'AUD'), null));
   }
   
-  // Selections
+  // Product URL (Section 11)
+  if (product.url) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', product.url), null));
+  } else {
+    // Default to Boscotek website
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', 'https://www.boscotek.com.au'), null));
+  }
+  
+  // Additional configuration selections (Section 11)
   Object.entries(configuration.selections || {}).forEach(([key, value]) => {
-    if (value) {
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', key, null, createEntity('IFCTEXT', String(value)), null));
+    if (value && !['bodyColor', 'frontColor', 'drawerCapacity', 'cabinetCapacity'].includes(key)) {
+      const propertyName = key.charAt(0).toUpperCase() + key.slice(1);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', propertyName, null, createEntity('IFCTEXT', String(value)), null));
     }
   });
   
-  // Create property set
-  const pset = createEntity('IFCPROPERTYSET', 'BoscotekProperties', ownerHistoryId, null, null, properties);
+  // Create property set (Section 10.1)
+  const pset = createEntity('IFCPROPERTYSET', 'Pset_BoscotekCabinet', ownerHistoryId, null, null, properties);
   
   // Relate to element
   createEntity('IFCRELDEFINESBYPROPERTIES', 'PropertiesRel', ownerHistoryId, null, null, [elementId], pset);
+}
+
+/**
+ * Map color codes to descriptive finish names (Section 11)
+ */
+function mapColorCodeToFinish(colorCode: string): string {
+  const colorMap: { [key: string]: string } = {
+    'MG': 'MG - Mist Grey',
+    'SG': 'SG - Signal Grey',
+    'DB': 'DB - Deep Blue',
+    'OR': 'OR - Orange',
+    'GG': 'GG - Green Grey',
+    'BK': 'BK - Black',
+    'WH': 'WH - White',
+    'RD': 'RD - Red',
+    'YL': 'YL - Yellow'
+  };
+  
+  return colorMap[colorCode] || colorCode;
 }
 
 serve(async (req) => {
