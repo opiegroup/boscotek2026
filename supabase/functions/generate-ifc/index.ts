@@ -14,18 +14,53 @@ function generateIFCContent(configData: any): string {
   const { configuration, product, pricing, referenceCode } = configData;
   const timestamp = new Date().toISOString();
   
-  // Extract dimensions from actual configuration selections (convert mm to meters)
-  const dimensions = {
-    width: (configuration.selections?.width || 560) / 1000,
-    height: (configuration.selections?.height || 850) / 1000,
-    depth: (configuration.selections?.depth || 750) / 1000
-  };
+  // Extract dimensions from configuration
+  // Priority: configuration.dimensions (pre-calculated) > product option metadata > defaults
+  let dimensions: { width: number; height: number; depth: number };
   
-  console.log('IFC Generation - Actual Dimensions:', {
-    width_mm: configuration.selections?.width,
-    height_mm: configuration.selections?.height,
-    depth_mm: configuration.selections?.depth,
-    dimensions_meters: dimensions
+  if (configuration.dimensions) {
+    // Use pre-calculated dimensions from configuration (in mm, convert to meters)
+    dimensions = {
+      width: (configuration.dimensions.width || 560) / 1000,
+      height: (configuration.dimensions.height || 850) / 1000,
+      depth: (configuration.dimensions.depth || 750) / 1000
+    };
+  } else {
+    // Derive dimensions from product option selections
+    const getOptionValue = (groupId: string, defaultMm: number): number => {
+      const selectionId = configuration.selections?.[groupId];
+      if (!selectionId) return defaultMm;
+      
+      const group = product.groups?.find((g: any) => g.id === groupId);
+      const option = group?.options?.find((o: any) => o.id === selectionId);
+      
+      // Check for meta values (in meters) or value field (in mm)
+      if (option?.meta?.width) return option.meta.width * 1000;
+      if (option?.meta?.height) return option.meta.height * 1000;
+      if (option?.meta?.depth) return option.meta.depth * 1000;
+      if (typeof option?.value === 'number') return option.value;
+      
+      return defaultMm;
+    };
+    
+    // For HD Cabinet: width from 'width', height from 'height', depth from 'series'
+    // Check both possible group names
+    const widthMm = getOptionValue('width', 560) || getOptionValue('size', 560);
+    const heightMm = getOptionValue('height', 850) || getOptionValue('bench_height', 850);
+    const depthMm = getOptionValue('series', 750);
+    
+    dimensions = {
+      width: widthMm / 1000,
+      height: heightMm / 1000,
+      depth: depthMm / 1000
+    };
+  }
+  
+  console.log('IFC Generation - Dimensions (meters):', {
+    width: dimensions.width,
+    height: dimensions.height,
+    depth: dimensions.depth,
+    source: configuration.dimensions ? 'config.dimensions' : 'product options'
   });
 
   // IFC Header (Section 2: Enhanced with CoordinationView4 and detailed metadata)
@@ -144,8 +179,8 @@ DATA;`;
   const productPlacement = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDirection, xDirection);
   const productLocalPlacement = createEntity('IFCLOCALPLACEMENT', null, productPlacement);
   
-  // Create cabinet/workbench body
-  const bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext);
+  // Create cabinet/workbench body with detailed geometry components
+  const bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext, configuration, product);
   
   // 7. Product Instance (Section 6 & 7: Add ObjectType with full Boscotek code)
   let productIfcType = 'IFCFURNISHINGELEMENT';
@@ -168,31 +203,19 @@ DATA;`;
   // 8. Property Sets (Metadata)
   addPropertySets(productInstance, configuration, product, pricing, referenceCode, createEntity, ownerHistoryId);
   
-  // 9. Drawers - TEMPORARILY add as separate elements (not aggregated) for testing
-  let allElements = [productInstance];
+  // 9. Drawer fronts are now integrated into the main cabinet geometry
+  // (see createCabinetGeometry function for detailed drawer front extrusions)
+  // This consolidates all visual geometry into a single IfcProductDefinitionShape
+  // as recommended for LOD 200-300 BIM models
   
-  console.log('IFC Generation - Checking for drawers:', {
-    hasCustomDrawers: !!configuration.customDrawers,
+  console.log('IFC Generation - Cabinet geometry includes:', {
+    hasDrawerFronts: !!configuration.customDrawers && configuration.customDrawers.length > 0,
     drawerCount: configuration.customDrawers?.length || 0,
-    drawers: configuration.customDrawers
+    drawers: configuration.customDrawers?.map((d: any) => d.id) || []
   });
   
-  if (configuration.customDrawers && configuration.customDrawers.length > 0) {
-    const drawerIds = addDrawerGeometry(configuration.customDrawers, product, dimensions, productInstance, createEntity, ownerHistoryId, geometricContext, productLocalPlacement);
-    
-    console.log('IFC Generation - Created drawer IDs:', drawerIds);
-    
-    // TEMPORARY: Add drawers as separate elements at same level as cabinet
-    // This helps us debug if the issue is with aggregation or with drawer geometry itself
-    if (drawerIds.length > 0) {
-      allElements = allElements.concat(drawerIds);
-    }
-  } else {
-    console.warn('IFC Generation - NO DRAWERS FOUND in configuration!');
-  }
-  
-  // 10. Add all elements to building storey (cabinet + drawers as separate objects)
-  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, allElements, storeyId);
+  // 10. Add cabinet to building storey (single consolidated element)
+  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, [productInstance], storeyId);
 
   // Close IFC file
   const ifcContent = `${ifcHeader}
@@ -204,158 +227,202 @@ END-ISO-10303-21;`;
 }
 
 /**
- * Create cabinet/workbench body geometry
- * Simple solid box representation (will add complexity once basic geometry works)
+ * Create professional cabinet geometry with distinct components
+ * LOD 200-300: Plinth, carcass (sides/back/top), and drawer fronts
+ * 
+ * Geometry Components:
+ * 1. Plinth/Base - Bottom structural support
+ * 2. Carcass - Back panel, side panels, top panel
+ * 3. Drawer Fronts - Individual front faces for each drawer
  */
-function createCabinetGeometry(dimensions: any, createEntity: Function, contextId: number): number {
+function createCabinetGeometry(
+  dimensions: any, 
+  createEntity: Function, 
+  contextId: number,
+  configuration?: any,
+  product?: any
+): number {
   // Access E function from parent scope
   const E = (value: string) => ({ __ifcEnum: value });
   
   const { width, height, depth } = dimensions;
   
-  console.log('Creating cabinet geometry:', { width, height, depth });
+  // Calculate cabinet geometry parameters based on product configuration
+  // These match the 3D viewer calculations in Viewer3D.tsx
+  const heightGroup = product?.groups?.find((g: any) => g.id === 'height');
+  const selectedHeightId = configuration?.selections?.['height'];
+  const selectedHeightOption = heightGroup?.options?.find((o: any) => o.id === selectedHeightId);
+  const usableHeightMeters = (selectedHeightOption?.meta?.usableHeight || 750) / 1000;
   
-  // Create a simple solid rectangular box
-  // Position origin at bottom center
+  // Shell thickness distribution (matches 3D viewer)
+  const totalShellThickness = height - usableHeightMeters;
+  const plinthHeight = Math.max(0.06, totalShellThickness * 0.6); // 60% to plinth, min 60mm
+  const topPanelHeight = Math.max(0.02, totalShellThickness * 0.4); // 40% to top panel, min 20mm
+  
+  // Panel thicknesses (standard steel cabinet construction)
+  const sideWallThickness = 0.02; // 20mm side panels
+  const backPanelThickness = 0.02; // 20mm back panel
+  const drawerFrontThickness = 0.02; // 20mm drawer front faces
+  
+  // Plinth setback (recessed from cabinet front)
+  const plinthSetback = 0.015; // 15mm setback
+  
+  console.log('Creating detailed cabinet geometry:', { 
+    width, height, depth,
+    plinthHeight,
+    topPanelHeight,
+    usableHeight: usableHeightMeters,
+    drawerCount: configuration?.customDrawers?.length || 0
+  });
+  
+  const solids: number[] = [];
   const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-  const originPoint = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, 0.]);
-  const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-  const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
-  const position = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDir, xDir);
   
-  // Create rectangular profile for the cabinet footprint
-  const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
-  const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
-  const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
-  const profile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
+  // ==========================================================
+  // 1. PLINTH / BASE (bottom structural support)
+  // Slightly recessed from cabinet front for visual distinction
+  // ==========================================================
+  const plinthOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2 + plinthSetback, 0.]);
+  const plinthZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const plinthXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const plinthPosition = createEntity('IFCAXIS2PLACEMENT3D', plinthOrigin, plinthZDir, plinthXDir);
   
-  // Extrude the profile upward to create the cabinet body
-  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', profile, position, extrusionDir, height);
+  const plinthProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const plinthProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const plinthProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', plinthProfileOrigin, plinthProfileXDir);
+  const plinthProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, plinthProfilePosition, width, depth - plinthSetback);
   
-  // Create shape representation
-  const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);
+  const plinthSolid = createEntity('IFCEXTRUDEDAREASOLID', plinthProfile, plinthPosition, extrusionDir, plinthHeight);
+  solids.push(plinthSolid);
   
-  console.log('Cabinet body representation created');
+  // ==========================================================
+  // 2. TOP PANEL (cabinet top surface)
+  // ==========================================================
+  const topOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, height - topPanelHeight]);
+  const topZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const topXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const topPosition = createEntity('IFCAXIS2PLACEMENT3D', topOrigin, topZDir, topXDir);
+  
+  const topProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const topProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const topProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', topProfileOrigin, topProfileXDir);
+  const topProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, topProfilePosition, width, depth);
+  
+  const topSolid = createEntity('IFCEXTRUDEDAREASOLID', topProfile, topPosition, extrusionDir, topPanelHeight);
+  solids.push(topSolid);
+  
+  // ==========================================================
+  // 3. BACK PANEL (full height between plinth and top)
+  // ==========================================================
+  const internalHeight = height - plinthHeight - topPanelHeight;
+  const backOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, plinthHeight]);
+  const backZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const backXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const backPosition = createEntity('IFCAXIS2PLACEMENT3D', backOrigin, backZDir, backXDir);
+  
+  const backProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const backProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const backProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', backProfileOrigin, backProfileXDir);
+  const backProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, backProfilePosition, width, backPanelThickness);
+  
+  const backSolid = createEntity('IFCEXTRUDEDAREASOLID', backProfile, backPosition, extrusionDir, internalHeight);
+  solids.push(backSolid);
+  
+  // ==========================================================
+  // 4. LEFT SIDE PANEL
+  // ==========================================================
+  const leftOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2 + backPanelThickness, plinthHeight]);
+  const leftZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const leftXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const leftPosition = createEntity('IFCAXIS2PLACEMENT3D', leftOrigin, leftZDir, leftXDir);
+  
+  const leftProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const leftProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const leftProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', leftProfileOrigin, leftProfileXDir);
+  const leftProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftProfilePosition, sideWallThickness, depth - backPanelThickness);
+  
+  const leftSolid = createEntity('IFCEXTRUDEDAREASOLID', leftProfile, leftPosition, extrusionDir, internalHeight);
+  solids.push(leftSolid);
+  
+  // ==========================================================
+  // 5. RIGHT SIDE PANEL
+  // ==========================================================
+  const rightOrigin = createEntity('IFCCARTESIANPOINT', [width/2 - sideWallThickness, -depth/2 + backPanelThickness, plinthHeight]);
+  const rightZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const rightXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const rightPosition = createEntity('IFCAXIS2PLACEMENT3D', rightOrigin, rightZDir, rightXDir);
+  
+  const rightProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const rightProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const rightProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', rightProfileOrigin, rightProfileXDir);
+  const rightProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightProfilePosition, sideWallThickness, depth - backPanelThickness);
+  
+  const rightSolid = createEntity('IFCEXTRUDEDAREASOLID', rightProfile, rightPosition, extrusionDir, internalHeight);
+  solids.push(rightSolid);
+  
+  // ==========================================================
+  // 6. DRAWER FRONTS (individual panels for each drawer)
+  // Positioned on the front face, stacked from bottom to top
+  // ==========================================================
+  if (configuration?.customDrawers && configuration.customDrawers.length > 0) {
+    const drawerGroup = product?.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+    const drawerGap = 0.004; // 4mm gap between drawers
+    const drawerInset = sideWallThickness + 0.002; // Inset from cabinet edges
+    const drawerFrontWidth = width - (drawerInset * 2);
+    
+    // Sort drawers by height descending (largest at bottom, matching 3D viewer)
+    const drawersWithHeights = configuration.customDrawers.map((d: any, idx: number) => {
+      const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+      const heightMm = opt?.meta?.front || 150;
+      return { ...d, heightMm, originalIndex: idx };
+    }).sort((a: any, b: any) => b.heightMm - a.heightMm);
+    
+    let currentZ = plinthHeight; // Start stacking from top of plinth
+    
+    drawersWithHeights.forEach((drawer: any, idx: number) => {
+      const drawerHeight = drawer.heightMm / 1000; // Convert to meters
+      
+      // Create drawer front panel on the front face (positive Y direction)
+      const dfOrigin = createEntity('IFCCARTESIANPOINT', [
+        -width/2 + drawerInset, 
+        depth/2 - drawerFrontThickness, 
+        currentZ + drawerGap/2
+      ]);
+      const dfZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+      const dfXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+      const dfPosition = createEntity('IFCAXIS2PLACEMENT3D', dfOrigin, dfZDir, dfXDir);
+      
+      const dfProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+      const dfProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+      const dfProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', dfProfileOrigin, dfProfileXDir);
+      const dfProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, dfProfilePosition, drawerFrontWidth, drawerFrontThickness);
+      
+      const dfSolid = createEntity('IFCEXTRUDEDAREASOLID', dfProfile, dfPosition, extrusionDir, drawerHeight - drawerGap);
+      solids.push(dfSolid);
+      
+      currentZ += drawerHeight;
+      
+      console.log(`Drawer front ${idx + 1}: height=${drawer.heightMm}mm, z=${(currentZ * 1000).toFixed(0)}mm`);
+    });
+  }
+  
+  // Create single shape representation with all geometry components
+  const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), solids);
+  
+  console.log(`Cabinet geometry created: ${solids.length} solid components`);
   
   // Product definition shape
   return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);
 }
 
-/**
- * Add drawer geometry to IFC (Section 9: Return drawer IDs for aggregation)
- */
-function addDrawerGeometry(
-  drawers: any[],
-  product: any,
-  cabinetDimensions: any,
-  parentId: number,
-  createEntity: Function,
-  ownerHistoryId: number,
-  contextId: number,
-  parentPlacement: number
-): number[] {
-  // Access E function from parent scope
-  const E = (value: string) => ({ __ifcEnum: value });
-  
-  const drawerIds: number[] = [];
-  
-  // Find drawer configuration group to look up heights
-  const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
-  
-  // Calculate cumulative Y positions based on actual drawer heights
-  let cumulativeY = 0; // Start from bottom of cabinet
-  
-  // Create individual drawer elements with proper placement
-  drawers.forEach((drawer: any, index: number) => {
-    // Look up drawer height from product definition
-    const drawerOption = drawerGroup?.options.find((o: any) => o.id === drawer.id);
-    const drawerHeightMm = drawerOption?.meta?.front || 150; // Default 150mm if not found
-    const drawerHeight = drawerHeightMm / 1000; // Convert mm to meters
-    
-    // Dimensions in meters (consistent with Section 5)
-    const drawerWidth = cabinetDimensions.width - 0.04;  // 40mm (0.04m) clearance
-    const drawerDepth = cabinetDimensions.depth - 0.05;  // 50mm (0.05m) clearance
-    
-    // Use cumulative Y position (each drawer starts where the previous one ended)
-    const drawerY = cumulativeY;
-    
-    // Create drawer placement (offset vertically from cabinet)
-    const drawerPoint = createEntity('IFCCARTESIANPOINT', [0., 0., drawerY]);
-    const drawerZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-    const drawerXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
-    const drawerAxis = createEntity('IFCAXIS2PLACEMENT3D', drawerPoint, drawerZDir, drawerXDir);
-    const drawerPlacement = createEntity('IFCLOCALPLACEMENT', parentPlacement, drawerAxis);
-    
-    // Create drawer geometry
-    const dExtrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-    const dOrigin = createEntity('IFCCARTESIANPOINT', [-drawerWidth/2, -drawerDepth/2, 0.]);
-    const dZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-    const dXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
-    const dPosition = createEntity('IFCAXIS2PLACEMENT3D', dOrigin, dZDir, dXDir);
-    
-    const dProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
-    const dProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
-    const dProfilePos = createEntity('IFCAXIS2PLACEMENT2D', dProfileOrigin, dProfileXDir);
-    const dProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, dProfilePos, drawerWidth, drawerDepth);
-    
-    const dSolid = createEntity('IFCEXTRUDEDAREASOLID', dProfile, dPosition, dExtrusionDir, drawerHeight);
-    const dShapeRep = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [dSolid]);
-    const dProdDefShape = createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [dShapeRep]);
-    
-    // Create drawer element (Section 9)
-    const drawerElement = createEntity(
-      'IFCFURNISHINGELEMENT',
-      `Drawer-${index + 1}`,
-      ownerHistoryId,
-      `Drawer ${index + 1}`,
-      `Drawer Height ${drawerHeightMm.toFixed(0)}mm`, // Description with drawer specs
-      `Drawer-${index + 1}`,                        // ObjectType
-      drawerPlacement,                              // Proper entity reference
-      dProdDefShape,
-      null                                          // Tag
-    );
-    
-    drawerIds.push(drawerElement);
-    
-    // Update cumulative Y for next drawer (stack them vertically)
-    cumulativeY += drawerHeight;
-    
-    // Add drawer-specific properties
-    addDrawerProperties(drawerElement, drawer, index, createEntity, ownerHistoryId);
-  });
-  
-  return drawerIds;
-}
-
-/**
- * Add drawer-specific property sets (Section 9, 10)
- */
-function addDrawerProperties(
-  drawerId: number,
-  drawer: any,
-  index: number,
-  createEntity: Function,
-  ownerHistoryId: number
-): void {
-  const properties: number[] = [];
-  
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerNumber', null, createEntity('IFCINTEGER', index + 1), null));
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeight', null, createEntity('IFCLENGTHMEASURE', drawer.height || 0.15), null));
-  
-  if (drawer.interior) {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerInterior', null, createEntity('IFCLABEL', drawer.interior), null));
-  }
-  
-  if (drawer.capacity) {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LoadCapacity', null, createEntity('IFCLABEL', drawer.capacity), null));
-  }
-  
-  const pset = createEntity('IFCPROPERTYSET', `Pset_Drawer_${index + 1}`, ownerHistoryId, null, null, properties);
-  createEntity('IFCRELDEFINESBYPROPERTIES', `DrawerPropsRel_${index + 1}`, ownerHistoryId, null, null, [drawerId], pset);
-}
+// Note: Drawer geometry is now integrated into the main cabinet geometry
+// (see createCabinetGeometry function) for a consolidated LOD 200-300 representation.
+// Drawer fronts are extruded as part of the cabinet's ProductDefinitionShape.
+// Drawer metadata (heights, counts, configuration) is included in Pset_BoscotekCabinet.
 
 /**
  * Add comprehensive property sets (Section 10, 11: Metadata per specification)
+ * Includes all Pset_BoscotekCabinet properties as per IFC Export Brief
  */
 function addPropertySets(
   elementId: number,
@@ -368,7 +435,9 @@ function addPropertySets(
 ): void {
   const properties: number[] = [];
   
+  // ==========================================================
   // Section 10.2: Standard Properties - Pset_BoscotekCabinet
+  // ==========================================================
   
   // Core Identification
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BoscotekCode', null, createEntity('IFCIDENTIFIER', referenceCode), null));
@@ -377,101 +446,188 @@ function addPropertySets(
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'OwnerOrganisation', null, createEntity('IFCLABEL', 'Opie Manufacturing Group'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AustralianMade', null, createEntity('IFCBOOLEAN', '.T.'), null));
   
-  // Dimensions (in millimeters as per Section 5)
+  // Dimensions (in millimeters as per specification)
+  // Use configuration.dimensions if available, otherwise derive from selections
+  let widthMm = 560, depthMm = 750, heightMm = 850;
+  
   if (configuration.dimensions) {
-    const dims = configuration.dimensions;
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null, createEntity('IFCLENGTHMEASURE', dims.width), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Depth', null, createEntity('IFCLENGTHMEASURE', dims.depth), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', dims.height), null));
+    widthMm = configuration.dimensions.width || widthMm;
+    depthMm = configuration.dimensions.depth || depthMm;
+    heightMm = configuration.dimensions.height || heightMm;
+  } else {
+    // Derive from product option selections
+    const getOptionValueMm = (groupId: string): number | null => {
+      const selectionId = configuration.selections?.[groupId];
+      if (!selectionId) return null;
+      
+      const group = product.groups?.find((g: any) => g.id === groupId);
+      const option = group?.options?.find((o: any) => o.id === selectionId);
+      
+      // Check for value field (in mm) or meta values (in meters, convert)
+      if (typeof option?.value === 'number') return option.value;
+      if (option?.meta?.width) return option.meta.width * 1000;
+      if (option?.meta?.height) return option.meta.height * 1000;
+      if (option?.meta?.depth) return option.meta.depth * 1000;
+      
+      return null;
+    };
+    
+    widthMm = getOptionValueMm('width') || getOptionValueMm('size') || widthMm;
+    heightMm = getOptionValueMm('height') || getOptionValueMm('bench_height') || heightMm;
+    depthMm = getOptionValueMm('series') || depthMm;
   }
   
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null, createEntity('IFCLENGTHMEASURE', widthMm), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Depth', null, createEntity('IFCLENGTHMEASURE', depthMm), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', heightMm), null));
+  
+  // ==========================================================
   // Drawer Configuration
+  // ==========================================================
   if (configuration.customDrawers && configuration.customDrawers.length > 0) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', configuration.customDrawers.length), null));
     
+    // Get drawer heights from product options
+    const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+    const drawerHeights = configuration.customDrawers.map((d: any) => {
+      const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+      return opt?.meta?.front || 150;
+    });
+    
     // Drawer configuration code (e.g., "75.200.250" for drawer heights in mm)
-    const drawerHeights = configuration.customDrawers.map((d: any) => (d.height * 1000).toFixed(0)).join('.');
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', drawerHeights), null));
-  }
-  
-  // Load Ratings (Section 10.2)
-  if (configuration.selections) {
-    const sel = configuration.selections;
+    // Sort descending to match stacking order (largest at bottom)
+    const sortedHeights = [...drawerHeights].sort((a, b) => b - a);
+    const drawerConfigCode = sortedHeights.join('.');
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', drawerConfigCode), null));
     
-    // UDL Capacities
-    if (sel.drawerCapacity || product.specifications?.drawerUDL) {
-      const drawerUDL = sel.drawerCapacity || product.specifications?.drawerUDL || '80 kg';
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLDrawerCapacity', null, createEntity('IFCLABEL', drawerUDL), null));
-    }
-    
-    if (sel.cabinetCapacity || product.specifications?.cabinetUDL) {
-      const cabinetUDL = sel.cabinetCapacity || product.specifications?.cabinetUDL || '300 kg';
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLCabinetCapacity', null, createEntity('IFCLABEL', cabinetUDL), null));
-    }
-    
-    // Materials and Finishes (Section 10.2, 11)
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialBody', null, createEntity('IFCLABEL', 'Steel'), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialFronts', null, createEntity('IFCLABEL', 'Steel'), null));
-    
-    // Map color codes to finish descriptions
-    if (sel.bodyColor) {
-      const finishBody = mapColorCodeToFinish(sel.bodyColor);
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', finishBody), null));
-    }
-    
-    if (sel.frontColor) {
-      const finishFronts = mapColorCodeToFinish(sel.frontColor);
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', finishFronts), null));
-    }
-  }
-  
-  // Pricing (Section 11)
-  if (pricing) {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BasePrice', null, createEntity('IFCMONETARYMEASURE', pricing.basePrice), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalPrice', null, createEntity('IFCMONETARYMEASURE', pricing.totalPrice), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Currency', null, createEntity('IFCLABEL', 'AUD'), null));
-  }
-  
-  // Product URL (Section 11)
-  if (product.url) {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', product.url), null));
+    // Individual drawer heights property
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeights', null, createEntity('IFCLABEL', drawerHeights.join(', ') + ' mm'), null));
   } else {
-    // Default to Boscotek website
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', 'https://www.boscotek.com.au'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', 0), null));
   }
   
-  // Additional configuration selections (Section 11)
-  Object.entries(configuration.selections || {}).forEach(([key, value]) => {
-    if (value && !['bodyColor', 'frontColor', 'drawerCapacity', 'cabinetCapacity'].includes(key)) {
-      const propertyName = key.charAt(0).toUpperCase() + key.slice(1);
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', propertyName, null, createEntity('IFCTEXT', String(value)), null));
-    }
-  });
+  // ==========================================================
+  // Load Ratings (Section 10.2) - Standard Boscotek capacities
+  // ==========================================================
+  // Get from selections or use Boscotek standard values
+  const drawerUDL = configuration.selections?.drawerCapacity || 
+                    product.specifications?.drawerUDL || 
+                    '200 kg (HD Cabinet Standard)';
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLDrawerCapacity', null, createEntity('IFCLABEL', drawerUDL), null));
   
+  const cabinetUDL = configuration.selections?.cabinetCapacity || 
+                     product.specifications?.cabinetUDL || 
+                     '1200 kg (HD Cabinet Standard)';
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLCabinetCapacity', null, createEntity('IFCLABEL', cabinetUDL), null));
+  
+  // ==========================================================
+  // Materials and Finishes (Section 10.2, 11)
+  // ==========================================================
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialBody', null, createEntity('IFCLABEL', 'Steel - XT Shield Powder Coated'), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialFronts', null, createEntity('IFCLABEL', 'Steel - XT Shield Powder Coated'), null));
+  
+  // Map color codes to finish descriptions
+  const housingColorId = configuration.selections?.housing_color || configuration.selections?.color;
+  const faciaColorId = configuration.selections?.facia_color || configuration.selections?.drawer_facia;
+  
+  if (housingColorId) {
+    const finishBody = mapColorCodeToFinish(housingColorId);
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', finishBody), null));
+  } else {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', 'MG - Monument Grey (Standard)'), null));
+  }
+  
+  if (faciaColorId) {
+    const finishFronts = mapColorCodeToFinish(faciaColorId);
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', finishFronts), null));
+  } else {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', 'SG - Surfmist Grey (Standard)'), null));
+  }
+  
+  // ==========================================================
+  // Pricing (Section 11)
+  // ==========================================================
+  if (pricing) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BasePrice', null, createEntity('IFCMONETARYMEASURE', pricing.basePrice || 0), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalPrice', null, createEntity('IFCMONETARYMEASURE', pricing.totalPrice || 0), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Currency', null, createEntity('IFCLABEL', pricing.currency || 'AUD'), null));
+  }
+  
+  // ==========================================================
+  // Product URL (Section 11)
+  // ==========================================================
+  const productUrl = product.url || 'https://www.boscotek.com.au/products/high-density-cabinets';
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', productUrl), null));
+  
+  // Product description
+  if (product.description) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Description', null, createEntity('IFCTEXT', product.description), null));
+  }
+  
+  // ==========================================================
+  // Series/Depth Type (for HD Cabinet)
+  // ==========================================================
+  const seriesId = configuration.selections?.series;
+  if (seriesId) {
+    const seriesGroup = product.groups?.find((g: any) => g.id === 'series');
+    const seriesOption = seriesGroup?.options?.find((o: any) => o.id === seriesId);
+    if (seriesOption) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Series', null, createEntity('IFCLABEL', seriesOption.code || seriesOption.label), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DepthType', null, createEntity('IFCLABEL', seriesId.includes('d') ? 'D - Deep' : 'S - Standard'), null));
+    }
+  }
+  
+  // ==========================================================
   // Create property set (Section 10.1)
-  const pset = createEntity('IFCPROPERTYSET', 'Pset_BoscotekCabinet', ownerHistoryId, null, null, properties);
+  // ==========================================================
+  const pset = createEntity('IFCPROPERTYSET', 'Pset_BoscotekCabinet', ownerHistoryId, 'Boscotek cabinet configuration properties', null, properties);
   
   // Relate to element
   createEntity('IFCRELDEFINESBYPROPERTIES', 'PropertiesRel', ownerHistoryId, null, null, [elementId], pset);
+  
+  console.log(`Property set created with ${properties.length} properties`);
 }
 
 /**
- * Map color codes to descriptive finish names (Section 11)
+ * Map color codes/IDs to descriptive finish names (Section 11)
+ * Handles both color codes (e.g., 'MG') and selection IDs (e.g., 'col-mg')
  */
-function mapColorCodeToFinish(colorCode: string): string {
+function mapColorCodeToFinish(colorCodeOrId: string): string {
+  // Full color map including all Boscotek finishes from catalog
   const colorMap: { [key: string]: string } = {
-    'MG': 'MG - Mist Grey',
-    'SG': 'SG - Signal Grey',
-    'DB': 'DB - Deep Blue',
-    'OR': 'OR - Orange',
-    'GG': 'GG - Green Grey',
-    'BK': 'BK - Black',
-    'WH': 'WH - White',
-    'RD': 'RD - Red',
-    'YL': 'YL - Yellow'
+    // By code
+    'MG': 'MG - Monument Grey (Texture)',
+    'SG': 'SG - Surfmist Grey (Texture)',
+    'LG': 'LG - Light Grey (Satin)',
+    'LB': 'LB - Light Blue (Satin)',
+    'GG': 'GG - Green (Satin)',
+    'CC': 'CC - Cream (Satin)',
+    'DG': 'DG - Dark Grey (Satin)',
+    'BK': 'BK - Black (Satin)',
+    'DB': 'DB - Dark Blue (Gloss)',
+    'BB': 'BB - Bright Blue (Gloss)',
+    'MB': 'MB - Mid Blue (Gloss)',
+    'YW': 'YW - Yellow (Gloss)',
+    'RD': 'RD - Red (Gloss)',
+    'OR': 'OR - Orange (Gloss)',
+    // By selection ID
+    'col-mg': 'MG - Monument Grey (Texture)',
+    'col-sg': 'SG - Surfmist Grey (Texture)',
+    'col-lg': 'LG - Light Grey (Satin)',
+    'col-lb': 'LB - Light Blue (Satin)',
+    'col-gg': 'GG - Green (Satin)',
+    'col-cc': 'CC - Cream (Satin)',
+    'col-dg': 'DG - Dark Grey (Satin)',
+    'col-bk': 'BK - Black (Satin)',
+    'col-db': 'DB - Dark Blue (Gloss)',
+    'col-bb': 'BB - Bright Blue (Gloss)',
+    'col-mb': 'MB - Mid Blue (Gloss)',
+    'col-yw': 'YW - Yellow (Gloss)',
+    'col-rd': 'RD - Red (Gloss)',
+    'col-or': 'OR - Orange (Gloss)'
   };
   
-  return colorMap[colorCode] || colorCode;
+  return colorMap[colorCodeOrId] || colorCodeOrId;
 }
 
 serve(async (req) => {
