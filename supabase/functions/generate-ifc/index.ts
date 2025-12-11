@@ -607,28 +607,169 @@ function createWorkbenchGeometry(
   solids.push(createBox(0, 0, worktopZ, worktopWidth, worktopDepth, WORKTOP_THICKNESS));
   
   // ==========================================================
-  // 5. OPTIONAL: Under-bench storage representation (simplified)
+  // 5. UNDER-BENCH STORAGE (drawer units, cabinets)
   // ==========================================================
   const underBenchOption = configuration?.selections?.under_bench;
+  const underBenchPos = configuration?.selections?.under_bench_pos || 'right';
+  
   if (underBenchOption && underBenchOption !== 'B0' && underBenchOption !== 'iw-ub-none') {
-    // Add a simplified storage unit representation
-    const storageWidth = 0.56; // Standard cabinet width
-    const storageDepth = depth - 0.1;
-    const storageHeight = height - legOffset - 0.05;
+    const UNIT_WIDTH = 0.56; // Standard drawer unit width (560mm)
+    const UNIT_DEPTH = depth - 0.1;
+    const UNIT_HEIGHT = 0.7; // Standard cabinet height
     
-    // Position based on under_bench_pos or default to right
-    const position = configuration?.selections?.under_bench_pos || 'right';
-    let storageX = 0;
-    if (position === 'left' || position === 'pos-left') {
-      storageX = -width/2 + LEG_SIZE + storageWidth/2;
-    } else if (position === 'right' || position === 'pos-right') {
-      storageX = width/2 - LEG_SIZE - storageWidth/2;
+    // Flush positions against legs
+    const flushLeft = -width/2 + LEG_SIZE + UNIT_WIDTH/2;
+    const flushRight = width/2 - LEG_SIZE - UNIT_WIDTH/2;
+    let singlePos = (underBenchPos === 'left' || underBenchPos === 'pos-left') ? flushLeft : flushRight;
+    if (underBenchPos === 'center' || underBenchPos === 'pos-center') singlePos = 0;
+    
+    // Y position for storage units (suspended under worktop)
+    const unitZ = height - UNIT_HEIGHT - 0.05;
+    
+    // Helper to add a storage unit box
+    const addStorageUnit = (x: number) => {
+      solids.push(createBox(x, 0, unitZ, UNIT_WIDTH, UNIT_DEPTH, UNIT_HEIGHT));
+    };
+    
+    // Determine storage unit positions based on under-bench option
+    // Heavy Duty (Bxx codes)
+    if (underBenchOption.startsWith('B')) {
+      switch(underBenchOption) {
+        case 'B1': case 'B2': case 'B3': case 'B4': case 'B5': case 'B28':
+          addStorageUnit(singlePos);
+          break;
+        case 'B6': case 'B7': case 'B12': case 'B13':
+          addStorageUnit(flushLeft);
+          addStorageUnit(flushRight);
+          break;
+        case 'B15': case 'B16': case 'B17': case 'B18': case 'B21': case 'B22': case 'B23': case 'B24':
+          addStorageUnit(singlePos);
+          break;
+        case 'B19': case 'B20': case 'B25': case 'B26': case 'B27':
+          addStorageUnit(flushLeft);
+          addStorageUnit(flushRight);
+          break;
+      }
     }
     
-    // Only add if there's actually storage selected (not just shelves)
-    if (!underBenchOption.includes('shelf') || underBenchOption.includes('drawer') || 
-        underBenchOption.includes('cabinet') || underBenchOption.includes('door')) {
-      solids.push(createBox(storageX, 0, legOffset + 0.05, storageWidth, storageDepth, storageHeight));
+    // Industrial (iw-ub-xxx codes)
+    if (underBenchOption.startsWith('iw-ub-')) {
+      const hasTwo = underBenchOption.includes('-2') || 
+                     underBenchOption.includes('cabinet-door') || 
+                     underBenchOption.includes('cabinet-drawer') ||
+                     underBenchOption.includes('door-drawer') ||
+                     underBenchOption.includes('drawers-2') ||
+                     underBenchOption.includes('half-shelf-drawer-cabinet') ||
+                     underBenchOption.includes('half-shelf-drawer-cupboard');
+      
+      if (hasTwo) {
+        addStorageUnit(flushLeft);
+        addStorageUnit(flushRight);
+      } else if (underBenchOption.includes('drawer') || 
+                 underBenchOption.includes('cabinet') || 
+                 underBenchOption.includes('door')) {
+        addStorageUnit(singlePos);
+      }
+    }
+  }
+  
+  // ==========================================================
+  // 6. ABOVE-BENCH STRUCTURE (uprights, crossbar, shelf)
+  // ==========================================================
+  const aboveBenchOption = configuration?.selections?.above_bench;
+  
+  if (aboveBenchOption && aboveBenchOption !== 'T0' && aboveBenchOption !== 'iw-ab-none') {
+    const POST_WIDTH = 0.04; // 40mm square posts
+    const POST_HEIGHT = 1.1; // Height of uprights
+    const SHELF_THICKNESS = 0.02;
+    const SHELF_DEPTH = 0.25;
+    
+    // Y position for posts (starts at worktop surface)
+    const postBaseZ = height + WORKTOP_THICKNESS;
+    
+    // Left upright post
+    solids.push(createBox(
+      -width/2 + POST_WIDTH/2 + 0.01,
+      -depth/2 + POST_WIDTH/2 + 0.01,
+      postBaseZ,
+      POST_WIDTH, POST_WIDTH, POST_HEIGHT
+    ));
+    
+    // Right upright post
+    solids.push(createBox(
+      width/2 - POST_WIDTH/2 - 0.01,
+      -depth/2 + POST_WIDTH/2 + 0.01,
+      postBaseZ,
+      POST_WIDTH, POST_WIDTH, POST_HEIGHT
+    ));
+    
+    // Top crossbar (connects uprights)
+    solids.push(createBox(
+      0,
+      -depth/2 + POST_WIDTH/2 + 0.01,
+      postBaseZ + POST_HEIGHT - POST_WIDTH/2,
+      width - 0.02,
+      POST_WIDTH, POST_WIDTH
+    ));
+    
+    // Shelf (if option includes shelf)
+    const hasShelf = aboveBenchOption.includes('shelf') || 
+                     aboveBenchOption === 'P' || 
+                     aboveBenchOption === 'SP' ||
+                     aboveBenchOption.includes('iw-ab-shelf');
+    
+    if (hasShelf) {
+      solids.push(createBox(
+        0,
+        -depth/2 + SHELF_DEPTH/2 + 0.05,
+        postBaseZ + POST_HEIGHT - SHELF_THICKNESS/2,
+        width - 0.1,
+        SHELF_DEPTH,
+        SHELF_THICKNESS
+      ));
+    }
+    
+    // Power panel (if option includes power)
+    const hasPower = aboveBenchOption.includes('power') || 
+                     aboveBenchOption === 'P' || 
+                     aboveBenchOption === 'SP';
+    
+    if (hasPower) {
+      const PANEL_HEIGHT = 0.1;
+      const PANEL_DEPTH = 0.04;
+      solids.push(createBox(
+        0,
+        -depth/2 + PANEL_DEPTH/2,
+        postBaseZ + 0.15,
+        width - 0.12,
+        PANEL_DEPTH,
+        PANEL_HEIGHT
+      ));
+    }
+    
+    // For T-series with panels (pegboard/louvre) - add back panel
+    if (aboveBenchOption.startsWith('T') && !['T0', 'T9', 'T10'].includes(aboveBenchOption)) {
+      const PANEL_WIDTH = (width - 0.1) / 2;
+      const PANEL_HEIGHT = 0.6;
+      const PANEL_THICKNESS = 0.015;
+      
+      // Lower panels (two bays)
+      solids.push(createBox(
+        -PANEL_WIDTH/2 - 0.02,
+        -depth/2 + PANEL_THICKNESS/2 + 0.02,
+        postBaseZ + 0.35,
+        PANEL_WIDTH,
+        PANEL_THICKNESS,
+        PANEL_HEIGHT
+      ));
+      solids.push(createBox(
+        PANEL_WIDTH/2 + 0.02,
+        -depth/2 + PANEL_THICKNESS/2 + 0.02,
+        postBaseZ + 0.35,
+        PANEL_WIDTH,
+        PANEL_THICKNESS,
+        PANEL_HEIGHT
+      ));
     }
   }
   
