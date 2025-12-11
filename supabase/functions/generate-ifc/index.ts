@@ -41,11 +41,23 @@ DATA;`;
   let entityId = 1;
   const entities: string[] = [];
 
+  // Helper to mark IFC enum values (will be formatted as .ENUM. not 'ENUM')
+  const E = (value: string) => ({ __ifcEnum: value });
+
   // Helper to create entity with FIXED type detection (Bugs 1 & 2)
   const createEntity = (type: string, ...params: any[]): number => {
     const id = entityId++;
     const paramsStr = params.map(p => {
       if (p === null || p === undefined) return '$';
+      // Check for enum marker BEFORE string check
+      // FIX: Don't add dots - IfcOpenShell expects raw enum values
+      if (p && typeof p === 'object' && '__ifcEnum' in p) {
+        return p.__ifcEnum;
+      }
+      // Special tokens: *, $, .T., .F.
+      if (p === '*') return '*';
+      if (p === '.T.' || p === '.F.') return p;
+      // Regular strings (names, descriptions) - quoted
       if (typeof p === 'string') return `'${p}'`;
       if (Array.isArray(p)) {
         if (p.length === 0) return '()';
@@ -86,28 +98,28 @@ DATA;`;
   };
 
   // 1. Owner History
-  const ownerHistoryId = createEntity('IFCOWNERHISTORY', null, null, null, 'NOCHANGE', null, null, null, Date.now());
+  const ownerHistoryId = createEntity('IFCOWNERHISTORY', null, null, null, E('NOCHANGE'), null, null, null, Date.now());
   
-  // 2. Units (Section 5: Use MILLIMETRES as per spec)
-  const lengthUnit = createEntity('IFCSIUNIT', '*', 'LENGTHUNIT', '.MILLI.', 'METRE');
-  const areaUnit = createEntity('IFCSIUNIT', '*', 'AREAUNIT', null, 'SQUARE_METRE');
-  const volumeUnit = createEntity('IFCSIUNIT', '*', 'VOLUMEUNIT', null, 'CUBIC_METRE');
-  const massUnit = createEntity('IFCSIUNIT', '*', 'MASSUNIT', '.KILO.', 'GRAM');
-  const angleUnit = createEntity('IFCSIUNIT', '*', 'PLANEANGLEUNIT', null, 'RADIAN');
+  // 2. Units (Section 5: Use MILLIMETRES - FIX: Use MILLI not .MILLI. for BlenderBIM)
+  const lengthUnit = createEntity('IFCSIUNIT', '*', E('LENGTHUNIT'), E('MILLI'), E('METRE'));
+  const areaUnit = createEntity('IFCSIUNIT', '*', E('AREAUNIT'), null, E('SQUARE_METRE'));
+  const volumeUnit = createEntity('IFCSIUNIT', '*', E('VOLUMEUNIT'), null, E('CUBIC_METRE'));
+  const massUnit = createEntity('IFCSIUNIT', '*', E('MASSUNIT'), E('KILO'), E('GRAM'));
+  const angleUnit = createEntity('IFCSIUNIT', '*', E('PLANEANGLEUNIT'), null, E('RADIAN'));
   
   const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit, angleUnit]);
   
   // 3. Geometric Representation Context (MUST be created BEFORE project)
-  const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', null, 'Model', 3, 1.E-5, null, null);
+  const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', null, E('Model'), 3, 1.E-5, null, null);
   
   // 4. Project Structure (NOW with proper references to units and context)
   // FIX: Pass [geometricContext] and unitAssignment instead of null
   const projectId = createEntity('IFCPROJECT', referenceCode, ownerHistoryId, product.name, `Boscotek ${product.name} Configuration`, null, null, null, [geometricContext], unitAssignment);
   
   // 5. Spatial Hierarchy: Site → Building → BuildingStorey
-  const siteId = createEntity('IFCSITE', 'Site', ownerHistoryId, 'Default Site', null, null, null, null, 'ELEMENT', null, null, null, null, null);
-  const buildingId = createEntity('IFCBUILDING', 'Building', ownerHistoryId, 'Default Building', null, null, null, null, 'ELEMENT', null, null, null);
-  const storeyId = createEntity('IFCBUILDINGSTOREY', 'Storey', ownerHistoryId, 'Level 0', null, null, null, null, 'ELEMENT', null, null, null);
+  const siteId = createEntity('IFCSITE', 'Site', ownerHistoryId, 'Default Site', null, null, null, null, E('ELEMENT'), null, null, null, null, null);
+  const buildingId = createEntity('IFCBUILDING', 'Building', ownerHistoryId, 'Default Building', null, null, null, null, E('ELEMENT'), null, null, null);
+  const storeyId = createEntity('IFCBUILDINGSTOREY', 'Storey', ownerHistoryId, 'Level 0', null, null, null, null, E('ELEMENT'), null, null, null);
   
   // 6. Spatial Aggregation Relationships
   createEntity('IFCRELAGGREGATES', 'ProjectContainer', ownerHistoryId, null, null, projectId, [siteId]);
@@ -178,6 +190,9 @@ END-ISO-10303-21;`;
  * Create cabinet/workbench body geometry
  */
 function createCabinetGeometry(dimensions: any, createEntity: Function, contextId: number): number {
+  // Access E function from parent scope
+  const E = (value: string) => ({ __ifcEnum: value });
+  
   const { width, height, depth } = dimensions;
   
   // Create proper placement with all directions
@@ -191,13 +206,13 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
   const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
-  const rectangleProfile = createEntity('IFCRECTANGLEPROFILEDEF', 'AREA', null, profilePosition, width, depth);
+  const rectangleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
   
   // Create extrusion
   const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', rectangleProfile, position, extrusionDirection, height);
   
   // Shape representation
-  const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, 'Body', 'SweptSolid', [extrudedSolid]);
+  const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);
   
   // Product definition shape
   return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);
@@ -216,6 +231,9 @@ function addDrawerGeometry(
   contextId: number,
   parentPlacement: number
 ): number[] {
+  // Access E function from parent scope
+  const E = (value: string) => ({ __ifcEnum: value });
+  
   const drawerIds: number[] = [];
   
   // Create individual drawer elements with proper placement
@@ -243,10 +261,10 @@ function addDrawerGeometry(
     const dProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
     const dProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
     const dProfilePos = createEntity('IFCAXIS2PLACEMENT2D', dProfileOrigin, dProfileXDir);
-    const dProfile = createEntity('IFCRECTANGLEPROFILEDEF', 'AREA', null, dProfilePos, drawerWidth, drawerDepth);
+    const dProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, dProfilePos, drawerWidth, drawerDepth);
     
     const dSolid = createEntity('IFCEXTRUDEDAREASOLID', dProfile, dPosition, dExtrusionDir, drawerHeight);
-    const dShapeRep = createEntity('IFCSHAPEREPRESENTATION', contextId, 'Body', 'SweptSolid', [dSolid]);
+    const dShapeRep = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [dSolid]);
     const dProdDefShape = createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [dShapeRep]);
     
     // Create drawer element (Section 9)
