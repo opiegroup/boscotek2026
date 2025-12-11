@@ -14,12 +14,19 @@ function generateIFCContent(configData: any): string {
   const { configuration, product, pricing, referenceCode } = configData;
   const timestamp = new Date().toISOString();
   
-  // Extract dimensions (Section 5: Use METERS - no conversion needed)
-  const dimensions = configData.dimensions || {
-    width: 0.56,
-    height: 0.85,
-    depth: 0.75
+  // Extract dimensions from actual configuration selections (convert mm to meters)
+  const dimensions = {
+    width: (configuration.selections?.width || 560) / 1000,
+    height: (configuration.selections?.height || 850) / 1000,
+    depth: (configuration.selections?.depth || 750) / 1000
   };
+  
+  console.log('IFC Generation - Actual Dimensions:', {
+    width_mm: configuration.selections?.width,
+    height_mm: configuration.selections?.height,
+    depth_mm: configuration.selections?.depth,
+    dimensions_meters: dimensions
+  });
 
   // IFC Header (Section 2: Enhanced with CoordinationView4 and detailed metadata)
   const ifcHeader = `ISO-10303-21;
@@ -161,24 +168,31 @@ DATA;`;
   // 8. Property Sets (Metadata)
   addPropertySets(productInstance, configuration, product, pricing, referenceCode, createEntity, ownerHistoryId);
   
-  // 9. Drawers (Section 9: Proper aggregation and assembly)
-  let allProducts = [productInstance]; // Start with cabinet
+  // 9. Drawers - TEMPORARILY add as separate elements (not aggregated) for testing
+  let allElements = [productInstance];
+  
+  console.log('IFC Generation - Checking for drawers:', {
+    hasCustomDrawers: !!configuration.customDrawers,
+    drawerCount: configuration.customDrawers?.length || 0,
+    drawers: configuration.customDrawers
+  });
   
   if (configuration.customDrawers && configuration.customDrawers.length > 0) {
     const drawerIds = addDrawerGeometry(configuration.customDrawers, product, dimensions, productInstance, createEntity, ownerHistoryId, geometricContext, productLocalPlacement);
     
-    // Section 9: Aggregate drawers under cabinet using IfcRelAggregates
+    console.log('IFC Generation - Created drawer IDs:', drawerIds);
+    
+    // TEMPORARY: Add drawers as separate elements at same level as cabinet
+    // This helps us debug if the issue is with aggregation or with drawer geometry itself
     if (drawerIds.length > 0) {
-      createEntity('IFCRELAGGREGATES', 'CabinetDrawerAssembly', ownerHistoryId, 'Cabinet with Drawers', null, productInstance, drawerIds);
-      
-      // FIX (Bug 3): Drawers must also be added to allProducts for spatial containment
-      allProducts = allProducts.concat(drawerIds);
+      allElements = allElements.concat(drawerIds);
     }
+  } else {
+    console.warn('IFC Generation - NO DRAWERS FOUND in configuration!');
   }
   
-  // 10. Add ALL products (cabinet + drawers) to building storey
-  // FIX (Bug 3): All products must be contained in BuildingStorey per IFC requirements
-  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, allProducts, storeyId);
+  // 10. Add all elements to building storey (cabinet + drawers as separate objects)
+  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, allElements, storeyId);
 
   // Close IFC file
   const ifcContent = `${ifcHeader}
@@ -191,6 +205,7 @@ END-ISO-10303-21;`;
 
 /**
  * Create cabinet/workbench body geometry
+ * Simple solid box representation (will add complexity once basic geometry works)
  */
 function createCabinetGeometry(dimensions: any, createEntity: Function, contextId: number): number {
   // Access E function from parent scope
@@ -198,49 +213,29 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
   
   const { width, height, depth } = dimensions;
   
-  // Create a cabinet FRAME/SHELL instead of solid block
-  // This allows drawers inside to be visible
-  const wallThickness = 0.020; // 20mm walls
+  console.log('Creating cabinet geometry:', { width, height, depth });
   
-  // Create bounding box representation (shell/frame)
-  // This is a simplified representation showing the cabinet extents
-  // In a full BIM model, you'd model individual panels, but for configurator export,
-  // we'll create a thin shell that shows the cabinet boundary
-  
-  const extrusionDirection = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  // Create a simple solid rectangular box
+  // Position origin at bottom center
+  const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const originPoint = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, 0.]);
   const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const position = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDir, xDir);
   
-  // Create HOLLOW rectangular profile (outline only, not filled)
+  // Create rectangular profile for the cabinet footprint
   const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
+  const profile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
   
-  // Use ArbitraryProfileWithVoids to create a hollow rectangle (outer - inner)
-  // Outer rectangle
-  const outerP1 = createEntity('IFCCARTESIANPOINT', [0., 0.]);
-  const outerP2 = createEntity('IFCCARTESIANPOINT', [width, 0.]);
-  const outerP3 = createEntity('IFCCARTESIANPOINT', [width, depth]);
-  const outerP4 = createEntity('IFCCARTESIANPOINT', [0., depth]);
-  const outerPolyline = createEntity('IFCPOLYLINE', [outerP1, outerP2, outerP3, outerP4, outerP1]);
+  // Extrude the profile upward to create the cabinet body
+  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', profile, position, extrusionDir, height);
   
-  // Inner rectangle (cavity for drawers) - inset by wall thickness
-  const innerP1 = createEntity('IFCCARTESIANPOINT', [wallThickness, wallThickness]);
-  const innerP2 = createEntity('IFCCARTESIANPOINT', [width - wallThickness, wallThickness]);
-  const innerP3 = createEntity('IFCCARTESIANPOINT', [width - wallThickness, depth - wallThickness]);
-  const innerP4 = createEntity('IFCCARTESIANPOINT', [wallThickness, depth - wallThickness]);
-  const innerPolyline = createEntity('IFCPOLYLINE', [innerP1, innerP2, innerP3, innerP4, innerP1]);
-  
-  // Create profile with voids (hollow frame)
-  const frameProfile = createEntity('IFCARBITRARYCLOSEDPROFILEDEF', E('AREA'), null, outerPolyline);
-  
-  // Create extrusion
-  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', frameProfile, position, extrusionDirection, height);
-  
-  // Shape representation
+  // Create shape representation
   const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);
+  
+  console.log('Cabinet body representation created');
   
   // Product definition shape
   return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);

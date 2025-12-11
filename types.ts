@@ -270,7 +270,7 @@ export interface ConfigurationRecord {
   updatedAt: string;
 }
 
-export type ExportType = 'IFC' | 'DATA' | 'SPEC_PACK' | 'ALL';
+export type ExportType = 'IFC' | 'DATA' | 'SPEC_PACK' | 'OBJ' | 'BLENDER_SCRIPT' | 'ALL';
 export type ExportStatus = 'pending' | 'processing' | 'completed' | 'failed';
 
 export interface BIMExport {
@@ -322,6 +322,9 @@ export interface ExportResponse {
   success: boolean;
   exportId?: string;
   ifcUrl?: string;
+  objUrl?: string;
+  mtlUrl?: string;
+  blenderScriptUrl?: string;
   dataUrls?: {
     csv?: string;
     xlsx?: string;

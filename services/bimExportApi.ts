@@ -290,6 +290,10 @@ export const requestExport = async (
         ? 'generate-ifc' 
         : exportRequest.exportType === 'DATA'
         ? 'generate-data-export'
+        : exportRequest.exportType === 'OBJ'
+        ? 'generate-obj'
+        : exportRequest.exportType === 'BLENDER_SCRIPT'
+        ? 'generate-blender-script'
         : 'generate-spec-pack';
 
       const { data, error } = await supabase.functions.invoke(functionName, {
@@ -315,6 +319,9 @@ export const requestExport = async (
         success: true,
         exportId: data.exportId,
         ifcUrl: data.ifcUrl,
+        objUrl: data.objUrl,
+        mtlUrl: data.mtlUrl,
+        blenderScriptUrl: data.scriptUrl,
         dataUrls: data.dataUrls,
         specPackUrl: data.specPackUrl
       };

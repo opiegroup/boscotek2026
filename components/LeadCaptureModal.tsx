@@ -41,15 +41,14 @@ export const LeadCaptureModal: React.FC<LeadCaptureModalProps> = ({
         const now = Date.now();
         const hoursSinceCapture = (now - timestamp) / (1000 * 60 * 60);
         
-        // If less than 24 hours, auto-fill and auto-submit
+        // If less than 24 hours, auto-fill form (but keep it open for review)
         if (hoursSinceCapture < 24) {
           try {
             const lead = JSON.parse(cachedLead) as BIMLeadData;
             setFormData({ ...lead, consent: true });
-            // Auto-submit after a brief delay
-            setTimeout(() => {
-              handleSubmit(null, lead);
-            }, 500);
+            setIsPreFilled(true);
+            // Don't auto-submit - let user review and click submit button
+            console.log('Pre-filled cached lead data - please review and submit');
           } catch (err) {
             console.error('Error parsing cached lead:', err);
           }
@@ -160,6 +159,19 @@ export const LeadCaptureModal: React.FC<LeadCaptureModalProps> = ({
               {getExportDescription()}
             </p>
           </div>
+
+          {/* Pre-filled Notice */}
+          {isPreFilled && (
+            <div className="bg-green-900/20 border border-green-500/50 rounded-lg p-3 flex items-start gap-3">
+              <svg className="w-5 h-5 text-green-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1">
+                <p className="text-sm text-green-300 font-medium">Your details have been pre-filled</p>
+                <p className="text-xs text-green-400/80 mt-1">Review and update if needed, then click "Continue to Download"</p>
+              </div>
+            </div>
+          )}
 
           {/* Form Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
