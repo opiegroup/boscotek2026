@@ -198,21 +198,19 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
   
   const { width, height, depth } = dimensions;
   
-  // Create proper placement with all directions
-  const extrusionDirection = createEntity('IFCDIRECTION', [0., 0., 1.]);
-  const originPoint = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, 0.]);
-  const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
-  const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
-  const position = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDir, xDir);
+  // Create profile using POLYLINE (same approach as working test file)
+  const p1 = createEntity('IFCCARTESIANPOINT', [0., 0., 0.]);
+  const p2 = createEntity('IFCCARTESIANPOINT', [width, 0., 0.]);
+  const p3 = createEntity('IFCCARTESIANPOINT', [width, depth, 0.]);
+  const p4 = createEntity('IFCCARTESIANPOINT', [0., depth, 0.]);
+  const polyline = createEntity('IFCPOLYLINE', [p1, p2, p3, p4, p1]);
+  const profile = createEntity('IFCARBITRARYCLOSEDPROFILEDEF', E('AREA'), null, polyline);
   
-  // Create rectangular profile (centered at origin)
-  const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
-  const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
-  const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
-  const rectangleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
+  // Create extrusion direction and placement
+  const extrusionDirection = createEntity('IFCDIRECTION', [0., 0., 1.]);
   
   // Create extrusion
-  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', rectangleProfile, position, extrusionDirection, height);
+  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', profile, null, extrusionDirection, height);
   
   // Shape representation
   const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);

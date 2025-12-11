@@ -56,8 +56,14 @@ export const captureLead = async (leadData: BIMLeadData, configId?: string): Pro
     .single();
 
   if (error) {
-    console.error('Error capturing lead:', error);
-    throw new Error('Failed to capture lead information');
+    console.error('❌ Error capturing lead:', error);
+    console.error('   Error details:', {
+      message: error.message,
+      code: error.code,
+      hint: error.hint,
+      details: error.details
+    });
+    throw new Error(`Failed to capture lead: ${error.message} (code: ${error.code})`);
   }
 
   // Track analytics event
@@ -132,8 +138,14 @@ export const saveConfiguration = async (
     .single();
 
   if (error) {
-    console.error('Error saving configuration:', error);
-    throw new Error('Failed to save configuration');
+    console.error('❌ Error saving configuration:', error);
+    console.error('   Error details:', {
+      message: error.message,
+      code: error.code,
+      hint: error.hint,
+      details: error.details
+    });
+    throw new Error(`Failed to save configuration: ${error.message} (code: ${error.code})`);
   }
 
   // Track analytics event
