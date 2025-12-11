@@ -27,6 +27,7 @@ export const LeadCaptureModal: React.FC<LeadCaptureModalProps> = ({
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPreFilled, setIsPreFilled] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof BIMLeadData, string>>>({});
 
   // Reset form when modal opens
