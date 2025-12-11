@@ -699,9 +699,12 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
        
        if (isPowerOnly) {
           // Power panel rail only - sits at back of worktop without uprights
+          // Position: on top of worktop (height + worktop thickness + half panel height)
+          const panelHeight = 0.10;
+          const worktopThickness = 0.04;
           return (
-             <group position={[0, height + 0.04, -depth/2 + 0.03]}>
-                <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+             <group position={[0, height + worktopThickness + panelHeight/2, -depth/2 + 0.03]}>
+                <mesh><boxGeometry args={[width - 0.12, panelHeight, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
                 {[-0.3, -0.1, 0.1, 0.3].map((x, i) => <mesh key={i} position={[x, 0, 0.021]}><planeGeometry args={[0.08, 0.05]} /><meshBasicMaterial color="#f0f0f0" /></mesh>)}
              </group>
           );
