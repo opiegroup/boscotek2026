@@ -50,9 +50,10 @@ DATA;`;
     const paramsStr = params.map(p => {
       if (p === null || p === undefined) return '$';
       // Check for enum marker BEFORE string check
-      // FIX: Don't add dots - IfcOpenShell expects raw enum values
+      // NOTE: IFC requires .ENUM. format. BlenderBIM v0.8.4 has a bug parsing this.
+      // Valid IFC format is required for other tools (Revit, ArchiCAD, etc.)
       if (p && typeof p === 'object' && '__ifcEnum' in p) {
-        return p.__ifcEnum;
+        return `.${p.__ifcEnum}.`;
       }
       // Special tokens: *, $, .T., .F.
       if (p === '*') return '*';
