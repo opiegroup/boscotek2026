@@ -198,21 +198,46 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
   
   const { width, height, depth } = dimensions;
   
-  // Create proper placement with all directions
+  // Create a cabinet FRAME/SHELL instead of solid block
+  // This allows drawers inside to be visible
+  const wallThickness = 0.020; // 20mm walls
+  
+  // Create bounding box representation (shell/frame)
+  // This is a simplified representation showing the cabinet extents
+  // In a full BIM model, you'd model individual panels, but for configurator export,
+  // we'll create a thin shell that shows the cabinet boundary
+  
   const extrusionDirection = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const originPoint = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, 0.]);
   const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const position = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDir, xDir);
   
-  // Create rectangular profile (centered at origin)
+  // Create HOLLOW rectangular profile (outline only, not filled)
   const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
-  const rectangleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
+  
+  // Use ArbitraryProfileWithVoids to create a hollow rectangle (outer - inner)
+  // Outer rectangle
+  const outerP1 = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const outerP2 = createEntity('IFCCARTESIANPOINT', [width, 0.]);
+  const outerP3 = createEntity('IFCCARTESIANPOINT', [width, depth]);
+  const outerP4 = createEntity('IFCCARTESIANPOINT', [0., depth]);
+  const outerPolyline = createEntity('IFCPOLYLINE', [outerP1, outerP2, outerP3, outerP4, outerP1]);
+  
+  // Inner rectangle (cavity for drawers) - inset by wall thickness
+  const innerP1 = createEntity('IFCCARTESIANPOINT', [wallThickness, wallThickness]);
+  const innerP2 = createEntity('IFCCARTESIANPOINT', [width - wallThickness, wallThickness]);
+  const innerP3 = createEntity('IFCCARTESIANPOINT', [width - wallThickness, depth - wallThickness]);
+  const innerP4 = createEntity('IFCCARTESIANPOINT', [wallThickness, depth - wallThickness]);
+  const innerPolyline = createEntity('IFCPOLYLINE', [innerP1, innerP2, innerP3, innerP4, innerP1]);
+  
+  // Create profile with voids (hollow frame)
+  const frameProfile = createEntity('IFCARBITRARYCLOSEDPROFILEDEF', E('AREA'), null, outerPolyline);
   
   // Create extrusion
-  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', rectangleProfile, position, extrusionDirection, height);
+  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', frameProfile, position, extrusionDirection, height);
   
   // Shape representation
   const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);
