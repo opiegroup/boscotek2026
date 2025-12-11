@@ -82,17 +82,9 @@ DATA;`;
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
-        // Distinguish between dimension values, timestamps, and entity references
-        // Entity IDs are small positive integers (1, 2, 3... typically < 100000)
-        // Timestamps are very large integers (e.g., 1702262399000 from Date.now())
+        // Distinguish between dimension values and entity references
+        // Entity IDs are positive integers (1, 2, 3...)
         // Dimension values are floats (0.56, 0.75) or special values (0)
-        
-        // Special case: timestamps (very large integers > 1000000000)
-        // These should remain as plain numbers, not entity references
-        if (p > 1000000000) {
-          return p.toString();
-        }
-        
         if (p === 0 || p < 0 || p % 1 !== 0) {
           // It's a dimension value (0, negative, or has decimals)
           const str = p.toString();
@@ -206,19 +198,21 @@ function createCabinetGeometry(dimensions: any, createEntity: Function, contextI
   
   const { width, height, depth } = dimensions;
   
-  // Create profile using POLYLINE (same approach as working test file)
-  const p1 = createEntity('IFCCARTESIANPOINT', [0., 0., 0.]);
-  const p2 = createEntity('IFCCARTESIANPOINT', [width, 0., 0.]);
-  const p3 = createEntity('IFCCARTESIANPOINT', [width, depth, 0.]);
-  const p4 = createEntity('IFCCARTESIANPOINT', [0., depth, 0.]);
-  const polyline = createEntity('IFCPOLYLINE', [p1, p2, p3, p4, p1]);
-  const profile = createEntity('IFCARBITRARYCLOSEDPROFILEDEF', E('AREA'), null, polyline);
-  
-  // Create extrusion direction and placement
+  // Create proper placement with all directions
   const extrusionDirection = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const originPoint = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, 0.]);
+  const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const position = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDir, xDir);
+  
+  // Create rectangular profile (centered at origin)
+  const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
+  const rectangleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, width, depth);
   
   // Create extrusion
-  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', profile, null, extrusionDirection, height);
+  const extrudedSolid = createEntity('IFCEXTRUDEDAREASOLID', rectangleProfile, position, extrusionDirection, height);
   
   // Shape representation
   const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), [extrudedSolid]);
@@ -282,7 +276,7 @@ function addDrawerGeometry(
       `Drawer-${index + 1}`,
       ownerHistoryId,
       `Drawer ${index + 1}`,
-      `Drawer Height ${(drawerHeight * 1000).toFixed(0)}mm`, // Convert meters to millimeters
+      `Drawer Height ${drawerHeight.toFixed(0)}mm`, // Description with drawer specs
       `Drawer-${index + 1}`,                        // ObjectType
       drawerPlacement,                              // Proper entity reference
       dProdDefShape,
