@@ -18,12 +18,19 @@ function generateIFCContent(configData: any): string {
   // Priority: configuration.dimensions (pre-calculated) > product option metadata > defaults
   let dimensions: { width: number; height: number; depth: number };
   
+  // Set product-appropriate defaults
+  const isWorkbench = product.id.includes('workbench');
+  const isIndustrial = product.id.includes('industrial');
+  const defaultWidth = isWorkbench ? 1800 : 560;
+  const defaultHeight = isWorkbench ? 900 : 850;
+  const defaultDepth = isWorkbench ? (isIndustrial ? 800 : 750) : 750;
+  
   if (configuration.dimensions) {
     // Use pre-calculated dimensions from configuration (in mm, convert to meters)
     dimensions = {
-      width: (configuration.dimensions.width || 560) / 1000,
-      height: (configuration.dimensions.height || 850) / 1000,
-      depth: (configuration.dimensions.depth || 750) / 1000
+      width: (configuration.dimensions.width || defaultWidth) / 1000,
+      height: (configuration.dimensions.height || defaultHeight) / 1000,
+      depth: (configuration.dimensions.depth || defaultDepth) / 1000
     };
   } else {
     // Derive dimensions from product option selections
@@ -43,11 +50,20 @@ function generateIFCContent(configData: any): string {
       return defaultMm;
     };
     
-    // For HD Cabinet: width from 'width', height from 'height', depth from 'series'
-    // Check both possible group names
-    const widthMm = getOptionValue('width', 560) || getOptionValue('size', 560);
-    const heightMm = getOptionValue('height', 850) || getOptionValue('bench_height', 850);
-    const depthMm = getOptionValue('series', 750);
+    // Get dimensions based on product type
+    let widthMm: number, heightMm: number, depthMm: number;
+    
+    if (isWorkbench) {
+      // Workbench: width from 'size', height from 'bench_height', depth is fixed
+      widthMm = getOptionValue('size', defaultWidth);
+      heightMm = getOptionValue('bench_height', defaultHeight);
+      depthMm = defaultDepth; // Fixed depth for workbenches
+    } else {
+      // Cabinet: width from 'width', height from 'height', depth from 'series'
+      widthMm = getOptionValue('width', defaultWidth);
+      heightMm = getOptionValue('height', defaultHeight);
+      depthMm = getOptionValue('series', defaultDepth);
+    }
     
     dimensions = {
       width: widthMm / 1000,
@@ -192,8 +208,18 @@ DATA;`;
   const productPlacement = createEntity('IFCAXIS2PLACEMENT3D', originPoint, zDirection, xDirection);
   const productLocalPlacement = createEntity('IFCLOCALPLACEMENT', null, productPlacement);
   
-  // Create cabinet/workbench body with detailed geometry components
-  const bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext, configuration, product);
+  // Create product geometry based on product type
+  let bodyRepresentation: number;
+  
+  if (product.id.includes('workbench')) {
+    // Workbench geometry (frame + worktop)
+    const isIndustrial = product.id.includes('industrial');
+    const hasCastors = configuration.selections?.mobility === true;
+    bodyRepresentation = createWorkbenchGeometry(dimensions, createEntity, geometricContext, configuration, product, isIndustrial, hasCastors);
+  } else {
+    // Cabinet geometry (carcass + drawers)
+    bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext, configuration, product);
+  }
   
   // 7. Product Instance (Section 6 & 7: Add ObjectType with full Boscotek code)
   // Name format: "Boscotek - [Configuration Code]" e.g. "Boscotek - BTCS.700.560.100.100.MG.SG"
@@ -454,8 +480,170 @@ function createCabinetGeometry(
 // Drawer metadata (heights, counts, configuration) is included in Pset_BoscotekCabinet.
 
 /**
+ * Create professional workbench geometry with distinct components
+ * LOD 200-300: Frame legs, crossbars, and worktop
+ * 
+ * Geometry Components:
+ * 1. 4 Vertical legs (square tubular steel)
+ * 2. Top frame crossbars (front, back, sides)
+ * 3. Lower frame bracing (optional, based on variant)
+ * 4. Worktop surface
+ */
+function createWorkbenchGeometry(
+  dimensions: any,
+  createEntity: Function,
+  contextId: number,
+  configuration?: any,
+  product?: any,
+  isIndustrial: boolean = false,
+  hasCastors: boolean = false
+): number {
+  const E = (value: string) => ({ __ifcEnum: value });
+  
+  const { width, height, depth } = dimensions;
+  
+  // Workbench constants (matching 3D viewer)
+  const LEG_SIZE = 0.06; // 60mm square legs
+  const CASTOR_HEIGHT = 0.12; // 120mm castors
+  const FOOT_HEIGHT = 0.05; // 50mm levelling feet
+  const WORKTOP_THICKNESS = 0.04; // 40mm worktop
+  const WORKTOP_OVERHANG = 0.02; // 20mm overhang each side
+  
+  // Calculate leg dimensions
+  const legOffset = hasCastors ? CASTOR_HEIGHT : FOOT_HEIGHT;
+  const legHeight = height - legOffset;
+  
+  console.log('Creating workbench geometry:', {
+    width, height, depth,
+    isIndustrial,
+    hasCastors,
+    legHeight,
+    legOffset
+  });
+  
+  const solids: number[] = [];
+  const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  
+  // Helper function to create a vertical extrusion (box) at specified position
+  const createBox = (centerX: number, centerY: number, baseZ: number, boxWidth: number, boxDepth: number, boxHeight: number): number => {
+    const origin = createEntity('IFCCARTESIANPOINT', [centerX, centerY, baseZ]);
+    const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+    const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+    const position = createEntity('IFCAXIS2PLACEMENT3D', origin, zDir, xDir);
+    
+    const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+    const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+    const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
+    const profile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, boxWidth, boxDepth);
+    
+    return createEntity('IFCEXTRUDEDAREASOLID', profile, position, extrusionDir, boxHeight);
+  };
+  
+  // ==========================================================
+  // 1. FOUR VERTICAL LEGS
+  // Positioned at corners, inset by half leg size
+  // ==========================================================
+  const legPositions = [
+    // [X, Y] positions for each leg (centered on leg)
+    [width/2 - LEG_SIZE/2, depth/2 - LEG_SIZE/2],   // Front-right
+    [-width/2 + LEG_SIZE/2, depth/2 - LEG_SIZE/2],  // Front-left
+    [width/2 - LEG_SIZE/2, -depth/2 + LEG_SIZE/2],  // Back-right
+    [-width/2 + LEG_SIZE/2, -depth/2 + LEG_SIZE/2]  // Back-left
+  ];
+  
+  legPositions.forEach(([x, y]) => {
+    solids.push(createBox(x, y, legOffset, LEG_SIZE, LEG_SIZE, legHeight));
+  });
+  
+  // ==========================================================
+  // 2. TOP FRAME CROSSBARS (at worktop height)
+  // ==========================================================
+  const crossbarZ = height - LEG_SIZE/2;
+  const crossbarCenterZ = height - LEG_SIZE;
+  
+  // Front crossbar (full width)
+  solids.push(createBox(0, depth/2 - LEG_SIZE/2, crossbarCenterZ, width, LEG_SIZE, LEG_SIZE));
+  
+  // Back crossbar (full width)
+  solids.push(createBox(0, -depth/2 + LEG_SIZE/2, crossbarCenterZ, width, LEG_SIZE, LEG_SIZE));
+  
+  // Left side crossbar (between front and back legs)
+  const sideBarLength = depth - LEG_SIZE * 2;
+  solids.push(createBox(-width/2 + LEG_SIZE/2, 0, crossbarCenterZ, LEG_SIZE, sideBarLength, LEG_SIZE));
+  
+  // Right side crossbar
+  solids.push(createBox(width/2 - LEG_SIZE/2, 0, crossbarCenterZ, LEG_SIZE, sideBarLength, LEG_SIZE));
+  
+  // ==========================================================
+  // 3. LOWER FRAME BRACING (variant-specific)
+  // ==========================================================
+  const lowerBraceZ = legOffset + 0.15; // 150mm above floor/castor
+  
+  if (isIndustrial) {
+    // Industrial: H-frame with left, right, and center braces
+    // Left side brace
+    solids.push(createBox(-width/2 + LEG_SIZE/2, 0, lowerBraceZ, LEG_SIZE, sideBarLength, LEG_SIZE));
+    // Right side brace
+    solids.push(createBox(width/2 - LEG_SIZE/2, 0, lowerBraceZ, LEG_SIZE, sideBarLength, LEG_SIZE));
+    // Center cross brace
+    const centerBraceWidth = width - LEG_SIZE * 2;
+    solids.push(createBox(0, 0, lowerBraceZ, centerBraceWidth, LEG_SIZE, LEG_SIZE));
+  } else {
+    // Heavy Duty: Single back brace
+    const backBraceWidth = width - 0.1; // Slightly shorter
+    const backBraceHeight = LEG_SIZE * 0.8;
+    const backBraceZ = 0.2 + (hasCastors ? 0.05 : 0);
+    solids.push(createBox(0, -depth/2 + LEG_SIZE/2, backBraceZ, backBraceWidth, backBraceHeight, backBraceHeight));
+  }
+  
+  // ==========================================================
+  // 4. WORKTOP SURFACE
+  // Overhangs frame slightly, sits on top of frame
+  // ==========================================================
+  const worktopWidth = width + WORKTOP_OVERHANG * 2;
+  const worktopDepth = depth + WORKTOP_OVERHANG * 2;
+  const worktopZ = height; // Sits on top of frame
+  
+  solids.push(createBox(0, 0, worktopZ, worktopWidth, worktopDepth, WORKTOP_THICKNESS));
+  
+  // ==========================================================
+  // 5. OPTIONAL: Under-bench storage representation (simplified)
+  // ==========================================================
+  const underBenchOption = configuration?.selections?.under_bench;
+  if (underBenchOption && underBenchOption !== 'B0' && underBenchOption !== 'iw-ub-none') {
+    // Add a simplified storage unit representation
+    const storageWidth = 0.56; // Standard cabinet width
+    const storageDepth = depth - 0.1;
+    const storageHeight = height - legOffset - 0.05;
+    
+    // Position based on under_bench_pos or default to right
+    const position = configuration?.selections?.under_bench_pos || 'right';
+    let storageX = 0;
+    if (position === 'left' || position === 'pos-left') {
+      storageX = -width/2 + LEG_SIZE + storageWidth/2;
+    } else if (position === 'right' || position === 'pos-right') {
+      storageX = width/2 - LEG_SIZE - storageWidth/2;
+    }
+    
+    // Only add if there's actually storage selected (not just shelves)
+    if (!underBenchOption.includes('shelf') || underBenchOption.includes('drawer') || 
+        underBenchOption.includes('cabinet') || underBenchOption.includes('door')) {
+      solids.push(createBox(storageX, 0, legOffset + 0.05, storageWidth, storageDepth, storageHeight));
+    }
+  }
+  
+  // Create single shape representation with all geometry components
+  const shapeRepresentation = createEntity('IFCSHAPEREPRESENTATION', contextId, E('Body'), E('SweptSolid'), solids);
+  
+  console.log(`Workbench geometry created: ${solids.length} solid components`);
+  
+  // Product definition shape
+  return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);
+}
+
+/**
  * Add comprehensive property sets (Section 10, 11: Metadata per specification)
- * Includes all Pset_BoscotekCabinet properties as per IFC Export Brief
+ * Handles both Cabinets and Workbenches with appropriate properties
  */
 function addPropertySets(
   elementId: number,
@@ -467,28 +655,30 @@ function addPropertySets(
   ownerHistoryId: number
 ): void {
   const properties: number[] = [];
+  const isWorkbench = product.id.includes('workbench');
   
   // ==========================================================
-  // Section 10.2: Standard Properties - Pset_BoscotekCabinet
+  // Core Identification (Common to all products)
   // ==========================================================
-  
-  // Core Identification
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BoscotekCode', null, createEntity('IFCIDENTIFIER', referenceCode), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Family', null, createEntity('IFCLABEL', product.name), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Manufacturer', null, createEntity('IFCLABEL', 'Boscotek'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'OwnerOrganisation', null, createEntity('IFCLABEL', 'Opie Manufacturing Group'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AustralianMade', null, createEntity('IFCBOOLEAN', '.T.'), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductType', null, createEntity('IFCLABEL', isWorkbench ? 'Workbench' : 'Cabinet'), null));
   
+  // ==========================================================
   // Dimensions (in millimeters as per specification)
-  // Use configuration.dimensions if available, otherwise derive from selections
-  let widthMm = 560, depthMm = 750, heightMm = 850;
+  // ==========================================================
+  let widthMm = isWorkbench ? 1800 : 560;
+  let depthMm = isWorkbench ? 750 : 750;
+  let heightMm = isWorkbench ? 900 : 850;
   
   if (configuration.dimensions) {
     widthMm = configuration.dimensions.width || widthMm;
     depthMm = configuration.dimensions.depth || depthMm;
     heightMm = configuration.dimensions.height || heightMm;
   } else {
-    // Derive from product option selections
     const getOptionValueMm = (groupId: string): number | null => {
       const selectionId = configuration.selections?.[groupId];
       if (!selectionId) return null;
@@ -496,7 +686,6 @@ function addPropertySets(
       const group = product.groups?.find((g: any) => g.id === groupId);
       const option = group?.options?.find((o: any) => o.id === selectionId);
       
-      // Check for value field (in mm) or meta values (in meters, convert)
       if (typeof option?.value === 'number') return option.value;
       if (option?.meta?.width) return option.meta.width * 1000;
       if (option?.meta?.height) return option.meta.height * 1000;
@@ -515,70 +704,105 @@ function addPropertySets(
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', heightMm), null));
   
   // ==========================================================
-  // Drawer Configuration
+  // Product-specific properties
   // ==========================================================
-  if (configuration.customDrawers && configuration.customDrawers.length > 0) {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', configuration.customDrawers.length), null));
+  if (isWorkbench) {
+    // --- WORKBENCH PROPERTIES ---
     
-    // Get drawer heights from product options
-    const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
-    const drawerHeights = configuration.customDrawers.map((d: any) => {
-      const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
-      return opt?.meta?.front || 150;
-    });
+    // Worktop material
+    const worktopId = configuration.selections?.worktop;
+    if (worktopId) {
+      const worktopGroup = product.groups?.find((g: any) => g.id === 'worktop');
+      const worktopOption = worktopGroup?.options?.find((o: any) => o.id === worktopId);
+      if (worktopOption) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterial', null, createEntity('IFCLABEL', worktopOption.label), null));
+      }
+    }
     
-    // Drawer configuration code (e.g., "75.200.250" for drawer heights in mm)
-    // Sort descending to match stacking order (largest at bottom)
-    const sortedHeights = [...drawerHeights].sort((a, b) => b - a);
-    const drawerConfigCode = sortedHeights.join('.');
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', drawerConfigCode), null));
+    // Under-bench configuration
+    const underBench = configuration.selections?.under_bench;
+    if (underBench && underBench !== 'B0' && underBench !== 'iw-ub-none') {
+      const underBenchGroup = product.groups?.find((g: any) => g.id === 'under_bench');
+      const underBenchOption = underBenchGroup?.options?.find((o: any) => o.id === underBench);
+      if (underBenchOption) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UnderBenchOption', null, createEntity('IFCLABEL', underBenchOption.label), null));
+      }
+    }
     
-    // Individual drawer heights property
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeights', null, createEntity('IFCLABEL', drawerHeights.join(', ') + ' mm'), null));
+    // Above-bench configuration
+    const aboveBench = configuration.selections?.above_bench;
+    if (aboveBench && aboveBench !== 'T0' && aboveBench !== 'iw-ab-none') {
+      const aboveBenchGroup = product.groups?.find((g: any) => g.id === 'above_bench');
+      const aboveBenchOption = aboveBenchGroup?.options?.find((o: any) => o.id === aboveBench);
+      if (aboveBenchOption) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AboveBenchOption', null, createEntity('IFCLABEL', aboveBenchOption.label), null));
+      }
+    }
+    
+    // Mobility (castors)
+    const hasCastors = configuration.selections?.mobility === true;
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'HasCastors', null, createEntity('IFCBOOLEAN', hasCastors ? '.T.' : '.F.'), null));
+    
+    // Load capacity (workbench specific)
+    const isHeavyDuty = product.id.includes('heavy');
+    const udlCapacity = isHeavyDuty ? '1000 kg (Heavy Duty)' : '800 kg (Industrial)';
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopLoadCapacity', null, createEntity('IFCLABEL', udlCapacity), null));
+    
   } else {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', 0), null));
+    // --- CABINET PROPERTIES ---
+    
+    // Drawer Configuration
+    if (configuration.customDrawers && configuration.customDrawers.length > 0) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', configuration.customDrawers.length), null));
+      
+      const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+      const drawerHeights = configuration.customDrawers.map((d: any) => {
+        const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+        return opt?.meta?.front || 150;
+      });
+      
+      const sortedHeights = [...drawerHeights].sort((a, b) => b - a);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', sortedHeights.join('.')), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeights', null, createEntity('IFCLABEL', drawerHeights.join(', ') + ' mm'), null));
+    } else {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', 0), null));
+    }
+    
+    // Load Ratings
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLDrawerCapacity', null, createEntity('IFCLABEL', '200 kg (HD Cabinet Standard)'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLCabinetCapacity', null, createEntity('IFCLABEL', '1200 kg (HD Cabinet Standard)'), null));
+    
+    // Series/Depth Type
+    const seriesId = configuration.selections?.series;
+    if (seriesId) {
+      const seriesGroup = product.groups?.find((g: any) => g.id === 'series');
+      const seriesOption = seriesGroup?.options?.find((o: any) => o.id === seriesId);
+      if (seriesOption) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Series', null, createEntity('IFCLABEL', seriesOption.code || seriesOption.label), null));
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DepthType', null, createEntity('IFCLABEL', seriesId.includes('d') ? 'D - Deep' : 'S - Standard'), null));
+      }
+    }
   }
   
   // ==========================================================
-  // Load Ratings (Section 10.2) - Standard Boscotek capacities
+  // Materials and Finishes (Common)
   // ==========================================================
-  // Get from selections or use Boscotek standard values
-  const drawerUDL = configuration.selections?.drawerCapacity || 
-                    product.specifications?.drawerUDL || 
-                    '200 kg (HD Cabinet Standard)';
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLDrawerCapacity', null, createEntity('IFCLABEL', drawerUDL), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialFrame', null, createEntity('IFCLABEL', 'Steel - XT Shield Powder Coated'), null));
   
-  const cabinetUDL = configuration.selections?.cabinetCapacity || 
-                     product.specifications?.cabinetUDL || 
-                     '1200 kg (HD Cabinet Standard)';
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'UDLCabinetCapacity', null, createEntity('IFCLABEL', cabinetUDL), null));
+  const frameColorId = configuration.selections?.housing_color || configuration.selections?.color;
+  if (frameColorId) {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFrame', null, createEntity('IFCLABEL', mapColorCodeToFinish(frameColorId)), null));
+  } else {
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFrame', null, createEntity('IFCLABEL', 'MG - Monument Grey (Standard)'), null));
+  }
   
-  // ==========================================================
-  // Materials and Finishes (Section 10.2, 11)
-  // ==========================================================
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialBody', null, createEntity('IFCLABEL', 'Steel - XT Shield Powder Coated'), null));
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaterialFronts', null, createEntity('IFCLABEL', 'Steel - XT Shield Powder Coated'), null));
-  
-  // Map color codes to finish descriptions
-  const housingColorId = configuration.selections?.housing_color || configuration.selections?.color;
   const faciaColorId = configuration.selections?.facia_color || configuration.selections?.drawer_facia;
-  
-  if (housingColorId) {
-    const finishBody = mapColorCodeToFinish(housingColorId);
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', finishBody), null));
-  } else {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishBody', null, createEntity('IFCLABEL', 'MG - Monument Grey (Standard)'), null));
-  }
-  
   if (faciaColorId) {
-    const finishFronts = mapColorCodeToFinish(faciaColorId);
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', finishFronts), null));
-  } else {
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishFronts', null, createEntity('IFCLABEL', 'SG - Surfmist Grey (Standard)'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FinishDrawers', null, createEntity('IFCLABEL', mapColorCodeToFinish(faciaColorId)), null));
   }
   
   // ==========================================================
-  // Pricing (Section 11)
+  // Pricing
   // ==========================================================
   if (pricing) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BasePrice', null, createEntity('IFCMONETARYMEASURE', pricing.basePrice || 0), null));
@@ -587,38 +811,30 @@ function addPropertySets(
   }
   
   // ==========================================================
-  // Product URL (Section 11)
+  // Product URL and Description
   // ==========================================================
-  const productUrl = product.url || 'https://www.boscotek.com.au/products/high-density-cabinets';
+  const productUrls: { [key: string]: string } = {
+    'prod-hd-cabinet': 'https://www.boscotek.com.au/products/high-density-cabinets',
+    'prod-workbench-heavy': 'https://www.boscotek.com.au/products/heavy-duty-workbenches',
+    'prod-workbench-industrial': 'https://www.boscotek.com.au/products/industrial-workbenches'
+  };
+  const productUrl = productUrls[product.id] || 'https://www.boscotek.com.au';
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', productUrl), null));
   
-  // Product description
   if (product.description) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Description', null, createEntity('IFCTEXT', product.description), null));
   }
   
   // ==========================================================
-  // Series/Depth Type (for HD Cabinet)
+  // Create property set with appropriate name
   // ==========================================================
-  const seriesId = configuration.selections?.series;
-  if (seriesId) {
-    const seriesGroup = product.groups?.find((g: any) => g.id === 'series');
-    const seriesOption = seriesGroup?.options?.find((o: any) => o.id === seriesId);
-    if (seriesOption) {
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Series', null, createEntity('IFCLABEL', seriesOption.code || seriesOption.label), null));
-      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DepthType', null, createEntity('IFCLABEL', seriesId.includes('d') ? 'D - Deep' : 'S - Standard'), null));
-    }
-  }
+  const psetName = isWorkbench ? 'Pset_BoscotekWorkbench' : 'Pset_BoscotekCabinet';
+  const psetDescription = isWorkbench ? 'Boscotek workbench configuration properties' : 'Boscotek cabinet configuration properties';
+  const pset = createEntity('IFCPROPERTYSET', psetName, ownerHistoryId, psetDescription, null, properties);
   
-  // ==========================================================
-  // Create property set (Section 10.1)
-  // ==========================================================
-  const pset = createEntity('IFCPROPERTYSET', 'Pset_BoscotekCabinet', ownerHistoryId, 'Boscotek cabinet configuration properties', null, properties);
-  
-  // Relate to element
   createEntity('IFCRELDEFINESBYPROPERTIES', 'PropertiesRel', ownerHistoryId, null, null, [elementId], pset);
   
-  console.log(`Property set created with ${properties.length} properties`);
+  console.log(`Property set ${psetName} created with ${properties.length} properties`);
 }
 
 /**
