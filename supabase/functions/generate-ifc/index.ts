@@ -54,13 +54,16 @@ DATA;`;
         const allNumbers = p.every(item => typeof item === 'number');
         
         if (allNumbers) {
-          // FIX (Bugs 1 & 2): ONLY treat as coordinates if array contains decimals
-          // Entity IDs are ALWAYS integers, so hasDecimals distinguishes them
-          // Arrays like [2,3,4,5] (unit IDs) or [7] (context ID) are entity references
-          // Arrays like [0., 0., 0.] or [1., 0., 0.] are coordinates
+          // PROPER FIX: Distinguish coordinates from entity references
+          // Entity IDs are ALWAYS positive integers starting from 1 (never 0, never negative)
+          // Coordinates often contain 0 (origins, directions) or negative values (offsets)
+          
+          const hasZero = p.some((n: number) => n === 0);
+          const hasNegative = p.some((n: number) => n < 0);
           const hasDecimals = p.some((n: number) => n % 1 !== 0);
           
-          if (hasDecimals) {
+          // If array contains 0, negative, or decimals → it's coordinates
+          if (hasZero || hasNegative || hasDecimals) {
             // Coordinates: format as floats
             return `(${p.map(n => {
               const str = n.toString();
@@ -69,7 +72,7 @@ DATA;`;
           }
         }
         
-        // Entity reference list: treat all integer arrays as entity references
+        // Entity reference list: all positive non-zero integers are entity references
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
