@@ -6,11 +6,12 @@ import BoscotekLogo from './BoscotekLogo';
 interface QuoteCartProps {
   items: QuoteLineItem[];
   onRemoveItem: (id: string) => void;
+  onEditItem: (id: string) => void;
   onAddMore: () => void;
   onSubmitQuote: (customer: CustomerDetails) => void;
 }
 
-const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onAddMore, onSubmitQuote }) => {
+const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onEditItem, onAddMore, onSubmitQuote }) => {
   const [customer, setCustomer] = useState<CustomerDetails>({ name: '', company: '', email: '', phone: '', notes: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -65,7 +66,14 @@ const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onAddMore, o
                                             Quantity: <span className="text-white font-bold">{item.quantity}</span>
                                          </div>
                                       </div>
-                                      <div className="text-right block sm:hidden">
+                                      <div className="text-right block sm:hidden flex gap-2">
+                                          <button 
+                                             onClick={() => onEditItem(item.id)}
+                                             className="text-xs bg-zinc-800 hover:bg-amber-500 hover:text-black text-zinc-300 px-3 py-1.5 rounded transition-colors font-medium"
+                                             title="Edit Configuration"
+                                          >
+                                             ✏️ Edit
+                                          </button>
                                           <button 
                                              onClick={() => onRemoveItem(item.id)}
                                              className="text-zinc-600 hover:text-red-500 p-1"
@@ -77,20 +85,29 @@ const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onAddMore, o
                                    </div>
                                 </div>
                                 
-                                <div className="text-left sm:text-right flex flex-row sm:flex-col justify-between items-center sm:items-end">
+                                <div className="text-left sm:text-right flex flex-row sm:flex-col justify-between items-center sm:items-end gap-3">
                                     <div className="text-right">
                                         <div className="font-mono font-bold text-amber-500 text-lg">${item.totalPrice.toLocaleString()}</div>
                                         {item.quantity > 1 && (
                                             <div className="text-xs text-zinc-500">${item.unitPrice.toLocaleString()} ea</div>
                                         )}
                                     </div>
-                                    <button 
-                                       onClick={() => onRemoveItem(item.id)}
-                                       className="text-zinc-600 hover:text-red-500 p-1 hidden sm:block"
-                                       title="Remove Item"
-                                    >
-                                       ✕
-                                    </button>
+                                    <div className="hidden sm:flex gap-2 items-center">
+                                        <button 
+                                           onClick={() => onEditItem(item.id)}
+                                           className="text-xs bg-zinc-800 hover:bg-amber-500 hover:text-black text-zinc-300 px-3 py-1.5 rounded transition-colors font-medium"
+                                           title="Edit Configuration"
+                                        >
+                                           ✏️ Edit
+                                        </button>
+                                        <button 
+                                           onClick={() => onRemoveItem(item.id)}
+                                           className="text-zinc-600 hover:text-red-500 p-1"
+                                           title="Remove Item"
+                                        >
+                                           ✕
+                                        </button>
+                                    </div>
                                 </div>
                              </div>
 

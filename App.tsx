@@ -46,6 +46,7 @@ const BoscotekApp: React.FC = () => {
   // Cart State
   const [quoteItems, setQuoteItems] = useState<QuoteLineItem[]>([]);
   const [submittedRef, setSubmittedRef] = useState('');
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
 
   // Effect to fetch price when config changes
   useEffect(() => {
@@ -133,24 +134,63 @@ const BoscotekApp: React.FC = () => {
        specsSummary.push(`${config.embeddedCabinets.length}x Custom Embedded Cabinets`);
     }
 
-    const newItem: QuoteLineItem = {
-      id: `line-${Date.now()}`,
-      productName: activeProduct.name,
-      configuration: { ...config },
-      quantity: quantity,
-      unitPrice: pricing.totalPrice,
-      totalPrice: pricing.totalPrice * quantity,
-      specsSummary: specsSummary,
-      breakdown: pricing.breakdown // Save detailed breakdown for cart display
-    };
+    // Check if we're editing an existing item
+    if (editingItemId) {
+      // Update the existing item
+      const updatedItem: QuoteLineItem = {
+        id: editingItemId, // Keep the same ID
+        productName: activeProduct.name,
+        configuration: { ...config },
+        quantity: quantity,
+        unitPrice: pricing.totalPrice,
+        totalPrice: pricing.totalPrice * quantity,
+        specsSummary: specsSummary,
+        breakdown: pricing.breakdown
+      };
+      
+      setQuoteItems(quoteItems.map(item => 
+        item.id === editingItemId ? updatedItem : item
+      ));
+      setEditingItemId(null); // Clear editing state
+    } else {
+      // Add new item
+      const newItem: QuoteLineItem = {
+        id: `line-${Date.now()}`,
+        productName: activeProduct.name,
+        configuration: { ...config },
+        quantity: quantity,
+        unitPrice: pricing.totalPrice,
+        totalPrice: pricing.totalPrice * quantity,
+        specsSummary: specsSummary,
+        breakdown: pricing.breakdown
+      };
+      
+      setQuoteItems([...quoteItems, newItem]);
+    }
 
-    setQuoteItems([...quoteItems, newItem]);
     setViewMode('catalog'); // Return to catalog to add more or view cart
     setActiveProduct(null);
   };
 
   const handleRemoveItem = (id: string) => {
     setQuoteItems(quoteItems.filter(i => i.id !== id));
+  };
+
+  const handleEditItem = (id: string) => {
+    // Find the item to edit
+    const itemToEdit = quoteItems.find(i => i.id === id);
+    if (!itemToEdit) return;
+
+    // Find the product definition
+    const product = products.find(p => p.id === itemToEdit.configuration.productId);
+    if (!product) return;
+
+    // Load the configuration back into the configurator
+    setConfig(itemToEdit.configuration);
+    setQuantity(itemToEdit.quantity);
+    setActiveProduct(product);
+    setEditingItemId(id); // Track which item we're editing
+    setViewMode('config');
   };
 
   const handleSubmitFullQuote = async (customer: CustomerDetails) => {
@@ -205,6 +245,7 @@ const BoscotekApp: React.FC = () => {
        <QuoteCart 
           items={quoteItems}
           onRemoveItem={handleRemoveItem}
+          onEditItem={handleEditItem}
           onAddMore={() => setViewMode('catalog')}
           onSubmitQuote={handleSubmitFullQuote}
        />
@@ -273,9 +314,10 @@ const BoscotekApp: React.FC = () => {
               onChange={handleConfigChange}
               onCustomDrawerChange={handleCustomDrawerChange}
               onEmbeddedCabinetChange={handleEmbeddedCabinetChange} // New Handler
-              onBack={() => { setActiveProduct(null); setViewMode('catalog'); }}
+              onBack={() => { setActiveProduct(null); setViewMode('catalog'); setEditingItemId(null); }}
               activeDrawerIndex={activeDrawerIndex}
               onSelectDrawer={setActiveDrawerIndex}
+              isEditingCartItem={editingItemId !== null}
            />
         </div>
 
@@ -309,6 +351,7 @@ const BoscotekApp: React.FC = () => {
               quantity={quantity}
               onQuantityChange={setQuantity}
               onAddToQuote={handleAddToQuote}
+              isEditingCartItem={editingItemId !== null}
            />
         </div>
       </div>

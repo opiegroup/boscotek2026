@@ -16,6 +16,7 @@ interface ConfiguratorControlsProps {
   onSelectDrawer: (index: number | null) => void;
   // New props for Embedded Cabinets
   onEmbeddedCabinetChange?: (cabinets: EmbeddedCabinet[]) => void;
+  isEditingCartItem?: boolean;
 }
 
 const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({ 
@@ -26,7 +27,8 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   onBack,
   activeDrawerIndex,
   onSelectDrawer,
-  onEmbeddedCabinetChange
+  onEmbeddedCabinetChange,
+  isEditingCartItem = false
 }) => {
   
   const { interiors, products } = useCatalog();
@@ -439,6 +441,18 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
         >
           ← Back to Product List
         </button>
+
+        {isEditingCartItem && (
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-amber-500 text-lg">✏️</span>
+              <div>
+                <div className="text-amber-500 font-bold text-sm">Editing Cart Item</div>
+                <div className="text-amber-400/80 text-xs">Make your changes and click "Update Configuration"</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <h2 className="text-xl font-bold text-white mb-1">{product.name}</h2>
         <p className="text-xs text-zinc-400 mb-4">{product.description}</p>

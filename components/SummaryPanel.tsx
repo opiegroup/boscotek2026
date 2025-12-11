@@ -12,6 +12,7 @@ interface SummaryPanelProps {
   quantity: number;
   onQuantityChange: (qty: number) => void;
   onAddToQuote: () => void;
+  isEditingCartItem?: boolean;
 }
 
 const SummaryPanel: React.FC<SummaryPanelProps> = ({ 
@@ -21,7 +22,8 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
   referenceCode,
   quantity,
   onQuantityChange,
-  onAddToQuote
+  onAddToQuote,
+  isEditingCartItem = false
 }) => {
   
   const grandTotal = pricing.totalPrice * quantity;
@@ -205,8 +207,10 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
             onClick={onAddToQuote}
             className="w-full py-3 bg-amber-500 hover:bg-amber-400 text-black font-bold uppercase tracking-wide rounded transition-colors flex items-center justify-center gap-2"
          >
-            <span>Add to Quote</span>
-            <span className="bg-black/20 px-2 py-0.5 rounded text-xs">Enter Cart</span>
+            <span>{isEditingCartItem ? '💾 Update Configuration' : 'Add to Quote'}</span>
+            <span className="bg-black/20 px-2 py-0.5 rounded text-xs">
+              {isEditingCartItem ? 'Save Changes' : 'Enter Cart'}
+            </span>
          </button>
       </div>
     </div>
