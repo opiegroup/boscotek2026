@@ -14,18 +14,11 @@ function generateIFCContent(configData: any): string {
   const { configuration, product, pricing, referenceCode } = configData;
   const timestamp = new Date().toISOString();
   
-  // Extract dimensions (Section 5: Convert to MILLIMETERS)
-  const dimensionsMeters = configData.dimensions || {
+  // Extract dimensions (Section 5: Use METERS - no conversion needed)
+  const dimensions = configData.dimensions || {
     width: 0.56,
     height: 0.85,
     depth: 0.75
-  };
-  
-  // Convert to millimeters (IFC units are now in mm)
-  const dimensions = {
-    width: dimensionsMeters.width * 1000,
-    height: dimensionsMeters.height * 1000,
-    depth: dimensionsMeters.depth * 1000
   };
 
   // IFC Header (Section 2: Enhanced with CoordinationView4 and detailed metadata)
@@ -89,7 +82,15 @@ DATA;`;
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
-        // Single numbers are ALWAYS entity references in IFC parameters
+        // Distinguish between dimension values and entity references
+        // Entity IDs are positive integers (1, 2, 3...)
+        // Dimension values are floats (0.56, 0.75) or special values (0)
+        if (p === 0 || p < 0 || p % 1 !== 0) {
+          // It's a dimension value (0, negative, or has decimals)
+          const str = p.toString();
+          return str.includes('.') ? str : `${str}.`;
+        }
+        // It's an entity reference (positive integer)
         return `#${p}`;
       }
       return String(p);
@@ -101,12 +102,13 @@ DATA;`;
   // 1. Owner History
   const ownerHistoryId = createEntity('IFCOWNERHISTORY', null, null, null, E('NOCHANGE'), null, null, null, Date.now());
   
-  // 2. Units (Section 5: Use MILLIMETRES - FIX: Use MILLI not .MILLI. for BlenderBIM)
-  const lengthUnit = createEntity('IFCSIUNIT', '*', E('LENGTHUNIT'), E('MILLI'), E('METRE'));
-  const areaUnit = createEntity('IFCSIUNIT', '*', E('AREAUNIT'), null, E('SQUARE_METRE'));
-  const volumeUnit = createEntity('IFCSIUNIT', '*', E('VOLUMEUNIT'), null, E('CUBIC_METRE'));
-  const massUnit = createEntity('IFCSIUNIT', '*', E('MASSUNIT'), E('KILO'), E('GRAM'));
-  const angleUnit = createEntity('IFCSIUNIT', '*', E('PLANEANGLEUNIT'), null, E('RADIAN'));
+  // 2. Units (Section 5: Use METRES - dimensions will be in meters, not millimeters)
+  // FIX: Use $ (null) for Dimensions, and no prefix for METRE to avoid BlenderBIM parsing issues
+  const lengthUnit = createEntity('IFCSIUNIT', null, E('LENGTHUNIT'), null, E('METRE'));
+  const areaUnit = createEntity('IFCSIUNIT', null, E('AREAUNIT'), null, E('SQUARE_METRE'));
+  const volumeUnit = createEntity('IFCSIUNIT', null, E('VOLUMEUNIT'), null, E('CUBIC_METRE'));
+  const massUnit = createEntity('IFCSIUNIT', null, E('MASSUNIT'), E('KILO'), E('GRAM'));
+  const angleUnit = createEntity('IFCSIUNIT', null, E('PLANEANGLEUNIT'), null, E('RADIAN'));
   
   const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit, angleUnit]);
   
@@ -239,11 +241,11 @@ function addDrawerGeometry(
   
   // Create individual drawer elements with proper placement
   drawers.forEach((drawer: any, index: number) => {
-    // Dimensions in millimeters (consistent with Section 5)
-    const drawerWidth = cabinetDimensions.width - 40;  // 40mm clearance
-    const drawerDepth = cabinetDimensions.depth - 50;  // 50mm clearance
-    const drawerHeight = (drawer.height || 0.15) * 1000; // Convert to mm
-    const drawerY = (drawer.y || (index * 100)) * 1000; // Position in mm
+    // Dimensions in meters (consistent with Section 5)
+    const drawerWidth = cabinetDimensions.width - 0.04;  // 40mm (0.04m) clearance
+    const drawerDepth = cabinetDimensions.depth - 0.05;  // 50mm (0.05m) clearance
+    const drawerHeight = drawer.height || 0.15; // Height in meters
+    const drawerY = drawer.y || (index * 0.1); // Position in meters (100mm spacing = 0.1m)
     
     // Create drawer placement (offset vertically from cabinet)
     const drawerPoint = createEntity('IFCCARTESIANPOINT', [0., 0., drawerY]);
@@ -303,7 +305,7 @@ function addDrawerProperties(
   const properties: number[] = [];
   
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerNumber', null, createEntity('IFCINTEGER', index + 1), null));
-  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeight', null, createEntity('IFCLENGTHMEASURE', (drawer.height || 0.15) * 1000), null));
+  properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerHeight', null, createEntity('IFCLENGTHMEASURE', drawer.height || 0.15), null));
   
   if (drawer.interior) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerInterior', null, createEntity('IFCLABEL', drawer.interior), null));
@@ -343,16 +345,16 @@ function addPropertySets(
   // Dimensions (in millimeters as per Section 5)
   if (configuration.dimensions) {
     const dims = configuration.dimensions;
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null, createEntity('IFCLENGTHMEASURE', dims.width * 1000), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Depth', null, createEntity('IFCLENGTHMEASURE', dims.depth * 1000), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', dims.height * 1000), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null, createEntity('IFCLENGTHMEASURE', dims.width), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Depth', null, createEntity('IFCLENGTHMEASURE', dims.depth), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Height', null, createEntity('IFCLENGTHMEASURE', dims.height), null));
   }
   
   // Drawer Configuration
   if (configuration.customDrawers && configuration.customDrawers.length > 0) {
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'NumberOfDrawers', null, createEntity('IFCINTEGER', configuration.customDrawers.length), null));
     
-    // Drawer configuration code (e.g., "75.200.250" for drawer heights)
+    // Drawer configuration code (e.g., "75.200.250" for drawer heights in mm)
     const drawerHeights = configuration.customDrawers.map((d: any) => (d.height * 1000).toFixed(0)).join('.');
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerConfigurationCode', null, createEntity('IFCLABEL', drawerHeights), null));
   }
