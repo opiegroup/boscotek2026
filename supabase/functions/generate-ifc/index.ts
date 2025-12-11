@@ -34,31 +34,39 @@ DATA;`;
   let entityId = 1;
   const entities: string[] = [];
 
-  // Helper to create entity
+  // Helper to create entity with improved type detection
   const createEntity = (type: string, ...params: any[]): number => {
     const id = entityId++;
     const paramsStr = params.map(p => {
       if (p === null || p === undefined) return '$';
       if (typeof p === 'string') return `'${p}'`;
       if (Array.isArray(p)) {
-        // Check if array contains coordinates (has decimals) or entity refs (integers)
-        if (p.length > 0 && typeof p[0] === 'number') {
-          // Check if any number has decimals or is between -100 and 100
-          const hasDecimals = p.some((n: number) => typeof n === 'number' && n % 1 !== 0);
-          const isCoordinateRange = p.every((n: number) => 
-            typeof n === 'number' && n >= -1000 && n <= 1000
-          );
+        if (p.length === 0) return '()';
+        
+        // Check if ALL elements are numbers
+        const allNumbers = p.every(item => typeof item === 'number');
+        
+        if (allNumbers) {
+          // Detect if this is a coordinate list (has decimals OR small length + reasonable range)
+          const hasDecimals = p.some((n: number) => n % 1 !== 0);
+          const isSmallArray = p.length <= 4;
+          const isReasonableRange = p.every((n: number) => n >= -10000 && n <= 10000);
           
-          // If has decimals or looks like coordinates, treat as float literals
-          if (hasDecimals || (isCoordinateRange && p.length <= 4)) {
-            return `(${p.map(item => typeof item === 'number' ? `${item}.` : item).join(',')})`;
+          // Coordinates: small arrays with decimals or reasonable ranges
+          if (hasDecimals || (isSmallArray && isReasonableRange)) {
+            return `(${p.map(n => {
+              const str = n.toString();
+              // Add trailing dot for integers to make them floats in IFC
+              return str.includes('.') ? str : `${str}.`;
+            }).join(',')})`;
           }
         }
-        // Otherwise, treat as entity reference list
+        
+        // Entity reference list: treat numbers as #references
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
-        // All single numbers passed as parameters are entity references
+        // Single numbers are ALWAYS entity references in IFC parameters
         return `#${p}`;
       }
       return String(p);
@@ -67,11 +75,10 @@ DATA;`;
     return id;
   };
 
-  // 1. Project Structure
+  // 1. Owner History
   const ownerHistoryId = createEntity('IFCOWNERHISTORY', null, null, null, 'NOCHANGE', null, null, null, Date.now());
-  const projectId = createEntity('IFCPROJECT', referenceCode, ownerHistoryId, product.name, `Boscotek ${product.name} Configuration`, null, null, null, null, null);
   
-  // 2. Units
+  // 2. Units (MUST be created BEFORE project)
   const lengthUnit = createEntity('IFCSIUNIT', '*', 'LENGTHUNIT', null, 'METRE');
   const areaUnit = createEntity('IFCSIUNIT', '*', 'AREAUNIT', null, 'SQUARE_METRE');
   const volumeUnit = createEntity('IFCSIUNIT', '*', 'VOLUMEUNIT', null, 'CUBIC_METRE');
@@ -79,16 +86,22 @@ DATA;`;
   
   const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit]);
   
-  // 3. Geometric Representation Context
+  // 3. Geometric Representation Context (MUST be created BEFORE project)
   const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', null, 'Model', 3, 1.E-5, null, null);
   
-  // 4. Site and Building
+  // 4. Project Structure (NOW with proper references to units and context)
+  // FIX: Pass [geometricContext] and unitAssignment instead of null
+  const projectId = createEntity('IFCPROJECT', referenceCode, ownerHistoryId, product.name, `Boscotek ${product.name} Configuration`, null, null, null, [geometricContext], unitAssignment);
+  
+  // 5. Spatial Hierarchy: Site → Building → BuildingStorey
   const siteId = createEntity('IFCSITE', 'Site', ownerHistoryId, 'Default Site', null, null, null, null, 'ELEMENT', null, null, null, null, null);
   const buildingId = createEntity('IFCBUILDING', 'Building', ownerHistoryId, 'Default Building', null, null, null, null, 'ELEMENT', null, null, null);
+  const storeyId = createEntity('IFCBUILDINGSTOREY', 'Storey', ownerHistoryId, 'Level 0', null, null, null, null, 'ELEMENT', null, null, null);
   
-  // 5. Spatial Structure
+  // 6. Spatial Aggregation Relationships
   createEntity('IFCRELAGGREGATES', 'ProjectContainer', ownerHistoryId, null, null, projectId, [siteId]);
   createEntity('IFCRELAGGREGATES', 'SiteContainer', ownerHistoryId, null, null, siteId, [buildingId]);
+  createEntity('IFCRELAGGREGATES', 'BuildingContainer', ownerHistoryId, null, null, buildingId, [storeyId]);
   
   // 6. Main Product Geometry
   // Create proper placement hierarchy
@@ -119,8 +132,9 @@ DATA;`;
     null
   );
   
-  // 8. Add to building
-  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'BuildingContainer', ownerHistoryId, null, null, [productInstance], buildingId);
+  // 8. Add to building storey (NOT building directly)
+  // FIX: Products should be contained in BuildingStorey, not Building
+  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, [productInstance], storeyId);
   
   // 9. Property Sets (Metadata)
   addPropertySets(productInstance, configuration, product, pricing, referenceCode, createEntity, ownerHistoryId);

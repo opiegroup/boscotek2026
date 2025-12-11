@@ -1,0 +1,133 @@
+# Boscotek Configurator - AI Coding Rules
+
+## IFC Export Guidelines
+
+When working with IFC (Industry Foundation Classes) export code:
+
+### Critical Rules
+
+1. **NEVER pass null for IfcProject.RepresentationContexts**
+   - Must be a LIST of IfcGeometricRepresentationContext entities
+   - Example: `[geometricContext]` NOT `null`
+
+2. **NEVER pass null for IfcProject.UnitsInContext**
+   - Must be an IfcUnitAssignment entity reference
+   - Example: `unitAssignment` NOT `null`
+
+3. **ALWAYS create complete spatial hierarchy**
+   - Required: IfcProject → IfcSite → IfcBuilding → IfcBuildingStorey → Products
+   - NEVER skip IfcBuildingStorey
+   - NEVER place products directly in IfcBuilding
+
+4. **Distinguish entity references from coordinates**
+   - Coordinates: `[0., 0., 0.]` (floats with dots)
+   - Entity references: `[#10, #11, #12]` (with # prefix)
+   - Single numbers in parameters are ALWAYS entity references: `#100`
+
+5. **Creation order matters**
+   - Create units BEFORE project
+   - Create contexts BEFORE project
+   - Create spatial hierarchy BEFORE products
+   - Create geometry BEFORE products
+
+### IFC Entity Reference Rules
+
+```typescript
+// ✅ CORRECT - Entity reference
+const project = createEntity('IFCPROJECT', ..., [contextId], unitAssignmentId);
+
+// ❌ WRONG - Null or float value
+const project = createEntity('IFCPROJECT', ..., null, null);
+const project = createEntity('IFCPROJECT', ..., 0.0, 1.0);
+
+// ✅ CORRECT - Coordinate list
+const point = createEntity('IFCCARTESIANPOINT', [0., 0., 0.]);
+
+// ❌ WRONG - Entity references where coordinates expected
+const point = createEntity('IFCCARTESIANPOINT', [#10, #11, #12]);
+```
+
+### Spatial Structure Template
+
+When creating IFC spatial hierarchy, always use this pattern:
+
+```typescript
+// 1. Create units and contexts FIRST
+const units = createEntity('IFCUNITASSIGNMENT', ...);
+const context = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', ...);
+
+// 2. Create project WITH references
+const project = createEntity('IFCPROJECT', ..., [context], units);
+
+// 3. Create COMPLETE spatial hierarchy
+const site = createEntity('IFCSITE', ...);
+const building = createEntity('IFCBUILDING', ...);
+const storey = createEntity('IFCBUILDINGSTOREY', ...);  // DON'T SKIP THIS!
+
+// 4. Create aggregation relationships
+createEntity('IFCRELAGGREGATES', ..., project, [site]);
+createEntity('IFCRELAGGREGATES', ..., site, [building]);
+createEntity('IFCRELAGGREGATES', ..., building, [storey]);
+
+// 5. Place products in STOREY (not building)
+createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', ..., [product], storey);
+```
+
+### Validation Before Deployment
+
+Before deploying IFC export code, verify:
+
+- [ ] IfcProject has RepresentationContexts (not null)
+- [ ] IfcProject has UnitsInContext (not null)
+- [ ] IfcBuildingStorey exists in hierarchy
+- [ ] Products are contained in BuildingStorey
+- [ ] All entity references use # notation
+- [ ] All coordinates are float arrays
+
+### Testing Requirements
+
+When modifying IFC export:
+
+1. Generate test IFC file
+2. Open in BlenderBIM (must load without errors)
+3. Verify spatial hierarchy: Project → Site → Building → Storey → Products
+4. Verify 3D geometry is visible
+5. Check for error: "AttributeError: 'float' object has no attribute 'is_a'"
+
+### Reference Documentation
+
+For IFC export work, consult:
+- `IFC_EXPORTER_TEMPLATE.md` - Complete implementation guide
+- `IFC_SCHEMA_COMPLIANCE_CHECKLIST.md` - Validation checklist
+- `IFC_EXPORT_FIX_SUMMARY.md` - Common issues and fixes
+
+## General TypeScript Guidelines
+
+- Use explicit types for all function parameters
+- Avoid `any` type when possible
+- Use descriptive variable names (e.g., `geometricContext` not `ctx`)
+- Add comments for complex IFC entity relationships
+
+## Supabase Edge Functions
+
+- Always handle CORS preflight requests
+- Use environment variables for sensitive keys
+- Include proper error handling with try/catch
+- Return structured JSON responses
+- Log errors to console for debugging
+
+## React/TypeScript Frontend
+
+- Use functional components with hooks
+- Keep components focused and single-responsibility
+- Extract complex logic to services/utils
+- Use TypeScript interfaces for props
+- Handle loading and error states
+
+## Naming Conventions
+
+- Files: `kebab-case.ts` or `PascalCase.tsx` (React components)
+- Variables: `camelCase`
+- Constants: `UPPER_SNAKE_CASE`
+- Types/Interfaces: `PascalCase`
+- IFC entities: Match IFC schema exactly (e.g., `IFCPROJECT`, `IFCSITE`)
