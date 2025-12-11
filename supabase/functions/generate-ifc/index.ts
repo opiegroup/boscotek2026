@@ -635,6 +635,7 @@ function createWorkbenchGeometry(
   // ==========================================================
   const underBenchOption = configuration?.selections?.under_bench;
   const underBenchPos = configuration?.selections?.under_bench_pos || 'right';
+  const embeddedCabinets = configuration?.embeddedCabinets || [];
   
   if (underBenchOption && underBenchOption !== 'B0' && underBenchOption !== 'iw-ub-none') {
     const UNIT_WIDTH = 0.56; // Standard drawer unit width (560mm)
@@ -645,18 +646,77 @@ function createWorkbenchGeometry(
     const flushLeft = -width/2 + LEG_SIZE + UNIT_WIDTH/2;
     const flushRight = width/2 - LEG_SIZE - UNIT_WIDTH/2;
     let singlePos = (underBenchPos === 'left' || underBenchPos === 'pos-left') ? flushLeft : flushRight;
+    const singlePlacement = (underBenchPos === 'left' || underBenchPos === 'pos-left') ? 'left' : 'right';
     if (underBenchPos === 'center' || underBenchPos === 'pos-center') singlePos = 0;
     
-    // Y position for storage units (suspended under worktop)
+    // Z position for storage units (suspended under worktop)
     const unitZ = height - UNIT_HEIGHT - 0.05;
     
-    // Helper to add a storage unit box
+    // Helper to add a storage unit box (simple solid)
     const addStorageUnit = (x: number) => {
       solids.push(createBox(x, 0, unitZ, UNIT_WIDTH, UNIT_DEPTH, UNIT_HEIGHT));
     };
     
+    // Helper to add a cabinet with detailed drawer geometry
+    const addCabinetWithDrawers = (x: number, placement: 'left' | 'right') => {
+      const embeddedConfig = embeddedCabinets.find((c: any) => c.placement === placement);
+      const customDrawers = embeddedConfig?.configuration?.customDrawers;
+      
+      if (customDrawers && customDrawers.length > 0 && product) {
+        // Find drawer group to get heights
+        const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+        
+        // Calculate drawer heights - sort largest first (bottom)
+        const drawersWithHeights = customDrawers.map((d: any, idx: number) => {
+          const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+          const heightMm = opt?.meta?.front || 100;
+          return { ...d, heightMm, originalIndex: idx };
+        }).sort((a: any, b: any) => b.heightMm - a.heightMm);
+        
+        // Cabinet shell components
+        const shellThickness = 0.02;
+        const plinthHeight = 0.04;
+        const topThickness = 0.03;
+        const internalHeight = UNIT_HEIGHT - plinthHeight - topThickness;
+        
+        // Add cabinet shell: plinth, top, sides, back
+        solids.push(createBox(x, 0, unitZ, UNIT_WIDTH, UNIT_DEPTH, plinthHeight)); // Plinth
+        solids.push(createBox(x, 0, unitZ + UNIT_HEIGHT - topThickness, UNIT_WIDTH, UNIT_DEPTH, topThickness)); // Top
+        solids.push(createBox(x - UNIT_WIDTH/2 + shellThickness/2, 0, unitZ + plinthHeight + internalHeight/2, shellThickness, UNIT_DEPTH, internalHeight)); // Left side
+        solids.push(createBox(x + UNIT_WIDTH/2 - shellThickness/2, 0, unitZ + plinthHeight + internalHeight/2, shellThickness, UNIT_DEPTH, internalHeight)); // Right side
+        solids.push(createBox(x, -UNIT_DEPTH/2 + shellThickness/2, unitZ + plinthHeight + internalHeight/2, UNIT_WIDTH, shellThickness, internalHeight)); // Back
+        
+        // Add individual drawer fronts
+        let currentZOffset = 0;
+        const drawerFrontThickness = 0.02;
+        const drawerGap = 0.004;
+        
+        drawersWithHeights.forEach((drawer: any) => {
+          const drawerHeight = drawer.heightMm / 1000;
+          const drawerZ = unitZ + plinthHeight + currentZOffset + drawerGap/2;
+          
+          // Drawer front at the front face of cabinet
+          solids.push(createBox(
+            x,
+            UNIT_DEPTH/2 - drawerFrontThickness/2,
+            drawerZ + (drawerHeight - drawerGap)/2,
+            UNIT_WIDTH - shellThickness * 2 - 0.01,
+            drawerFrontThickness,
+            drawerHeight - drawerGap
+          ));
+          
+          currentZOffset += drawerHeight;
+        });
+        
+        console.log(`IFC: Added embedded cabinet at ${placement} with ${customDrawers.length} configured drawers`);
+      } else {
+        // Fallback to simple box if no drawer configuration
+        addStorageUnit(x);
+      }
+    };
+    
     // Determine storage unit positions based on under-bench option
-    // Heavy Duty (Bxx codes)
+    // Heavy Duty (Bxx codes) - typically use pre-set drawer counts, not embedded config
     if (underBenchOption.startsWith('B')) {
       switch(underBenchOption) {
         case 'B1': case 'B2': case 'B3': case 'B4': case 'B5': case 'B28':
@@ -676,22 +736,50 @@ function createWorkbenchGeometry(
       }
     }
     
-    // Industrial (iw-ub-xxx codes)
+    // Industrial (iw-ub-xxx codes) - uses embeddedCabinets for HD Cabinet configurations
     if (underBenchOption.startsWith('iw-ub-')) {
-      const hasTwo = underBenchOption.includes('-2') || 
-                     underBenchOption.includes('cabinet-door') || 
-                     underBenchOption.includes('cabinet-drawer') ||
-                     underBenchOption.includes('door-drawer') ||
-                     underBenchOption.includes('drawers-2') ||
-                     underBenchOption.includes('half-shelf-drawer-cabinet') ||
-                     underBenchOption.includes('half-shelf-drawer-cupboard');
+      const isCabinet = underBenchOption.includes('cabinet');
       
-      if (hasTwo) {
+      // Dual unit configurations
+      if (underBenchOption.includes('-2')) {
+        if (isCabinet) {
+          addCabinetWithDrawers(flushLeft, 'left');
+          addCabinetWithDrawers(flushRight, 'right');
+        } else {
+          addStorageUnit(flushLeft);
+          addStorageUnit(flushRight);
+        }
+      } 
+      // Mixed configurations with cabinet
+      else if (underBenchOption.includes('cabinet-door')) {
+        addCabinetWithDrawers(flushLeft, 'left');
+        addStorageUnit(flushRight);
+      }
+      else if (underBenchOption.includes('cabinet-drawer')) {
+        addCabinetWithDrawers(flushLeft, 'left');
+        addStorageUnit(flushRight);
+      }
+      else if (underBenchOption.includes('shelf-cabinet') || underBenchOption.includes('shelf_cab')) {
+        addCabinetWithDrawers(flushRight, 'right');
+      }
+      else if (underBenchOption.includes('half-shelf-drawer-cabinet')) {
+        addStorageUnit(flushLeft);
+        addCabinetWithDrawers(flushRight, 'right');
+      }
+      // Single cabinet
+      else if (underBenchOption.includes('cabinet-1') || underBenchOption === 'iw-ub-cabinet-1') {
+        addCabinetWithDrawers(singlePos, singlePlacement as 'left' | 'right');
+      }
+      // Other dual units (doors, drawers)
+      else if (underBenchOption.includes('door-drawer') || 
+               underBenchOption.includes('drawers-2') ||
+               underBenchOption.includes('half-shelf-drawer-cupboard')) {
         addStorageUnit(flushLeft);
         addStorageUnit(flushRight);
-      } else if (underBenchOption.includes('drawer') || 
-                 underBenchOption.includes('cabinet') || 
-                 underBenchOption.includes('door')) {
+      }
+      // Single units (non-cabinet)
+      else if (underBenchOption.includes('drawer') || 
+               underBenchOption.includes('door')) {
         addStorageUnit(singlePos);
       }
     }
@@ -929,6 +1017,34 @@ function addPropertySets(
     const isHeavyDuty = product.id.includes('heavy');
     const udlCapacity = isHeavyDuty ? '1000 kg (Heavy Duty)' : '800 kg (Industrial)';
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopLoadCapacity', null, createEntity('IFCLABEL', udlCapacity), null));
+    
+    // Embedded Cabinet Configurations
+    const embeddedCabinets = configuration.embeddedCabinets || [];
+    if (embeddedCabinets.length > 0) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'EmbeddedCabinetCount', null, createEntity('IFCINTEGER', embeddedCabinets.length), null));
+      
+      embeddedCabinets.forEach((cab: any, idx: number) => {
+        const placement = cab.placement || 'unknown';
+        const customDrawers = cab.configuration?.customDrawers || [];
+        const drawerCount = customDrawers.length;
+        
+        if (drawerCount > 0) {
+          // Find drawer group from product to get heights
+          const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+          const drawerHeights = customDrawers.map((d: any) => {
+            const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+            return opt?.meta?.front || 150;
+          });
+          
+          const sortedHeights = [...drawerHeights].sort((a: number, b: number) => b - a);
+          const configCode = sortedHeights.join('.');
+          
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', `EmbeddedCabinet_${placement}_DrawerCount`, null, createEntity('IFCINTEGER', drawerCount), null));
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', `EmbeddedCabinet_${placement}_DrawerConfig`, null, createEntity('IFCLABEL', configCode), null));
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', `EmbeddedCabinet_${placement}_DrawerHeights`, null, createEntity('IFCLABEL', drawerHeights.join(', ') + ' mm'), null));
+        }
+      });
+    }
     
   } else {
     // --- CABINET PROPERTIES ---

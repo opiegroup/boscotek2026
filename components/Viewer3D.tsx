@@ -4,8 +4,11 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Grid, ContactShadows, Environment, Float, Center, Text, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { ConfigurationState, ProductDefinition, DrawerConfiguration, EmbeddedCabinet } from '../types';
-import { getPartitionById } from '../data/catalog';
+import { getPartitionById, CATALOG } from '../data/catalog';
 import SceneControlsOverlay from './SceneControlsOverlay';
+
+// Get HD Cabinet product for embedded cabinet drawer lookups
+const HD_CABINET_PRODUCT = CATALOG.find(p => p.id === 'prod-hd-cabinet');
 
 // Fix for missing React Three Fiber types in JSX
 declare module 'react' {
@@ -582,13 +585,116 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
      )
   }
 
-  const CabinetUnit = ({ x }: any) => {
-     const uHeight = 0.7;
+  // Enhanced CabinetUnit - uses actual drawer configuration from embeddedCabinets if available
+  // BTCD.850.560 integrated cabinet specs from Boscotek catalog:
+  // Height: 810mm, Width: 560mm, Depth: 755mm, Usable height: 675mm
+  const CabinetUnit = ({ x, placement }: { x: number, placement?: 'left' | 'right' }) => {
+     const cabinetHeight = 0.81; // 810mm total height (per catalog)
+     const cabinetDepth = depth - 0.1;
+     
+     // Shell thickness: 810mm - 675mm usable = 135mm total shell
+     const totalShellThickness = 0.135;
+     const bottomShellHeight = totalShellThickness * 0.6; // ~81mm plinth
+     const topShellHeight = totalShellThickness * 0.4; // ~54mm top panel
+     const usableHeightMm = 675; // 675mm usable drawer space (per catalog)
+     
+     // Check if we have embedded cabinet configuration for this position
+     const embeddedConfig = placement && embeddedCabinets?.find((c: EmbeddedCabinet) => c.placement === placement);
+     const hasCustomDrawers = embeddedConfig?.configuration?.customDrawers?.length > 0;
+     
+     // Cabinet sits on floor with levelling feet (like the catalog image)
+     // Levelling feet height ~25mm
+     const levellingFeetHeight = 0.025;
+     const cabinetY = levellingFeetHeight + cabinetHeight/2;
+     
+     // If we have custom drawer configuration, render actual drawers
+     if (hasCustomDrawers && HD_CABINET_PRODUCT) {
+        // Use HD Cabinet product to get drawer heights (NOT the workbench product!)
+        const drawerGroup = HD_CABINET_PRODUCT.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+        const customDrawers = embeddedConfig.configuration.customDrawers;
+        
+        // Calculate drawer heights - same logic as HdCabinetGroup
+        const drawersWithHeights = customDrawers.map((d: DrawerConfiguration, idx: number) => {
+           const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
+           const heightMm = opt?.meta?.front || 100;
+           return { ...d, heightMm, originalIndex: idx };
+        }).sort((a: any, b: any) => b.heightMm - a.heightMm); // Sort largest first (bottom)
+        
+        // Build drawer stack positions - stack from bottom up
+        const drawerStack: any[] = [];
+        let currentOffsetMm = 0;
+        
+        drawersWithHeights.forEach((d: any) => {
+           const heightMeters = d.heightMm / 1000;
+           // Position: bottom shell + current offset + half drawer height (for center)
+           const yPosition = bottomShellHeight + (currentOffsetMm / 1000) + (heightMeters / 2);
+           drawerStack.push({
+              ...d,
+              height: heightMeters,
+              y: yPosition
+           });
+           currentOffsetMm += d.heightMm;
+        });
+        
+        const sideThickness = 0.02;
+        const internalHeight = cabinetHeight - bottomShellHeight - topShellHeight;
+        const internalCenterY = bottomShellHeight + internalHeight / 2 - cabinetHeight / 2;
+        
+        return (
+           <group position={[x, cabinetY, 0]}>
+              {/* Top Shell Panel */}
+              <mesh position={[0, cabinetHeight/2 - topShellHeight/2, 0]} castShadow>
+                 <boxGeometry args={[drawerUnitWidth, topShellHeight, cabinetDepth]} />
+                 <meshStandardMaterial color={frameColor} roughness={0.5} />
+              </mesh>
+              
+              {/* Bottom Shell / Plinth */}
+              <mesh position={[0, -cabinetHeight/2 + bottomShellHeight/2, 0]} castShadow>
+                 <boxGeometry args={[drawerUnitWidth, bottomShellHeight, cabinetDepth]} />
+                 <meshStandardMaterial color={frameColor} roughness={0.5} />
+              </mesh>
+              
+              {/* Back Panel */}
+              <mesh position={[0, internalCenterY, -cabinetDepth/2 + sideThickness/2]}>
+                 <boxGeometry args={[drawerUnitWidth, internalHeight, sideThickness]} />
+                 <meshStandardMaterial color={frameColor} roughness={0.5} />
+              </mesh>
+              
+              {/* Left Side Panel */}
+              <mesh position={[-drawerUnitWidth/2 + sideThickness/2, internalCenterY, 0]}>
+                 <boxGeometry args={[sideThickness, internalHeight, cabinetDepth]} />
+                 <meshStandardMaterial color={frameColor} roughness={0.5} />
+              </mesh>
+              
+              {/* Right Side Panel */}
+              <mesh position={[drawerUnitWidth/2 - sideThickness/2, internalCenterY, 0]}>
+                 <boxGeometry args={[sideThickness, internalHeight, cabinetDepth]} />
+                 <meshStandardMaterial color={frameColor} roughness={0.5} />
+              </mesh>
+              
+              {/* Custom Drawer Fronts - positioned relative to cabinet center */}
+              {drawerStack.map((drawer, i) => (
+                 <group key={i} position={[0, drawer.y - cabinetHeight/2, cabinetDepth/2 + 0.01]}>
+                    <mesh castShadow>
+                       <boxGeometry args={[drawerUnitWidth - sideThickness*2 - 0.005, drawer.height - 0.004, 0.02]} />
+                       <meshStandardMaterial color={faciaColor} roughness={0.4} metalness={0.1} />
+                    </mesh>
+                    <mesh position={[0, drawer.height/2 - 0.015, 0.01]}>
+                       <boxGeometry args={[drawerUnitWidth - sideThickness*2 - 0.01, 0.02, 0.015]} />
+                       <meshStandardMaterial color="#e4e4e7" metalness={0.8} roughness={0.2} />
+                    </mesh>
+                 </group>
+              ))}
+           </group>
+        );
+     }
+     
+     // Default 5-drawer cabinet if no custom configuration
      return (
-        <group position={[x, height - uHeight/2 - 0.05, 0]}>
-           <mesh castShadow><boxGeometry args={[drawerUnitWidth, uHeight, depth - 0.1]} /><meshStandardMaterial color={frameColor} /></mesh>
+        <group position={[x, cabinetY, 0]}>
+           <mesh castShadow><boxGeometry args={[drawerUnitWidth, cabinetHeight, cabinetDepth]} /><meshStandardMaterial color={frameColor} /></mesh>
            {[...Array(5)].map((_, i) => (
-                <group key={i} position={[0, 0.3 - (i * 0.14), (depth-0.1)/2 + 0.01]}>
+                <group key={i} position={[0, cabinetHeight/2 - 0.08 - (i * 0.14), cabinetDepth/2 + 0.01]}>
                    <mesh><boxGeometry args={[drawerUnitWidth - 0.04, 0.13, 0.01]} /><meshStandardMaterial color={faciaColor} /></mesh>
                    <mesh position={[0, 0.05, 0.01]}><boxGeometry args={[drawerUnitWidth - 0.04, 0.015, 0.005]} /><meshStandardMaterial color="#C0C0C0" metalness={0.8} /></mesh>
                 </group>
@@ -616,13 +722,14 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     const flushLeft = -width/2 + WORKBENCH_LEG_SIZE + drawerUnitWidth/2;
     const flushRight = width/2 - WORKBENCH_LEG_SIZE - drawerUnitWidth/2;
     let singlePos = (position === 'left' || position === 'pos-left') ? flushLeft : flushRight;
+    const singlePlacement: 'left' | 'right' = (position === 'left' || position === 'pos-left') ? 'left' : 'right';
     if (position === 'center' || position === 'pos-center') singlePos = 0;
 
     if (underBenchId.startsWith('B') && underBenchId !== 'B0') {
         const OneDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={1} suspended />;
         const TwoDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={2} suspended />;
         const ThreeDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={3} suspended />;
-        const Cab = ({x}:any) => <CabinetUnit x={x} />;
+        const Cab = ({x, placement}:{x:number, placement?:'left'|'right'}) => <CabinetUnit x={x} placement={placement} />;
         const Cup = ({x}:any) => <CupboardUnit x={x} />;
         const Shelf = () => <Undershelf />;
 
@@ -630,30 +737,29 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
             case 'B1': return <OneDrw x={singlePos} />;
             case 'B2': return <TwoDrw x={singlePos} />;
             case 'B3': return <ThreeDrw x={singlePos} />;
-            case 'B4': case 'B28': return <Cab x={singlePos} />;
+            case 'B4': case 'B28': return <Cab x={singlePos} placement={singlePlacement} />;
             case 'B5': return <Cup x={singlePos} />;
-            case 'B6': return <group><Cab x={flushLeft} /><OneDrw x={flushRight} /></group>;
+            case 'B6': return <group><Cab x={flushLeft} placement="left" /><OneDrw x={flushRight} /></group>;
             case 'B7': return <group><Cup x={flushLeft} /><OneDrw x={flushRight} /></group>;
             case 'B12': return <group><ThreeDrw x={flushLeft} /><ThreeDrw x={flushRight} /></group>;
-            case 'B13': return <group><Cab x={flushLeft} /><Cup x={flushRight} /></group>;
+            case 'B13': return <group><Cab x={flushLeft} placement="left" /><Cup x={flushRight} /></group>;
             case 'B14': return <Shelf />;
             case 'B15': case 'B18': return <group><Shelf /><OneDrw x={singlePos} /></group>;
             case 'B16': return <group><Shelf /><TwoDrw x={singlePos} /></group>;
             case 'B17': return <group><Shelf /><ThreeDrw x={singlePos} /></group>;
             case 'B19': return <group><Shelf /><OneDrw x={flushLeft} /><TwoDrw x={flushRight} /></group>;
             case 'B20': return <group><Shelf /><OneDrw x={flushLeft} /><ThreeDrw x={flushRight} /></group>;
-            case 'B21': case 'B22': return <group><Shelf /><Cab x={singlePos} /></group>;
+            case 'B21': case 'B22': return <group><Shelf /><Cab x={singlePos} placement={singlePlacement} /></group>;
             case 'B23': case 'B24': return <group><Shelf /><Cup x={singlePos} /></group>;
-            case 'B25': return <group><Shelf /><Cab x={flushLeft} /><Cup x={flushRight} /></group>;
-            case 'B26': return <group><Shelf /><Cab x={flushLeft} /><Cab x={flushRight} /></group>;
+            case 'B25': return <group><Shelf /><Cab x={flushLeft} placement="left" /><Cup x={flushRight} /></group>;
+            case 'B26': return <group><Shelf /><Cab x={flushLeft} placement="left" /><Cab x={flushRight} placement="right" /></group>;
             case 'B27': return <group><Shelf /><Cup x={flushLeft} /><Cup x={flushRight} /></group>;
             default: return null;
         }
     }
     
-    // Industrial logic
+    // Industrial logic - uses embeddedCabinets for HD Cabinet configurations
     if (underBenchId.startsWith('iw-')) {
-       // Shared components already defined (DrawerUnit, Cab, Cup, Shelf)
        const US = () => <Undershelf />;
        const HUS = () => <Undershelf w={width/2 - 0.05} x={-width/4} />; // Approximate Half Shelf on Left
        
@@ -662,24 +768,24 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
           case 'iw-ub-half-shelf': return <HUS />;
           case 'iw-ub-drawer-1': return <DrawerUnit x={singlePos} drawerCount={1} suspended />;
           case 'iw-ub-door-1': return <CupboardUnit x={singlePos} />;
-          case 'iw-ub-cabinet-1': return <CabinetUnit x={singlePos} />;
+          case 'iw-ub-cabinet-1': return <CabinetUnit x={singlePos} placement={singlePlacement} />;
           
           case 'iw-ub-drawer-2': return <group><DrawerUnit x={flushLeft} drawerCount={1} suspended /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
           case 'iw-ub-door-2': return <group><CupboardUnit x={flushLeft} /><CupboardUnit x={flushRight} /></group>;
-          case 'iw-ub-cabinet-2': return <group><CabinetUnit x={flushLeft} /><CabinetUnit x={flushRight} /></group>;
+          case 'iw-ub-cabinet-2': return <group><CabinetUnit x={flushLeft} placement="left" /><CabinetUnit x={flushRight} placement="right" /></group>;
           
-          case 'iw-ub-cabinet-door': return <group><CabinetUnit x={flushLeft} /><CupboardUnit x={flushRight} /></group>;
-          case 'iw-ub-cabinet-drawer': return <group><CabinetUnit x={flushLeft} /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
+          case 'iw-ub-cabinet-door': return <group><CabinetUnit x={flushLeft} placement="left" /><CupboardUnit x={flushRight} /></group>;
+          case 'iw-ub-cabinet-drawer': return <group><CabinetUnit x={flushLeft} placement="left" /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
           case 'iw-ub-door-drawer': return <group><CupboardUnit x={flushLeft} /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
 
           case 'iw-ub-shelf-drawer': return <group><US /><DrawerUnit x={singlePos} drawerCount={1} suspended /></group>;
           case 'iw-ub-drawers-2-shelf': return <group><US /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
           
           case 'iw-ub-drawer-half-shelf': return <group><HUS /><DrawerUnit x={flushRight} drawerCount={1} suspended /></group>;
-          case 'iw-ub-shelf-cabinet': return <group><HUS /><CabinetUnit x={flushRight} /></group>;
+          case 'iw-ub-shelf-cabinet': return <group><HUS /><CabinetUnit x={flushRight} placement="right" /></group>;
           case 'iw-ub-shelf-door': return <group><HUS /><CupboardUnit x={flushRight} /></group>;
           
-          case 'iw-ub-half-shelf-drawer-cabinet': return <group><HUS /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><CabinetUnit x={flushRight} /></group>;
+          case 'iw-ub-half-shelf-drawer-cabinet': return <group><HUS /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><CabinetUnit x={flushRight} placement="right" /></group>;
           case 'iw-ub-half-shelf-drawer-cupboard': return <group><HUS /><DrawerUnit x={flushLeft} drawerCount={1} suspended /><CupboardUnit x={flushRight} /></group>;
        }
     }

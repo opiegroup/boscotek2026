@@ -61,14 +61,19 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
     </h3>
   );
 
-  const getCabinetCapacity = (prod = product, cfg = config) => {
+  const getCabinetCapacity = (prod = product, cfg = config, isEmbedded = false) => {
+    // Embedded cabinets in workbenches always use BTCD.810.560 with 675mm usable height
+    if (isEmbedded) {
+      return 675;
+    }
+    
     const heightGroupId = 'height';
     const heightGroup = prod.groups.find(g => g.id === heightGroupId);
     if (!heightGroup) return 9999;
-    
+
     const selectedHeightId = cfg.selections[heightGroupId];
     const selectedOption = heightGroup.options.find(o => o.id === selectedHeightId);
-    
+
     return selectedOption?.meta?.usableHeight || 750;
   };
 
@@ -211,8 +216,8 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   };
 
   // --- SUB-COMPONENT: DRAWER STACK BUILDER ---
-  const DrawerStackBuilder = ({ group, currentConfig, currentProduct, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, currentProduct: ProductDefinition, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
-    const capacity = getCabinetCapacity(currentProduct, currentConfig);
+  const DrawerStackBuilder = ({ group, currentConfig, currentProduct, onDrawerStackChange, isEmbeddedCabinet = false }: { group: OptionGroup, currentConfig: ConfigurationState, currentProduct: ProductDefinition, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void, isEmbeddedCabinet?: boolean }) => {
+    const capacity = getCabinetCapacity(currentProduct, currentConfig, isEmbeddedCabinet);
     
     const currentUsage = useMemo(() => {
        return calculateUsedHeight(currentConfig.customDrawers, group);
@@ -325,15 +330,16 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
         setEditingCabinet(existing);
      } else {
         // Initialize new embedded cabinet state
+        // BTCD.850.560 integrated specs: 810mm high, 675mm usable, 560mm wide, 755mm deep
         setEditingCabinet({
            id: `emb-${Date.now()}`,
            placement,
            configuration: {
               productId: 'prod-hd-cabinet',
               selections: {
-                 'series': '755', // D Series
-                 'width': '560', 
-                 'height': '850',
+                 'series': 'series-d', // D Series (755mm deep)
+                 'width': 'w-560', // 560mm wide
+                 'height': 'h-810', // 810mm high with 675mm usable (embedded cabinet)
                  'housing_color': config.selections['color'] || 'col-mg', // Inherit from bench
                  'facia_color': config.selections['drawer_facia'] || 'col-sg', // Inherit from bench
               },
@@ -396,18 +402,20 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
               
               <div className="flex-1 overflow-y-auto custom-scrollbar p-4">
                  <p className="text-sm text-zinc-400 mb-4 bg-blue-900/20 p-3 rounded border border-blue-800/50">
-                    <strong>High Density Cabinet (BTCD.850.560)</strong><br/>
-                    850mm High, 560mm Wide, 755mm Deep. <br/>
+                    <strong>High Density Cabinet (BTCD.810.560)</strong><br/>
+                    810mm High, 560mm Wide, 755mm Deep. <br/>
+                    <span className="text-amber-500">Usable drawer height: 675mm</span><br/>
                     Configure your drawer stack below.
                  </p>
 
                  {hdProduct.groups.filter(g => g.type === 'drawer_stack').map(group => (
                     <div key={group.id}>
                        <SectionTitle step={1} title="Drawer Configuration" />
-                       <DrawerStackBuilder 
-                          group={group} 
-                          currentConfig={editingCabinet.configuration} 
+                       <DrawerStackBuilder
+                          group={group}
+                          currentConfig={editingCabinet.configuration}
                           currentProduct={hdProduct}
+                          isEmbeddedCabinet={true}
                           onDrawerStackChange={(newStack) => {
                              setEditingCabinet({
                                 ...editingCabinet,
