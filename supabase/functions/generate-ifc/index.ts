@@ -239,13 +239,25 @@ function addDrawerGeometry(
   
   const drawerIds: number[] = [];
   
+  // Find drawer configuration group to look up heights
+  const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
+  
+  // Calculate cumulative Y positions based on actual drawer heights
+  let cumulativeY = 0; // Start from bottom of cabinet
+  
   // Create individual drawer elements with proper placement
   drawers.forEach((drawer: any, index: number) => {
+    // Look up drawer height from product definition
+    const drawerOption = drawerGroup?.options.find((o: any) => o.id === drawer.id);
+    const drawerHeightMm = drawerOption?.meta?.front || 150; // Default 150mm if not found
+    const drawerHeight = drawerHeightMm / 1000; // Convert mm to meters
+    
     // Dimensions in meters (consistent with Section 5)
     const drawerWidth = cabinetDimensions.width - 0.04;  // 40mm (0.04m) clearance
     const drawerDepth = cabinetDimensions.depth - 0.05;  // 50mm (0.05m) clearance
-    const drawerHeight = drawer.height || 0.15; // Height in meters
-    const drawerY = drawer.y || (index * 0.1); // Position in meters (100mm spacing = 0.1m)
+    
+    // Use cumulative Y position (each drawer starts where the previous one ended)
+    const drawerY = cumulativeY;
     
     // Create drawer placement (offset vertically from cabinet)
     const drawerPoint = createEntity('IFCCARTESIANPOINT', [0., 0., drawerY]);
@@ -276,7 +288,7 @@ function addDrawerGeometry(
       `Drawer-${index + 1}`,
       ownerHistoryId,
       `Drawer ${index + 1}`,
-      `Drawer Height ${drawerHeight.toFixed(0)}mm`, // Description with drawer specs
+      `Drawer Height ${drawerHeightMm.toFixed(0)}mm`, // Description with drawer specs
       `Drawer-${index + 1}`,                        // ObjectType
       drawerPlacement,                              // Proper entity reference
       dProdDefShape,
@@ -284,6 +296,9 @@ function addDrawerGeometry(
     );
     
     drawerIds.push(drawerElement);
+    
+    // Update cumulative Y for next drawer (stack them vertically)
+    cumulativeY += drawerHeight;
     
     // Add drawer-specific properties
     addDrawerProperties(drawerElement, drawer, index, createEntity, ownerHistoryId);
