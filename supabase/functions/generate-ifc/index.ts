@@ -155,11 +155,24 @@ DATA;`;
   const unitAssignment = createEntity('IFCUNITASSIGNMENT', [lengthUnit, areaUnit, volumeUnit, massUnit, angleUnit]);
   
   // 3. Geometric Representation Context (MUST be created BEFORE project)
-  const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', null, E('Model'), 3, 1.E-5, null, null);
+  // CRITICAL: WorldCoordinateSystem is REQUIRED for geometry to render
+  const wcsOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., 0.]);
+  const wcsZAxis = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const wcsXAxis = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const worldCoordinateSystem = createEntity('IFCAXIS2PLACEMENT3D', wcsOrigin, wcsZAxis, wcsXAxis);
   
-  // 4. Project Structure (NOW with proper references to units and context)
-  // FIX: Pass [geometricContext] and unitAssignment instead of null
-  const projectId = createEntity('IFCPROJECT', referenceCode, ownerHistoryId, product.name, `Boscotek ${product.name} Configuration`, null, null, null, [geometricContext], unitAssignment);
+  const geometricContext = createEntity('IFCGEOMETRICREPRESENTATIONCONTEXT', 
+    null,                    // ContextIdentifier
+    E('Model'),              // ContextType
+    3,                       // CoordinateSpaceDimension
+    1.E-5,                   // Precision
+    worldCoordinateSystem,   // WorldCoordinateSystem (REQUIRED!)
+    null                     // TrueNorth
+  );
+  
+  // 4. Project Structure - Use "Boscotek" as the project name with config code
+  const projectName = `Boscotek - ${referenceCode}`;
+  const projectId = createEntity('IFCPROJECT', referenceCode, ownerHistoryId, projectName, `Boscotek ${product.name} - Configuration: ${referenceCode}`, null, null, null, [geometricContext], unitAssignment);
   
   // 5. Spatial Hierarchy: Site → Building → BuildingStorey
   const siteId = createEntity('IFCSITE', 'Site', ownerHistoryId, 'Default Site', null, null, null, null, E('ELEMENT'), null, null, null, null, null);
@@ -183,21 +196,19 @@ DATA;`;
   const bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext, configuration, product);
   
   // 7. Product Instance (Section 6 & 7: Add ObjectType with full Boscotek code)
-  let productIfcType = 'IFCFURNISHINGELEMENT';
-  if (product.id.includes('cabinet')) {
-    productIfcType = 'IFCFURNISHINGELEMENT'; // IFC4 doesn't have specific cabinet type
-  }
+  // Name format: "Boscotek - [Configuration Code]" e.g. "Boscotek - BTCS.700.560.100.100.MG.SG"
+  const productName = `Boscotek - ${referenceCode}`;
   
   const productInstance = createEntity(
-    productIfcType,
-    referenceCode,
-    ownerHistoryId,
-    product.name,
-    product.description,
-    referenceCode,          // ObjectType = Full Boscotek configuration code (e.g., BTCS.700.560.75.200.250.MG.SG)
-    productLocalPlacement,  // This is now a proper entity reference, not a float
-    bodyRepresentation,
-    null                    // Tag
+    'IFCFURNISHINGELEMENT',
+    referenceCode,           // GlobalId
+    ownerHistoryId,          // OwnerHistory
+    productName,             // Name = "Boscotek - BTCS.700.560..."
+    product.description,     // Description
+    referenceCode,           // ObjectType = Full configuration code
+    productLocalPlacement,   // ObjectPlacement
+    bodyRepresentation,      // Representation
+    referenceCode            // Tag = Configuration code
   );
   
   // 8. Property Sets (Metadata)
@@ -651,7 +662,8 @@ serve(async (req) => {
     const generationTime = Date.now() - startTime;
 
     // Upload to Supabase Storage
-    const fileName = `Boscotek_${product.id}_${referenceCode}_CFG${configId}_LEAD${leadId || 'NONE'}.ifc`;
+    // Clean filename: Boscotek_BTCS.700.560.100.100.MG.SG.ifc
+    const fileName = `Boscotek_${referenceCode}.ifc`;
     const filePath = `${new Date().getFullYear()}/${new Date().getMonth() + 1}/${fileName}`;
 
     const { data: uploadData, error: uploadError } = await supabaseClient
