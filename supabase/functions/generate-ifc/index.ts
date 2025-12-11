@@ -289,11 +289,20 @@ function createCabinetGeometry(
   const solids: number[] = [];
   const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   
+  // IMPORTANT: IFCRECTANGLEPROFILEDEF creates a rectangle CENTERED at the placement origin
+  // So we must specify CENTER positions, not corner positions
+  
   // ==========================================================
   // 1. PLINTH / BASE (bottom structural support)
   // Slightly recessed from cabinet front for visual distinction
   // ==========================================================
-  const plinthOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2 + plinthSetback, 0.]);
+  // Plinth spans: X from -width/2 to +width/2, Y from -depth/2 to +depth/2 - plinthSetback
+  // Plinth depth = depth - plinthSetback
+  // Plinth center Y = (-depth/2 + (depth/2 - plinthSetback)) / 2 = -plinthSetback/2
+  const plinthDepth = depth - plinthSetback;
+  const plinthCenterY = -plinthSetback / 2;
+  
+  const plinthOrigin = createEntity('IFCCARTESIANPOINT', [0., plinthCenterY, 0.]);
   const plinthZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const plinthXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const plinthPosition = createEntity('IFCAXIS2PLACEMENT3D', plinthOrigin, plinthZDir, plinthXDir);
@@ -301,15 +310,16 @@ function createCabinetGeometry(
   const plinthProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const plinthProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const plinthProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', plinthProfileOrigin, plinthProfileXDir);
-  const plinthProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, plinthProfilePosition, width, depth - plinthSetback);
+  const plinthProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, plinthProfilePosition, width, plinthDepth);
   
   const plinthSolid = createEntity('IFCEXTRUDEDAREASOLID', plinthProfile, plinthPosition, extrusionDir, plinthHeight);
   solids.push(plinthSolid);
   
   // ==========================================================
   // 2. TOP PANEL (cabinet top surface)
+  // Centered at (0, 0, height - topPanelHeight)
   // ==========================================================
-  const topOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, height - topPanelHeight]);
+  const topOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., height - topPanelHeight]);
   const topZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const topXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const topPosition = createEntity('IFCAXIS2PLACEMENT3D', topOrigin, topZDir, topXDir);
@@ -324,9 +334,12 @@ function createCabinetGeometry(
   
   // ==========================================================
   // 3. BACK PANEL (full height between plinth and top)
+  // Back panel at Y = -depth/2 + backPanelThickness/2 (centered on its thickness)
   // ==========================================================
   const internalHeight = height - plinthHeight - topPanelHeight;
-  const backOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2, plinthHeight]);
+  const backCenterY = -depth/2 + backPanelThickness/2;
+  
+  const backOrigin = createEntity('IFCCARTESIANPOINT', [0., backCenterY, plinthHeight]);
   const backZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const backXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const backPosition = createEntity('IFCAXIS2PLACEMENT3D', backOrigin, backZDir, backXDir);
@@ -341,8 +354,14 @@ function createCabinetGeometry(
   
   // ==========================================================
   // 4. LEFT SIDE PANEL
+  // Left side at X = -width/2 + sideWallThickness/2 (centered on its thickness)
+  // Spans from back panel to front
   // ==========================================================
-  const leftOrigin = createEntity('IFCCARTESIANPOINT', [-width/2, -depth/2 + backPanelThickness, plinthHeight]);
+  const sidePanelDepth = depth - backPanelThickness;
+  const sidePanelCenterY = backPanelThickness / 2; // Shifted forward from center by half back panel
+  const leftCenterX = -width/2 + sideWallThickness/2;
+  
+  const leftOrigin = createEntity('IFCCARTESIANPOINT', [leftCenterX, sidePanelCenterY, plinthHeight]);
   const leftZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const leftXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const leftPosition = createEntity('IFCAXIS2PLACEMENT3D', leftOrigin, leftZDir, leftXDir);
@@ -350,15 +369,18 @@ function createCabinetGeometry(
   const leftProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const leftProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const leftProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', leftProfileOrigin, leftProfileXDir);
-  const leftProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftProfilePosition, sideWallThickness, depth - backPanelThickness);
+  const leftProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftProfilePosition, sideWallThickness, sidePanelDepth);
   
   const leftSolid = createEntity('IFCEXTRUDEDAREASOLID', leftProfile, leftPosition, extrusionDir, internalHeight);
   solids.push(leftSolid);
   
   // ==========================================================
   // 5. RIGHT SIDE PANEL
+  // Right side at X = +width/2 - sideWallThickness/2 (centered on its thickness)
   // ==========================================================
-  const rightOrigin = createEntity('IFCCARTESIANPOINT', [width/2 - sideWallThickness, -depth/2 + backPanelThickness, plinthHeight]);
+  const rightCenterX = width/2 - sideWallThickness/2;
+  
+  const rightOrigin = createEntity('IFCCARTESIANPOINT', [rightCenterX, sidePanelCenterY, plinthHeight]);
   const rightZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   const rightXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
   const rightPosition = createEntity('IFCAXIS2PLACEMENT3D', rightOrigin, rightZDir, rightXDir);
@@ -366,7 +388,7 @@ function createCabinetGeometry(
   const rightProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
   const rightProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
   const rightProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', rightProfileOrigin, rightProfileXDir);
-  const rightProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightProfilePosition, sideWallThickness, depth - backPanelThickness);
+  const rightProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightProfilePosition, sideWallThickness, sidePanelDepth);
   
   const rightSolid = createEntity('IFCEXTRUDEDAREASOLID', rightProfile, rightPosition, extrusionDir, internalHeight);
   solids.push(rightSolid);
@@ -381,6 +403,9 @@ function createCabinetGeometry(
     const drawerInset = sideWallThickness + 0.002; // Inset from cabinet edges
     const drawerFrontWidth = width - (drawerInset * 2);
     
+    // Drawer front center Y = front of cabinet minus half the drawer thickness
+    const drawerFrontCenterY = depth/2 - drawerFrontThickness/2;
+    
     // Sort drawers by height descending (largest at bottom, matching 3D viewer)
     const drawersWithHeights = configuration.customDrawers.map((d: any, idx: number) => {
       const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
@@ -392,13 +417,10 @@ function createCabinetGeometry(
     
     drawersWithHeights.forEach((drawer: any, idx: number) => {
       const drawerHeight = drawer.heightMm / 1000; // Convert to meters
+      const drawerCenterZ = currentZ + drawerGap/2; // Z position for this drawer
       
-      // Create drawer front panel on the front face (positive Y direction)
-      const dfOrigin = createEntity('IFCCARTESIANPOINT', [
-        -width/2 + drawerInset, 
-        depth/2 - drawerFrontThickness, 
-        currentZ + drawerGap/2
-      ]);
+      // Create drawer front panel - CENTERED at (0, drawerFrontCenterY, drawerCenterZ)
+      const dfOrigin = createEntity('IFCCARTESIANPOINT', [0., drawerFrontCenterY, drawerCenterZ]);
       const dfZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
       const dfXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
       const dfPosition = createEntity('IFCAXIS2PLACEMENT3D', dfOrigin, dfZDir, dfXDir);
