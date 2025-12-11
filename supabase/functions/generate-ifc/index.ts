@@ -214,7 +214,11 @@ DATA;`;
   if (product.id.includes('workbench')) {
     // Workbench geometry (frame + worktop)
     const isIndustrial = product.id.includes('industrial');
-    const hasCastors = configuration.selections?.mobility === true;
+    // Check multiple ways castors might be indicated
+    const hasCastors = configuration.selections?.mobility === true || 
+                       configuration.selections?.mobility === 'castors' ||
+                       configuration.selections?.mobility === 'C' ||
+                       referenceCode.endsWith('-C'); // Config code ends with -C for castors
     bodyRepresentation = createWorkbenchGeometry(dimensions, createEntity, geometricContext, configuration, product, isIndustrial, hasCastors);
   } else {
     // Cabinet geometry (carcass + drawers)
@@ -540,7 +544,7 @@ function createWorkbenchGeometry(
   };
   
   // ==========================================================
-  // 1. FOUR VERTICAL LEGS
+  // 1. FOUR VERTICAL LEGS + CASTORS/FEET
   // Positioned at corners, inset by half leg size
   // ==========================================================
   const legPositions = [
@@ -552,7 +556,27 @@ function createWorkbenchGeometry(
   ];
   
   legPositions.forEach(([x, y]) => {
+    // Add leg
     solids.push(createBox(x, y, legOffset, LEG_SIZE, LEG_SIZE, legHeight));
+    
+    // Add castor or levelling foot at base
+    if (hasCastors) {
+      // Castor housing (bracket) - 60mm x 60mm x 40mm
+      const CASTOR_BRACKET_SIZE = 0.06;
+      const CASTOR_BRACKET_HEIGHT = 0.04;
+      solids.push(createBox(x, y, CASTOR_HEIGHT - CASTOR_BRACKET_HEIGHT, CASTOR_BRACKET_SIZE, CASTOR_BRACKET_SIZE, CASTOR_BRACKET_HEIGHT));
+      
+      // Castor wheel (simplified as box) - 100mm diameter x 40mm wide
+      const WHEEL_DIAMETER = 0.10;
+      const WHEEL_WIDTH = 0.04;
+      const wheelZ = WHEEL_DIAMETER / 2;
+      solids.push(createBox(x, y, wheelZ - WHEEL_DIAMETER/4, WHEEL_WIDTH, WHEEL_DIAMETER, WHEEL_DIAMETER/2));
+    } else {
+      // Levelling foot (simplified as small cylinder/box) - 80mm base x 50mm height
+      const FOOT_BASE = 0.08;
+      const FOOT_HEIGHT_ACTUAL = 0.05;
+      solids.push(createBox(x, y, 0, FOOT_BASE, FOOT_BASE, FOOT_HEIGHT_ACTUAL));
+    }
   });
   
   // ==========================================================
