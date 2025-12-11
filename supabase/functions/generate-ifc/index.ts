@@ -698,7 +698,7 @@ function createWorkbenchGeometry(
   }
   
   // ==========================================================
-  // 6. ABOVE-BENCH STRUCTURE (uprights, crossbar, shelf)
+  // 6. ABOVE-BENCH STRUCTURE (uprights, crossbar, shelf, power panel)
   // ==========================================================
   const aboveBenchOption = configuration?.selections?.above_bench;
   
@@ -707,93 +707,110 @@ function createWorkbenchGeometry(
     const POST_HEIGHT = 1.1; // Height of uprights
     const SHELF_THICKNESS = 0.02;
     const SHELF_DEPTH = 0.25;
+    const PANEL_HEIGHT = 0.1;
+    const PANEL_DEPTH = 0.04;
     
-    // Y position for posts (starts at worktop surface)
+    // Y position for above-bench items (starts at worktop surface)
     const postBaseZ = height + WORKTOP_THICKNESS;
     
-    // Left upright post
-    solids.push(createBox(
-      -width/2 + POST_WIDTH/2 + 0.01,
-      -depth/2 + POST_WIDTH/2 + 0.01,
-      postBaseZ,
-      POST_WIDTH, POST_WIDTH, POST_HEIGHT
-    ));
+    // Check if power panel only (no shelf, no uprights needed)
+    const isPowerOnly = aboveBenchOption === 'iw-ab-power' || aboveBenchOption === 'P';
     
-    // Right upright post
-    solids.push(createBox(
-      width/2 - POST_WIDTH/2 - 0.01,
-      -depth/2 + POST_WIDTH/2 + 0.01,
-      postBaseZ,
-      POST_WIDTH, POST_WIDTH, POST_HEIGHT
-    ));
-    
-    // Top crossbar (connects uprights)
-    solids.push(createBox(
-      0,
-      -depth/2 + POST_WIDTH/2 + 0.01,
-      postBaseZ + POST_HEIGHT - POST_WIDTH/2,
-      width - 0.02,
-      POST_WIDTH, POST_WIDTH
-    ));
-    
-    // Shelf (if option includes shelf)
-    const hasShelf = aboveBenchOption.includes('shelf') || 
-                     aboveBenchOption === 'P' || 
-                     aboveBenchOption === 'SP' ||
-                     aboveBenchOption.includes('iw-ab-shelf');
-    
-    if (hasShelf) {
-      solids.push(createBox(
-        0,
-        -depth/2 + SHELF_DEPTH/2 + 0.05,
-        postBaseZ + POST_HEIGHT - SHELF_THICKNESS/2,
-        width - 0.1,
-        SHELF_DEPTH,
-        SHELF_THICKNESS
-      ));
-    }
-    
-    // Power panel (if option includes power)
-    const hasPower = aboveBenchOption.includes('power') || 
-                     aboveBenchOption === 'P' || 
-                     aboveBenchOption === 'SP';
-    
-    if (hasPower) {
-      const PANEL_HEIGHT = 0.1;
-      const PANEL_DEPTH = 0.04;
+    if (isPowerOnly) {
+      // Power panel rail ONLY - sits at back of worktop, no uprights
       solids.push(createBox(
         0,
         -depth/2 + PANEL_DEPTH/2,
-        postBaseZ + 0.15,
+        postBaseZ + 0.04, // Just above worktop
         width - 0.12,
         PANEL_DEPTH,
         PANEL_HEIGHT
       ));
-    }
-    
-    // For T-series with panels (pegboard/louvre) - add back panel
-    if (aboveBenchOption.startsWith('T') && !['T0', 'T9', 'T10'].includes(aboveBenchOption)) {
-      const PANEL_WIDTH = (width - 0.1) / 2;
-      const PANEL_HEIGHT = 0.6;
-      const PANEL_THICKNESS = 0.015;
+    } else {
+      // Shelf options require uprights
+      const hasShelf = aboveBenchOption.includes('shelf') || 
+                       aboveBenchOption === 'SP' ||
+                       aboveBenchOption.includes('iw-ab-shelf');
       
-      // Lower panels (two bays)
-      solids.push(createBox(
-        -PANEL_WIDTH/2 - 0.02,
-        -depth/2 + PANEL_THICKNESS/2 + 0.02,
-        postBaseZ + 0.35,
-        PANEL_WIDTH,
-        PANEL_THICKNESS,
-        PANEL_HEIGHT
-      ));
-      solids.push(createBox(
-        PANEL_WIDTH/2 + 0.02,
-        -depth/2 + PANEL_THICKNESS/2 + 0.02,
-        postBaseZ + 0.35,
-        PANEL_WIDTH,
-        PANEL_THICKNESS,
-        PANEL_HEIGHT
-      ));
+      const hasPower = aboveBenchOption.includes('power') || 
+                       aboveBenchOption === 'SP';
+      
+      // Only add uprights if we have shelf (not for power-only)
+      if (hasShelf || aboveBenchOption.startsWith('T')) {
+        // Left upright post
+        solids.push(createBox(
+          -width/2 + POST_WIDTH/2 + 0.01,
+          -depth/2 + POST_WIDTH/2 + 0.01,
+          postBaseZ,
+          POST_WIDTH, POST_WIDTH, POST_HEIGHT
+        ));
+        
+        // Right upright post
+        solids.push(createBox(
+          width/2 - POST_WIDTH/2 - 0.01,
+          -depth/2 + POST_WIDTH/2 + 0.01,
+          postBaseZ,
+          POST_WIDTH, POST_WIDTH, POST_HEIGHT
+        ));
+        
+        // Top crossbar (connects uprights)
+        solids.push(createBox(
+          0,
+          -depth/2 + POST_WIDTH/2 + 0.01,
+          postBaseZ + POST_HEIGHT - POST_WIDTH/2,
+          width - 0.02,
+          POST_WIDTH, POST_WIDTH
+        ));
+        
+        // Shelf
+        if (hasShelf) {
+          solids.push(createBox(
+            0,
+            -depth/2 + SHELF_DEPTH/2 + 0.05,
+            postBaseZ + POST_HEIGHT - SHELF_THICKNESS/2,
+            width - 0.1,
+            SHELF_DEPTH,
+            SHELF_THICKNESS
+          ));
+        }
+        
+        // Power panel (combined with shelf)
+        if (hasPower) {
+          solids.push(createBox(
+            0,
+            -depth/2 + PANEL_DEPTH/2,
+            postBaseZ + 0.15,
+            width - 0.12,
+            PANEL_DEPTH,
+            PANEL_HEIGHT
+          ));
+        }
+      }
+      
+      // For T-series with panels (pegboard/louvre) - add back panel
+      if (aboveBenchOption.startsWith('T') && !['T0', 'T9', 'T10'].includes(aboveBenchOption)) {
+        const PANEL_WIDTH = (width - 0.1) / 2;
+        const BACK_PANEL_HEIGHT = 0.6;
+        const PANEL_THICKNESS = 0.015;
+        
+        // Lower panels (two bays)
+        solids.push(createBox(
+          -PANEL_WIDTH/2 - 0.02,
+          -depth/2 + PANEL_THICKNESS/2 + 0.02,
+          postBaseZ + 0.35,
+          PANEL_WIDTH,
+          PANEL_THICKNESS,
+          BACK_PANEL_HEIGHT
+        ));
+        solids.push(createBox(
+          PANEL_WIDTH/2 + 0.02,
+          -depth/2 + PANEL_THICKNESS/2 + 0.02,
+          postBaseZ + 0.35,
+          PANEL_WIDTH,
+          PANEL_THICKNESS,
+          BACK_PANEL_HEIGHT
+        ));
+      }
     }
   }
   

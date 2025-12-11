@@ -692,25 +692,37 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     const postH = 1.1; // Increased for clearer gap
     const postMat = <meshStandardMaterial color={frameColor} />;
     
-    // Industrial Shelf Logic (Single bay)
+    // Industrial Above Bench Logic
     if (isIndustrialAbove) {
+       // Power Panel ONLY (no shelf) - just the rail at back of worktop, no posts
+       const isPowerOnly = aboveBenchId === 'iw-ab-power' || aboveBenchId === 'P';
+       
+       if (isPowerOnly) {
+          // Power panel rail only - sits at back of worktop without uprights
+          return (
+             <group position={[0, height + 0.04, -depth/2 + 0.03]}>
+                <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+                {[-0.3, -0.1, 0.1, 0.3].map((x, i) => <mesh key={i} position={[x, 0, 0.021]}><planeGeometry args={[0.08, 0.05]} /><meshBasicMaterial color="#f0f0f0" /></mesh>)}
+             </group>
+          );
+       }
+       
+       // Shelf options (with or without power) - need uprights
        return (
           <group position={[0, height, 0]}>
              <mesh position={[-width/2 + 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
              <mesh position={[width/2 - 0.03, postH/2, -depth/2 + 0.03]} castShadow><boxGeometry args={[0.04, postH, 0.04]} />{postMat}</mesh>
              <mesh position={[0, postH - 0.02, -depth/2 + 0.03]}><boxGeometry args={[width, 0.04, 0.04]} />{postMat}</mesh>
              
-             {(aboveBenchId.includes('shelf') || aboveBenchId === 'P' || aboveBenchId === 'SP') && (
-                <group position={[0, 0, -depth/2 + 0.15]}>
-                   {aboveBenchId.includes('shelf') && <mesh position={[0, postH, 0]}><boxGeometry args={[width - 0.1, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
-                   {hasPower && (
-                      <group position={[0, 0.15, -0.12]}>
-                         <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
-                         {[-0.3, -0.1, 0.1, 0.3].map((x, i) => <mesh key={i} position={[x, 0, 0.021]}><planeGeometry args={[0.08, 0.05]} /><meshBasicMaterial color="#f0f0f0" /></mesh>)}
-                      </group>
-                   )}
-                </group>
-             )}
+             <group position={[0, 0, -depth/2 + 0.15]}>
+                {aboveBenchId.includes('shelf') && <mesh position={[0, postH, 0]}><boxGeometry args={[width - 0.1, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
+                {hasPower && (
+                   <group position={[0, 0.15, -0.12]}>
+                      <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
+                      {[-0.3, -0.1, 0.1, 0.3].map((x, i) => <mesh key={i} position={[x, 0, 0.021]}><planeGeometry args={[0.08, 0.05]} /><meshBasicMaterial color="#f0f0f0" /></mesh>)}
+                   </group>
+                )}
+             </group>
           </group>
        );
     }
