@@ -82,9 +82,17 @@ DATA;`;
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
-        // Distinguish between dimension values and entity references
-        // Entity IDs are positive integers (1, 2, 3...)
+        // Distinguish between dimension values, timestamps, and entity references
+        // Entity IDs are small positive integers (1, 2, 3... typically < 100000)
+        // Timestamps are very large integers (e.g., 1702262399000 from Date.now())
         // Dimension values are floats (0.56, 0.75) or special values (0)
+        
+        // Special case: timestamps (very large integers > 1000000000)
+        // These should remain as plain numbers, not entity references
+        if (p > 1000000000) {
+          return p.toString();
+        }
+        
         if (p === 0 || p < 0 || p % 1 !== 0) {
           // It's a dimension value (0, negative, or has decimals)
           const str = p.toString();
@@ -274,7 +282,7 @@ function addDrawerGeometry(
       `Drawer-${index + 1}`,
       ownerHistoryId,
       `Drawer ${index + 1}`,
-      `Drawer Height ${drawerHeight.toFixed(0)}mm`, // Description with drawer specs
+      `Drawer Height ${(drawerHeight * 1000).toFixed(0)}mm`, // Convert meters to millimeters
       `Drawer-${index + 1}`,                        // ObjectType
       drawerPlacement,                              // Proper entity reference
       dProdDefShape,
