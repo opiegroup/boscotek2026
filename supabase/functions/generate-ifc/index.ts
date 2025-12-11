@@ -41,7 +41,7 @@ DATA;`;
   let entityId = 1;
   const entities: string[] = [];
 
-  // Helper to create entity with improved type detection
+  // Helper to create entity with FIXED type detection (Bugs 1 & 2)
   const createEntity = (type: string, ...params: any[]): number => {
     const id = entityId++;
     const paramsStr = params.map(p => {
@@ -54,22 +54,22 @@ DATA;`;
         const allNumbers = p.every(item => typeof item === 'number');
         
         if (allNumbers) {
-          // Detect if this is a coordinate list (has decimals OR small length + reasonable range)
+          // FIX (Bugs 1 & 2): ONLY treat as coordinates if array contains decimals
+          // Entity IDs are ALWAYS integers, so hasDecimals distinguishes them
+          // Arrays like [2,3,4,5] (unit IDs) or [7] (context ID) are entity references
+          // Arrays like [0., 0., 0.] or [1., 0., 0.] are coordinates
           const hasDecimals = p.some((n: number) => n % 1 !== 0);
-          const isSmallArray = p.length <= 4;
-          const isReasonableRange = p.every((n: number) => n >= -10000 && n <= 10000);
           
-          // Coordinates: small arrays with decimals or reasonable ranges
-          if (hasDecimals || (isSmallArray && isReasonableRange)) {
+          if (hasDecimals) {
+            // Coordinates: format as floats
             return `(${p.map(n => {
               const str = n.toString();
-              // Add trailing dot for integers to make them floats in IFC
               return str.includes('.') ? str : `${str}.`;
             }).join(',')})`;
           }
         }
         
-        // Entity reference list: treat numbers as #references
+        // Entity reference list: treat all integer arrays as entity references
         return `(${p.map(item => typeof item === 'number' ? `#${item}` : item).join(',')})`;
       }
       if (typeof p === 'number') {
@@ -140,22 +140,27 @@ DATA;`;
     null                    // Tag
   );
   
-  // 8. Add to building storey (NOT building directly)
-  // FIX: Products should be contained in BuildingStorey, not Building
-  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, [productInstance], storeyId);
-  
-  // 9. Property Sets (Metadata)
+  // 8. Property Sets (Metadata)
   addPropertySets(productInstance, configuration, product, pricing, referenceCode, createEntity, ownerHistoryId);
   
-  // 10. Drawers (Section 9: Proper aggregation and assembly)
+  // 9. Drawers (Section 9: Proper aggregation and assembly)
+  let allProducts = [productInstance]; // Start with cabinet
+  
   if (configuration.customDrawers && configuration.customDrawers.length > 0) {
     const drawerIds = addDrawerGeometry(configuration.customDrawers, product, dimensions, productInstance, createEntity, ownerHistoryId, geometricContext, productLocalPlacement);
     
     // Section 9: Aggregate drawers under cabinet using IfcRelAggregates
     if (drawerIds.length > 0) {
       createEntity('IFCRELAGGREGATES', 'CabinetDrawerAssembly', ownerHistoryId, 'Cabinet with Drawers', null, productInstance, drawerIds);
+      
+      // FIX (Bug 3): Drawers must also be added to allProducts for spatial containment
+      allProducts = allProducts.concat(drawerIds);
     }
   }
+  
+  // 10. Add ALL products (cabinet + drawers) to building storey
+  // FIX (Bug 3): All products must be contained in BuildingStorey per IFC requirements
+  createEntity('IFCRELCONTAINEDINSPATIALSTRUCTURE', 'StoreyContainer', ownerHistoryId, null, null, allProducts, storeyId);
 
   // Close IFC file
   const ifcContent = `${ifcHeader}
