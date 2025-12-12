@@ -646,8 +646,12 @@ function createWorkbenchGeometry(
     const SHELF_THICK = 0.025; // Undershelf thickness
     
     // Positions - flush against legs
-    const flushLeft = -width/2 + LEG_SIZE + DRAWER_UNIT_WIDTH/2;
-    const flushRight = width/2 - LEG_SIZE - DRAWER_UNIT_WIDTH/2;
+    // NOTE: IFC X-axis is flipped relative to Three.js viewer orientation
+    // In Three.js: +X = right, -X = left (when viewing from front)
+    // In IFC/Blender: +X appears on LEFT, -X appears on RIGHT (when viewing from front)
+    // So we SWAP the signs to match the web viewer appearance
+    const flushLeft = width/2 - LEG_SIZE - DRAWER_UNIT_WIDTH/2;   // Positive X = LEFT in IFC
+    const flushRight = -width/2 + LEG_SIZE + DRAWER_UNIT_WIDTH/2; // Negative X = RIGHT in IFC
     
     // Determine single unit position based on under_bench_pos setting
     let singlePos: number;

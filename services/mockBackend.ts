@@ -261,6 +261,7 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
     const opt = group.options.find(o => o.id === val);
     if (opt && opt.priceDelta) {
       let priceToAdd = opt.priceDelta;
+      let labelSuffix = '';
       
       // Heuristic: Cabinet Credits for Embedded
       if (group.id === 'under_bench' && request.embeddedCabinets && request.embeddedCabinets.length > 0) {
@@ -274,11 +275,23 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
             if (credit > 0) priceToAdd -= credit;
          }
       }
+      
+      // Add position info for under_bench options (single unit configurations)
+      if (group.id === 'under_bench') {
+        const posGroup = product.groups.find(g => g.id === 'under_bench_pos');
+        const posVal = request.selections['under_bench_pos'];
+        if (posGroup && posVal) {
+          const posOpt = posGroup.options.find(o => o.id === posVal);
+          if (posOpt) {
+            labelSuffix = ` (${posOpt.label})`;
+          }
+        }
+      }
 
       total += priceToAdd;
       breakdown.push({ 
         code: opt.code || opt.id, 
-        label: `${group.label}: ${opt.label}`, 
+        label: `${group.label}: ${opt.label}${labelSuffix}`, 
         price: priceToAdd 
       });
     }
