@@ -135,18 +135,8 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
           </dl>
         </div>
 
-        {/* Export Options */}
-        <div className="mb-6">
-          <ExportButtons
-            configuration={config}
-            product={product}
-            pricing={pricing}
-            referenceCode={referenceCode}
-          />
-        </div>
-
         {/* Pricing Estimate */}
-        <div className="mb-8">
+        <div className="mb-6">
            <h3 className="text-sm font-bold uppercase text-zinc-400 border-b border-zinc-800 pb-1 mb-2">Item Breakdown</h3>
            <div className="flex items-baseline justify-between mb-2">
               <span className="text-zinc-500 text-sm">Unit Price (Ex GST)</span>
@@ -176,6 +166,7 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
              </div>
            )}
         </div>
+
       </div>
 
       {/* FOOTER: ADD TO QUOTE & TOTALS */}
@@ -199,8 +190,12 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
                >+</button>
             </div>
             <div className="flex-1 text-right">
-               <div className="text-[10px] text-zinc-500 uppercase">Grand Total (Ex GST)</div>
-               <div className="text-2xl font-bold text-white">${grandTotal.toLocaleString()}</div>
+               <div className="flex justify-end gap-4 text-xs text-zinc-400 mb-1">
+                  <span>Ex GST: ${grandTotal.toLocaleString()}</span>
+                  <span>GST: ${(pricing.gst * quantity).toLocaleString()}</span>
+               </div>
+               <div className="text-[10px] text-zinc-500 uppercase">Grand Total (Inc GST)</div>
+               <div className="text-2xl font-bold text-white">${(grandTotal + (pricing.gst * quantity)).toLocaleString()}</div>
             </div>
          </div>
          <button 
@@ -212,6 +207,16 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
               {isEditingCartItem ? 'Save Changes' : 'Enter Cart'}
             </span>
          </button>
+      </div>
+
+      {/* Export Options */}
+      <div className="p-4 bg-zinc-900 border-t border-zinc-800">
+        <ExportButtons
+          configuration={config}
+          product={product}
+          pricing={pricing}
+          referenceCode={referenceCode}
+        />
       </div>
     </div>
   );

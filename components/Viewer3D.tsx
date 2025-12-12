@@ -1,11 +1,16 @@
 
-import React, { useState, useRef, useMemo, useEffect } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import React, { useState, useRef, useMemo, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Grid, ContactShadows, Environment, Float, Center, Text, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { ConfigurationState, ProductDefinition, DrawerConfiguration, EmbeddedCabinet } from '../types';
 import { getPartitionById, CATALOG } from '../data/catalog';
 import SceneControlsOverlay from './SceneControlsOverlay';
+
+// Export interface for the ref
+export interface Viewer3DRef {
+  captureThumbnail: () => string | null;
+}
 
 // Get HD Cabinet product for embedded cabinet drawer lookups
 const HD_CABINET_PRODUCT = CATALOG.find(p => p.id === 'prod-hd-cabinet');
@@ -956,12 +961,64 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
   );
 };
 
-export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) => {
+// Helper component to capture the scene from inside the Canvas
+const SceneCapture = ({ onCapture }: { onCapture: (captureFunc: () => string | null) => void }) => {
+  const { gl, scene, camera } = useThree();
+  
+  useEffect(() => {
+    const captureFunc = () => {
+      try {
+        // Render the scene first to ensure we capture current state
+        gl.render(scene, camera);
+        // Get the canvas data as a smaller thumbnail (for performance)
+        const canvas = gl.domElement;
+        
+        // Create a smaller thumbnail canvas
+        const thumbCanvas = document.createElement('canvas');
+        const thumbSize = 200; // 200px thumbnail
+        thumbCanvas.width = thumbSize;
+        thumbCanvas.height = thumbSize;
+        
+        const ctx = thumbCanvas.getContext('2d');
+        if (ctx) {
+          // Calculate crop to make it square (center crop)
+          const srcSize = Math.min(canvas.width, canvas.height);
+          const srcX = (canvas.width - srcSize) / 2;
+          const srcY = (canvas.height - srcSize) / 2;
+          
+          ctx.drawImage(canvas, srcX, srcY, srcSize, srcSize, 0, 0, thumbSize, thumbSize);
+          return thumbCanvas.toDataURL('image/jpeg', 0.8);
+        }
+        return null;
+      } catch (e) {
+        console.error('Failed to capture thumbnail:', e);
+        return null;
+      }
+    };
+    
+    onCapture(captureFunc);
+  }, [gl, scene, camera, onCapture]);
+  
+  return null;
+};
+
+export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, product, activeDrawerIndex }, ref) => {
     const [bgMode, setBgMode] = useState<BackgroundMode>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [showFullExtension, setShowFullExtension] = useState(false);
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
+    const captureRef = useRef<(() => string | null) | null>(null);
+    
+    // Expose the capture function via ref
+    useImperativeHandle(ref, () => ({
+      captureThumbnail: () => {
+        if (captureRef.current) {
+          return captureRef.current();
+        }
+        return null;
+      }
+    }), []);
 
     // Space-bar pan mode
     useEffect(() => {
@@ -1050,7 +1107,8 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
 
     return (
        <div ref={canvasContainerRef} className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
-         <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 42 }}>
+         <Canvas shadows camera={{ position: [2.5, 2.0, 2.5], fov: 42 }} gl={{ preserveDrawingBuffer: true }}>
+           <SceneCapture onCapture={(func) => { captureRef.current = func; }} />
            {bgMode === 'photo' ? <Environment preset="warehouse" background blur={0.6} /> : <Environment preset="city" />}
            {bgMode === 'dark' && <color attach="background" args={['#18181b']} />}
            {bgMode === 'light' && <color attach="background" args={['#e4e4e7']} />}
@@ -1108,4 +1166,4 @@ export const Viewer3D = ({ config, product, activeDrawerIndex }: Viewer3DProps) 
          <SceneControlsOverlay controlsRef={controlsRef} />
        </div>
     );
-}
+});

@@ -114,15 +114,10 @@ const refreshCache = async () => {
 };
 
 export const getProducts = async (): Promise<ProductDefinition[]> => {
-  if (!CACHE.isLoaded || CACHE.products.length === 0) {
-    await refreshCache();
-  }
-  // If still empty, it means DB is empty. Return Seed so app works, but warn.
-  if (CACHE.products.length === 0) {
-    console.warn("DB is empty. Using local seed data. Please run Seed in Admin.");
-    return SEED_CATALOG;
-  }
-  return CACHE.products;
+  // ALWAYS use SEED_CATALOG as source of truth for product definitions
+  // This ensures drawer options are always correct (75, 100, 150, 225, 300 only)
+  // Database is used for pricing overrides via Admin, but core structure comes from code
+  return SEED_CATALOG;
 };
 
 export const getInteriors = async (): Promise<DrawerInteriorOption[]> => {
@@ -194,13 +189,12 @@ export const updateInteriorOption = async (interiorId: string, updates: { price?
 
 export const calculateQuote = async (request: QuoteRequest): Promise<PricingResult> => {
   // Ensure we have data
-  if (CACHE.products.length === 0) await getProducts();
   if (CACHE.interiors.length === 0) await getInteriors();
   if (CACHE.accessories.length === 0) await getAccessories();
 
   // 1. Find Product
-  // Fallback to SEED if cache is empty (safety net)
-  const products = CACHE.products.length > 0 ? CACHE.products : SEED_CATALOG;
+  // ALWAYS use SEED_CATALOG for product definitions to ensure correct drawer options
+  const products = SEED_CATALOG;
   const interiors = CACHE.interiors.length > 0 ? CACHE.interiors : SEED_INTERIORS;
   const accessories = CACHE.accessories.length > 0 ? CACHE.accessories : SEED_ACCESSORIES;
 

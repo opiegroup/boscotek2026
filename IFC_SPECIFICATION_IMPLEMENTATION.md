@@ -58,7 +58,7 @@ This document confirms that the Boscotek Configurator IFC export now fully imple
 ### Section 6: Product Type Mapping
 
 - [x] **Main cabinet**: IfcFurnishingElement
-- [x] **ObjectType** set to full Boscotek configuration code (e.g., "BTCS.700.560.75.200.250.MG.SG")
+- [x] **ObjectType** set to full Boscotek configuration code (e.g., "BTCS.700.560.75.150.225.MG.SG")
 - [x] **Drawers**: Individual IfcFurnishingElement entities
 - [x] **Name** descriptive (e.g., "HD Cabinet")
 
@@ -110,7 +110,7 @@ This document confirms that the Boscotek Configurator IFC export now fully imple
 - [x] **Family** (IfcLabel) → Product family name
 - [x] **Width, Depth, Height** (IfcLengthMeasure) → In millimeters
 - [x] **NumberOfDrawers** (IfcInteger)
-- [x] **DrawerConfigurationCode** (IfcLabel) → e.g., "75.200.250"
+- [x] **DrawerConfigurationCode** (IfcLabel) → e.g., "75.150.225"
 - [x] **UDLDrawerCapacity** (IfcLabel) → e.g., "80 kg"
 - [x] **UDLCabinetCapacity** (IfcLabel) → e.g., "300 kg"
 - [x] **MaterialBody, MaterialFronts** (IfcLabel) → "Steel"

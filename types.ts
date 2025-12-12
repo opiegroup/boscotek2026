@@ -103,6 +103,7 @@ export interface QuoteLineItem {
   totalPrice: number;
   specsSummary: string[]; // Human readable list of major options
   breakdown?: LineItem[]; // Detailed list of components and codes
+  thumbnail?: string; // Base64 data URL of the configured item
 }
 
 export interface Quote {

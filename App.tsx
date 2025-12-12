@@ -1,8 +1,8 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet } from './types';
 import ConfiguratorControls from './components/ConfiguratorControls';
-import { Viewer3D } from './components/Viewer3D';
+import { Viewer3D, Viewer3DRef } from './components/Viewer3D';
 import SummaryPanel from './components/SummaryPanel';
 import QuoteCart from './components/QuoteCart';
 import { getQuote } from './services/pricingService';
@@ -47,6 +47,9 @@ const BoscotekApp: React.FC = () => {
   const [quoteItems, setQuoteItems] = useState<QuoteLineItem[]>([]);
   const [submittedRef, setSubmittedRef] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  
+  // Ref for capturing thumbnails from the 3D viewer
+  const viewer3DRef = useRef<Viewer3DRef>(null);
 
   // Effect to fetch price when config changes
   useEffect(() => {
@@ -110,6 +113,9 @@ const BoscotekApp: React.FC = () => {
   const handleAddToQuote = () => {
     if (!activeProduct) return;
     
+    // Capture thumbnail from the 3D viewer
+    const thumbnail = viewer3DRef.current?.captureThumbnail() || undefined;
+    
     // Generate human readable specs for the cart
     const specsSummary = activeProduct.groups.map(g => {
        if (g.type === 'drawer_stack') return null;
@@ -136,7 +142,8 @@ const BoscotekApp: React.FC = () => {
 
     // Check if we're editing an existing item
     if (editingItemId) {
-      // Update the existing item
+      // Update the existing item (keep existing thumbnail if no new one captured)
+      const existingItem = quoteItems.find(item => item.id === editingItemId);
       const updatedItem: QuoteLineItem = {
         id: editingItemId, // Keep the same ID
         productName: activeProduct.name,
@@ -145,7 +152,8 @@ const BoscotekApp: React.FC = () => {
         unitPrice: pricing.totalPrice,
         totalPrice: pricing.totalPrice * quantity,
         specsSummary: specsSummary,
-        breakdown: pricing.breakdown
+        breakdown: pricing.breakdown,
+        thumbnail: thumbnail || existingItem?.thumbnail
       };
       
       setQuoteItems(quoteItems.map(item => 
@@ -162,7 +170,8 @@ const BoscotekApp: React.FC = () => {
         unitPrice: pricing.totalPrice,
         totalPrice: pricing.totalPrice * quantity,
         specsSummary: specsSummary,
-        breakdown: pricing.breakdown
+        breakdown: pricing.breakdown,
+        thumbnail: thumbnail
       };
       
       setQuoteItems([...quoteItems, newItem]);
@@ -335,6 +344,7 @@ const BoscotekApp: React.FC = () => {
            )}
 
            <Viewer3D 
+             ref={viewer3DRef}
              config={config} 
              product={activeProduct} 
              activeDrawerIndex={activeDrawerIndex}

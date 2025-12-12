@@ -121,7 +121,7 @@ IFC VALIDATION: Boscotek_prod-hd-cabinet_BTCS.700.560_CFG123_LEAD456.ifc
 In BlenderBIM, select the cabinet object and check properties:
 
 **Expected properties in Pset_BoscotekCabinet:**
-- ✅ BoscotekCode (e.g., "BTCS.700.560.75.200.250.MG.SG")
+- ✅ BoscotekCode (e.g., "BTCS.700.560.75.150.225.MG.SG")
 - ✅ Family (e.g., "HD Cabinet")
 - ✅ Manufacturer: "Boscotek"
 - ✅ OwnerOrganisation: "Opie Manufacturing Group"

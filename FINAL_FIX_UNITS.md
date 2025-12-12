@@ -76,7 +76,7 @@ properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Width', null,
 
 ## 📝 **Important Notes**
 
-1. **Property Labels**: We still use millimeter labels in drawer configuration codes (e.g., "75.200.250") for readability, but actual IFC geometry is in meters.
+1. **Property Labels**: We still use millimeter labels in drawer configuration codes (e.g., "75.150.225") for readability, but actual IFC geometry is in meters.
 
 2. **Unit Display**: BIM tools will display dimensions in their preferred units. BlenderBIM shows meters, Revit/ArchiCAD can show mm if configured.
 

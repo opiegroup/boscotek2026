@@ -58,6 +58,20 @@ const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onEditItem, 
                           <div key={item.id} className="p-4 flex flex-col hover:bg-zinc-900/50 transition-colors group">
                              {/* Item Header */}
                              <div className="flex flex-col sm:flex-row gap-4 mb-3">
+                                {/* Thumbnail */}
+                                <div className="flex-shrink-0">
+                                   {item.thumbnail ? (
+                                      <img 
+                                         src={item.thumbnail} 
+                                         alt={item.productName}
+                                         className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-lg border border-zinc-700 bg-zinc-800"
+                                      />
+                                   ) : (
+                                      <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg border border-zinc-700 bg-zinc-800 flex items-center justify-center">
+                                         <span className="text-3xl text-zinc-600">📦</span>
+                                      </div>
+                                   )}
+                                </div>
                                 <div className="flex-1">
                                    <div className="flex justify-between items-start">
                                       <div>
