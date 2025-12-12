@@ -631,275 +631,340 @@ function createWorkbenchGeometry(
   solids.push(createBox(0, 0, worktopZ, worktopWidth, worktopDepth, WORKTOP_THICKNESS));
   
   // ==========================================================
-  // 5. UNDER-BENCH STORAGE (drawer units, cabinets)
+  // 5. UNDER-BENCH STORAGE (drawer units, cabinets, undershelves)
+  // Matching Viewer3D.tsx geometry exactly
   // ==========================================================
   const underBenchOption = configuration?.selections?.under_bench;
   const underBenchPos = configuration?.selections?.under_bench_pos || 'right';
   const embeddedCabinets = configuration?.embeddedCabinets || [];
   
   if (underBenchOption && underBenchOption !== 'B0' && underBenchOption !== 'iw-ub-none') {
-    const UNIT_WIDTH = 0.56; // Standard drawer unit width (560mm)
+    const DRAWER_UNIT_WIDTH = 0.56; // 560mm drawer unit width
     const UNIT_DEPTH = depth - 0.1;
-    const UNIT_HEIGHT = 0.7; // Standard cabinet height
+    const DRAWER_HEIGHT = 0.15; // Height per drawer (150mm)
+    const SHELL_THICK = 0.02;
+    const SHELF_THICK = 0.025; // Undershelf thickness
     
-    // Flush positions against legs
-    const flushLeft = -width/2 + LEG_SIZE + UNIT_WIDTH/2;
-    const flushRight = width/2 - LEG_SIZE - UNIT_WIDTH/2;
-    let singlePos = (underBenchPos === 'left' || underBenchPos === 'pos-left') ? flushLeft : flushRight;
-    const singlePlacement = (underBenchPos === 'left' || underBenchPos === 'pos-left') ? 'left' : 'right';
-    if (underBenchPos === 'center' || underBenchPos === 'pos-center') singlePos = 0;
+    // Positions - flush against legs
+    const flushLeft = -width/2 + LEG_SIZE + DRAWER_UNIT_WIDTH/2;
+    const flushRight = width/2 - LEG_SIZE - DRAWER_UNIT_WIDTH/2;
     
-    // Z position for storage units (suspended under worktop)
-    const unitZ = height - UNIT_HEIGHT - 0.05;
+    // Determine single unit position based on under_bench_pos setting
+    let singlePos: number;
+    let singlePlacement: 'left' | 'right';
     
-    // Helper to add a storage unit box (simple solid)
-    const addStorageUnit = (x: number) => {
-      solids.push(createBox(x, 0, unitZ, UNIT_WIDTH, UNIT_DEPTH, UNIT_HEIGHT));
+    if (underBenchPos === 'left' || underBenchPos === 'pos-left' || underBenchPos === 'PL') {
+      singlePos = flushLeft;
+      singlePlacement = 'left';
+    } else if (underBenchPos === 'center' || underBenchPos === 'pos-center' || underBenchPos === 'PC') {
+      singlePos = 0;
+      singlePlacement = 'right'; // Default for embedded cabinet lookup
+    } else {
+      // Default: right (pos-right, PR, right, or any other value)
+      singlePos = flushRight;
+      singlePlacement = 'right';
+    }
+    
+    console.log(`IFC: Under-bench position: ${underBenchPos} → singlePos=${singlePos.toFixed(3)}m (flushL=${flushLeft.toFixed(3)}, flushR=${flushRight.toFixed(3)})`);
+    
+    // Undershelf height (lower position on frame)
+    const shelfHeight = legOffset + 0.2; // 200mm above floor
+    
+    // Helper: Add undershelf (spans frame width)
+    const addUndershelf = (shelfWidth?: number, offsetX?: number) => {
+      const sw = shelfWidth || (width - 0.15);
+      const ox = offsetX || 0;
+      solids.push(createBox(ox, 0, shelfHeight, sw, depth - 0.2, SHELF_THICK));
     };
     
-    // Helper to add a cabinet with detailed drawer geometry
+    // Helper: Add drawer unit with individual drawer fronts
+    // Drawers stack from TOP (i=0) to BOTTOM (i=n-1) to match 3D viewer
+    const addDrawerUnit = (x: number, drawerCount: number, suspended: boolean = true) => {
+      const unitHeight = drawerCount * DRAWER_HEIGHT + 0.05;
+      const unitZ = suspended ? (height - unitHeight - 0.05) : (shelfHeight + SHELF_THICK);
+      
+      // Cabinet shell/body
+      solids.push(createBox(x, 0, unitZ, DRAWER_UNIT_WIDTH, UNIT_DEPTH, unitHeight));
+      
+      // Individual drawer fronts (stacked from TOP to BOTTOM like 3D viewer)
+      for (let i = 0; i < drawerCount; i++) {
+        // Top drawer (i=0) is at top, each subsequent drawer is lower
+        const drawerZ = unitZ + unitHeight - 0.025 - ((i + 1) * DRAWER_HEIGHT);
+        // Drawer front face at front of unit
+        solids.push(createBox(
+          x, 
+          UNIT_DEPTH/2 + 0.01, // Front face (positive Y = front)
+          drawerZ,
+          DRAWER_UNIT_WIDTH - 0.04,
+          SHELL_THICK,
+          DRAWER_HEIGHT - 0.01
+        ));
+      }
+      
+      console.log(`IFC: Added ${drawerCount}-drawer unit at x=${x.toFixed(3)} (pos=${underBenchPos})`);
+    };
+    
+    // Helper: Add cupboard unit (single door)
+    const addCupboardUnit = (x: number) => {
+      const cupHeight = 0.65;
+      const unitZ = height - cupHeight - 0.05;
+      
+      // Cupboard body
+      solids.push(createBox(x, 0, unitZ, DRAWER_UNIT_WIDTH, UNIT_DEPTH, cupHeight));
+      
+      // Door front
+      solids.push(createBox(
+        x,
+        UNIT_DEPTH/2 - SHELL_THICK/2 + 0.01,
+        unitZ + cupHeight/2,
+        DRAWER_UNIT_WIDTH - 0.04,
+        SHELL_THICK,
+        cupHeight - 0.04
+      ));
+    };
+    
+    // Helper: Add cabinet with embedded drawer configuration
     const addCabinetWithDrawers = (x: number, placement: 'left' | 'right') => {
       const embeddedConfig = embeddedCabinets.find((c: any) => c.placement === placement);
       const customDrawers = embeddedConfig?.configuration?.customDrawers;
       
       if (customDrawers && customDrawers.length > 0 && product) {
-        // Find drawer group to get heights
         const drawerGroup = product.groups?.find((g: any) => g.type === 'drawer_stack' || g.id === 'config');
-        
-        // Calculate drawer heights - sort largest first (bottom)
-        const drawersWithHeights = customDrawers.map((d: any, idx: number) => {
+        const drawersWithHeights = customDrawers.map((d: any) => {
           const opt = drawerGroup?.options?.find((o: any) => o.id === d.id);
-          const heightMm = opt?.meta?.front || 100;
-          return { ...d, heightMm, originalIndex: idx };
-        }).sort((a: any, b: any) => b.heightMm - a.heightMm);
+          return opt?.meta?.front || 100;
+        }).sort((a: number, b: number) => b - a); // Largest at bottom
         
-        // Cabinet shell components
-        const shellThickness = 0.02;
-        const plinthHeight = 0.04;
-        const topThickness = 0.03;
-        const internalHeight = UNIT_HEIGHT - plinthHeight - topThickness;
+        const totalHeight = drawersWithHeights.reduce((sum: number, h: number) => sum + h, 0) / 1000 + 0.07;
+        const unitZ = height - totalHeight - 0.05;
         
-        // Add cabinet shell: plinth, top, sides, back
-        solids.push(createBox(x, 0, unitZ, UNIT_WIDTH, UNIT_DEPTH, plinthHeight)); // Plinth
-        solids.push(createBox(x, 0, unitZ + UNIT_HEIGHT - topThickness, UNIT_WIDTH, UNIT_DEPTH, topThickness)); // Top
-        solids.push(createBox(x - UNIT_WIDTH/2 + shellThickness/2, 0, unitZ + plinthHeight + internalHeight/2, shellThickness, UNIT_DEPTH, internalHeight)); // Left side
-        solids.push(createBox(x + UNIT_WIDTH/2 - shellThickness/2, 0, unitZ + plinthHeight + internalHeight/2, shellThickness, UNIT_DEPTH, internalHeight)); // Right side
-        solids.push(createBox(x, -UNIT_DEPTH/2 + shellThickness/2, unitZ + plinthHeight + internalHeight/2, UNIT_WIDTH, shellThickness, internalHeight)); // Back
+        // Cabinet shell
+        solids.push(createBox(x, 0, unitZ, DRAWER_UNIT_WIDTH, UNIT_DEPTH, totalHeight));
         
-        // Add individual drawer fronts
-        let currentZOffset = 0;
-        const drawerFrontThickness = 0.02;
-        const drawerGap = 0.004;
-        
-        drawersWithHeights.forEach((drawer: any) => {
-          const drawerHeight = drawer.heightMm / 1000;
-          const drawerZ = unitZ + plinthHeight + currentZOffset + drawerGap/2;
-          
-          // Drawer front at the front face of cabinet
+        // Individual drawer fronts
+        let currentZ = unitZ + 0.04;
+        drawersWithHeights.forEach((heightMm: number) => {
+          const dh = heightMm / 1000;
           solids.push(createBox(
             x,
-            UNIT_DEPTH/2 - drawerFrontThickness/2,
-            drawerZ + (drawerHeight - drawerGap)/2,
-            UNIT_WIDTH - shellThickness * 2 - 0.01,
-            drawerFrontThickness,
-            drawerHeight - drawerGap
+            UNIT_DEPTH/2 - SHELL_THICK/2 + 0.01,
+            currentZ + dh/2,
+            DRAWER_UNIT_WIDTH - 0.04,
+            SHELL_THICK,
+            dh - 0.004
           ));
-          
-          currentZOffset += drawerHeight;
+          currentZ += dh;
         });
         
-        console.log(`IFC: Added embedded cabinet at ${placement} with ${customDrawers.length} configured drawers`);
+        console.log(`IFC: Added embedded cabinet at ${placement} with ${customDrawers.length} drawers`);
       } else {
-        // Fallback to simple box if no drawer configuration
-        addStorageUnit(x);
+        // Fallback to 5-drawer cabinet
+        addDrawerUnit(x, 5, true);
       }
     };
     
-    // Determine storage unit positions based on under-bench option
-    // Heavy Duty (Bxx codes) - typically use pre-set drawer counts, not embedded config
+    // Heavy Duty (Bxx codes) - match Viewer3D.tsx switch statement exactly
     if (underBenchOption.startsWith('B')) {
       switch(underBenchOption) {
-        case 'B1': case 'B2': case 'B3': case 'B4': case 'B5': case 'B28':
-          addStorageUnit(singlePos);
-          break;
-        case 'B6': case 'B7': case 'B12': case 'B13':
-          addStorageUnit(flushLeft);
-          addStorageUnit(flushRight);
-          break;
-        case 'B15': case 'B16': case 'B17': case 'B18': case 'B21': case 'B22': case 'B23': case 'B24':
-          addStorageUnit(singlePos);
-          break;
-        case 'B19': case 'B20': case 'B25': case 'B26': case 'B27':
-          addStorageUnit(flushLeft);
-          addStorageUnit(flushRight);
-          break;
+        case 'B1': addDrawerUnit(singlePos, 1, true); break;
+        case 'B2': addDrawerUnit(singlePos, 2, true); break;
+        case 'B3': addDrawerUnit(singlePos, 3, true); break;
+        case 'B4': case 'B28': addCabinetWithDrawers(singlePos, singlePlacement as 'left' | 'right'); break;
+        case 'B5': addCupboardUnit(singlePos); break;
+        case 'B6': addCabinetWithDrawers(flushLeft, 'left'); addDrawerUnit(flushRight, 1, true); break;
+        case 'B7': addCupboardUnit(flushLeft); addDrawerUnit(flushRight, 1, true); break;
+        case 'B12': addDrawerUnit(flushLeft, 3, true); addDrawerUnit(flushRight, 3, true); break;
+        case 'B13': addCabinetWithDrawers(flushLeft, 'left'); addCupboardUnit(flushRight); break;
+        case 'B14': addUndershelf(); break;
+        case 'B15': case 'B18': addUndershelf(); addDrawerUnit(singlePos, 1, true); break;
+        case 'B16': addUndershelf(); addDrawerUnit(singlePos, 2, true); break;
+        case 'B17': addUndershelf(); addDrawerUnit(singlePos, 3, true); break;
+        case 'B19': addUndershelf(); addDrawerUnit(flushLeft, 1, true); addDrawerUnit(flushRight, 2, true); break;
+        case 'B20': addUndershelf(); addDrawerUnit(flushLeft, 1, true); addDrawerUnit(flushRight, 3, true); break;
+        case 'B21': case 'B22': addUndershelf(); addCabinetWithDrawers(singlePos, singlePlacement as 'left' | 'right'); break;
+        case 'B23': case 'B24': addUndershelf(); addCupboardUnit(singlePos); break;
+        case 'B25': addUndershelf(); addCabinetWithDrawers(flushLeft, 'left'); addCupboardUnit(flushRight); break;
+        case 'B26': addUndershelf(); addCabinetWithDrawers(flushLeft, 'left'); addCabinetWithDrawers(flushRight, 'right'); break;
+        case 'B27': addUndershelf(); addCupboardUnit(flushLeft); addCupboardUnit(flushRight); break;
       }
     }
     
-    // Industrial (iw-ub-xxx codes) - uses embeddedCabinets for HD Cabinet configurations
+    // Industrial (iw-ub-xxx codes)
     if (underBenchOption.startsWith('iw-ub-')) {
-      const isCabinet = underBenchOption.includes('cabinet');
+      const addHalfShelf = () => addUndershelf(width/2 - 0.05, -width/4);
       
-      // Dual unit configurations
-      if (underBenchOption.includes('-2')) {
-        if (isCabinet) {
-          addCabinetWithDrawers(flushLeft, 'left');
-          addCabinetWithDrawers(flushRight, 'right');
-        } else {
-          addStorageUnit(flushLeft);
-          addStorageUnit(flushRight);
-        }
-      } 
-      // Mixed configurations with cabinet
-      else if (underBenchOption.includes('cabinet-door')) {
-        addCabinetWithDrawers(flushLeft, 'left');
-        addStorageUnit(flushRight);
-      }
-      else if (underBenchOption.includes('cabinet-drawer')) {
-        addCabinetWithDrawers(flushLeft, 'left');
-        addStorageUnit(flushRight);
-      }
-      else if (underBenchOption.includes('shelf-cabinet') || underBenchOption.includes('shelf_cab')) {
-        addCabinetWithDrawers(flushRight, 'right');
-      }
-      else if (underBenchOption.includes('half-shelf-drawer-cabinet')) {
-        addStorageUnit(flushLeft);
-        addCabinetWithDrawers(flushRight, 'right');
-      }
-      // Single cabinet
-      else if (underBenchOption.includes('cabinet-1') || underBenchOption === 'iw-ub-cabinet-1') {
-        addCabinetWithDrawers(singlePos, singlePlacement as 'left' | 'right');
-      }
-      // Other dual units (doors, drawers)
-      else if (underBenchOption.includes('door-drawer') || 
-               underBenchOption.includes('drawers-2') ||
-               underBenchOption.includes('half-shelf-drawer-cupboard')) {
-        addStorageUnit(flushLeft);
-        addStorageUnit(flushRight);
-      }
-      // Single units (non-cabinet)
-      else if (underBenchOption.includes('drawer') || 
-               underBenchOption.includes('door')) {
-        addStorageUnit(singlePos);
+      switch(underBenchOption) {
+        case 'iw-ub-shelf': addUndershelf(); break;
+        case 'iw-ub-half-shelf': addHalfShelf(); break;
+        case 'iw-ub-drawer-1': addDrawerUnit(singlePos, 1, true); break;
+        case 'iw-ub-door-1': addCupboardUnit(singlePos); break;
+        case 'iw-ub-cabinet-1': addCabinetWithDrawers(singlePos, singlePlacement as 'left' | 'right'); break;
+        case 'iw-ub-drawer-2': addDrawerUnit(flushLeft, 1, true); addDrawerUnit(flushRight, 1, true); break;
+        case 'iw-ub-door-2': addCupboardUnit(flushLeft); addCupboardUnit(flushRight); break;
+        case 'iw-ub-cabinet-2': addCabinetWithDrawers(flushLeft, 'left'); addCabinetWithDrawers(flushRight, 'right'); break;
+        case 'iw-ub-door-drawer': addCupboardUnit(flushLeft); addDrawerUnit(flushRight, 1, true); break;
+        case 'iw-ub-cabinet-door': addCabinetWithDrawers(flushLeft, 'left'); addCupboardUnit(flushRight); break;
+        case 'iw-ub-shelf-cabinet': case 'iw-ub-shelf_cab': addUndershelf(); addCabinetWithDrawers(flushRight, 'right'); break;
+        case 'iw-ub-half-shelf-drawer-cabinet': addHalfShelf(); addDrawerUnit(flushLeft, 1, true); addCabinetWithDrawers(flushRight, 'right'); break;
+        case 'iw-ub-half-shelf-drawer-cupboard': addHalfShelf(); addDrawerUnit(flushLeft, 1, true); addCupboardUnit(flushRight); break;
       }
     }
   }
   
   // ==========================================================
-  // 6. ABOVE-BENCH STRUCTURE (uprights, crossbar, shelf, power panel)
+  // 6. ABOVE-BENCH STRUCTURE - Matching Viewer3D.tsx exactly
+  // Uses 3 posts (left, center, right), multiple shelves, and back panels
   // ==========================================================
   const aboveBenchOption = configuration?.selections?.above_bench;
   
   if (aboveBenchOption && aboveBenchOption !== 'T0' && aboveBenchOption !== 'iw-ab-none') {
-    const POST_WIDTH = 0.04; // 40mm square posts
-    const POST_HEIGHT = 1.1; // Height of uprights
-    const SHELF_THICKNESS = 0.02;
+    const POST_SIZE = 0.04; // 40mm square posts
+    const POST_HEIGHT = 1.1; // Height of uprights above worktop
+    const SHELF_THICK = 0.02;
     const SHELF_DEPTH = 0.25;
-    const PANEL_HEIGHT = 0.1;
-    const PANEL_DEPTH = 0.04;
+    const PANEL_THICK = 0.015; // Back panel thickness
+    const PANEL_HEIGHT = 0.3; // Pegboard/louvre panel height
     
-    // Y position for above-bench items (starts at worktop surface)
-    const postBaseZ = height + WORKTOP_THICKNESS;
+    // Z position base (top of worktop)
+    const baseZ = height + WORKTOP_THICKNESS;
+    const backY = -depth/2 + POST_SIZE/2 + 0.01; // Y position for back elements
     
-    // Check if power panel only (no shelf, no uprights needed)
+    // Bay width (space between posts for panels)
+    const bayWidth = (width - POST_SIZE * 3) / 2 - 0.02;
+    
+    // Power panel only (no frame structure)
     const isPowerOnly = aboveBenchOption === 'iw-ab-power' || aboveBenchOption === 'P';
     
     if (isPowerOnly) {
-      // Power panel rail ONLY - sits at back of worktop, no uprights
-      solids.push(createBox(
-        0,
-        -depth/2 + PANEL_DEPTH/2,
-        postBaseZ + 0.04, // Just above worktop
-        width - 0.12,
-        PANEL_DEPTH,
-        PANEL_HEIGHT
-      ));
+      // Just a power rail at the back
+      solids.push(createBox(0, backY, baseZ + 0.04, width - 0.12, 0.04, 0.1));
     } else {
-      // Shelf options require uprights
-      const hasShelf = aboveBenchOption.includes('shelf') || 
-                       aboveBenchOption === 'SP' ||
-                       aboveBenchOption.includes('iw-ab-shelf');
+      // Determine shelf positions and panel config based on T-code
+      // Matching Viewer3D.tsx switch statement
+      let shelfHeights: number[] = [];
+      let panels: { y: number; left: string; right: string }[] = [];
+      const yLower = 0.45; // Lower panel position
+      const yUpper = 0.65; // Upper panel position (if 4 panels)
       
-      const hasPower = aboveBenchOption.includes('power') || 
-                       aboveBenchOption === 'SP';
+      switch(aboveBenchOption) {
+        case 'T1': shelfHeights = [1.05, 0.7, 0.35]; break;
+        case 'T2': shelfHeights = [1.05, 0.8, 0.55, 0.3]; break;
+        case 'T3':
+          shelfHeights = [1.05, 0.75];
+          panels = [{ y: yLower, left: 'panel', right: 'panel' }];
+          break;
+        case 'T4':
+          shelfHeights = [1.05, 0.75];
+          panels = [{ y: yLower, left: 'panel', right: 'panel' }];
+          break;
+        case 'T5':
+          shelfHeights = [1.05, 0.75];
+          panels = [{ y: yLower, left: 'panel', right: 'panel' }];
+          break;
+        case 'T6':
+          shelfHeights = [1.05];
+          panels = [
+            { y: yUpper, left: 'panel', right: 'panel' },
+            { y: yLower, left: 'panel', right: 'panel' }
+          ];
+          break;
+        case 'T7':
+          shelfHeights = [1.05];
+          panels = [
+            { y: yUpper, left: 'panel', right: 'panel' },
+            { y: yLower, left: 'panel', right: 'panel' }
+          ];
+          break;
+        case 'T8':
+          shelfHeights = [1.05];
+          panels = [
+            { y: yUpper, left: 'panel', right: 'panel' },
+            { y: yLower, left: 'panel', right: 'panel' }
+          ];
+          break;
+        case 'T9': shelfHeights = [0.5]; break; // Fixed shelf only
+        case 'T10': shelfHeights = [0.5]; break; // Inclined shelf
+        // Industrial above-bench options
+        case 'iw-ab-shelf': case 'SP': shelfHeights = [1.05]; break;
+        default:
+          if (aboveBenchOption.includes('shelf')) {
+            shelfHeights = [1.05];
+          }
+      }
       
-      // Only add uprights if we have shelf (not for power-only)
-      if (hasShelf || aboveBenchOption.startsWith('T')) {
-        // Left upright post
+      // Only render frame if we have shelves or panels
+      if (shelfHeights.length > 0 || panels.length > 0) {
+        // THREE UPRIGHT POSTS (left, center, right) - matching Viewer3D
+        // Posts sit ON TOP of worktop, so start at baseZ (not baseZ + offset)
+        const postPositions = [
+          -width/2 + POST_SIZE/2 + 0.02,  // Left
+          0,                               // Center
+          width/2 - POST_SIZE/2 - 0.02    // Right
+        ];
+        
+        postPositions.forEach(xPos => {
+          // Start post at baseZ (top of worktop), extend UP by POST_HEIGHT
+          solids.push(createBox(xPos, backY, baseZ, POST_SIZE, POST_SIZE, POST_HEIGHT));
+        });
+        
+        // TOP CROSSBAR (connects all posts) - at top of posts
         solids.push(createBox(
-          -width/2 + POST_WIDTH/2 + 0.01,
-          -depth/2 + POST_WIDTH/2 + 0.01,
-          postBaseZ,
-          POST_WIDTH, POST_WIDTH, POST_HEIGHT
+          0, 
+          backY, 
+          baseZ + POST_HEIGHT - POST_SIZE, // Top of posts minus crossbar thickness
+          width - 0.04,
+          POST_SIZE,
+          POST_SIZE
         ));
         
-        // Right upright post
-        solids.push(createBox(
-          width/2 - POST_WIDTH/2 - 0.01,
-          -depth/2 + POST_WIDTH/2 + 0.01,
-          postBaseZ,
-          POST_WIDTH, POST_WIDTH, POST_HEIGHT
-        ));
-        
-        // Top crossbar (connects uprights)
-        solids.push(createBox(
-          0,
-          -depth/2 + POST_WIDTH/2 + 0.01,
-          postBaseZ + POST_HEIGHT - POST_WIDTH/2,
-          width - 0.02,
-          POST_WIDTH, POST_WIDTH
-        ));
-        
-        // Shelf
-        if (hasShelf) {
+        // SHELVES at specified heights (relative to baseZ)
+        shelfHeights.forEach(h => {
           solids.push(createBox(
             0,
-            -depth/2 + SHELF_DEPTH/2 + 0.05,
-            postBaseZ + POST_HEIGHT - SHELF_THICKNESS/2,
+            backY + SHELF_DEPTH/2 - POST_SIZE/2, // Slightly forward of posts
+            baseZ + h - SHELF_THICK/2, // Position shelf at this height
             width - 0.1,
             SHELF_DEPTH,
-            SHELF_THICKNESS
+            SHELF_THICK
           ));
-        }
+        });
         
-        // Power panel (combined with shelf)
-        if (hasPower) {
+        // BACK PANELS (pegboard/louvre) - two bays between posts
+        panels.forEach(panelRow => {
+          const panelZ = baseZ + panelRow.y - PANEL_HEIGHT/2;
+          
+          // Left bay panel (between left and center post)
           solids.push(createBox(
-            0,
-            -depth/2 + PANEL_DEPTH/2,
-            postBaseZ + 0.15,
-            width - 0.12,
-            PANEL_DEPTH,
+            -bayWidth/2 - POST_SIZE/2,
+            backY,
+            panelZ,
+            bayWidth,
+            PANEL_THICK,
             PANEL_HEIGHT
           ));
+          
+          // Right bay panel (between center and right post)
+          solids.push(createBox(
+            bayWidth/2 + POST_SIZE/2,
+            backY,
+            panelZ,
+            bayWidth,
+            PANEL_THICK,
+            PANEL_HEIGHT
+          ));
+        });
+        
+        // Power panel for SP (Shelf + Power) options
+        const hasPower = aboveBenchOption === 'SP' || 
+                         aboveBenchOption.includes('power') ||
+                         aboveBenchOption === 'iw-ab-shelf-power';
+        if (hasPower) {
+          solids.push(createBox(0, backY + 0.02, baseZ + 0.15, width - 0.12, 0.04, 0.1));
         }
       }
-      
-      // For T-series with panels (pegboard/louvre) - add back panel
-      if (aboveBenchOption.startsWith('T') && !['T0', 'T9', 'T10'].includes(aboveBenchOption)) {
-        const PANEL_WIDTH = (width - 0.1) / 2;
-        const BACK_PANEL_HEIGHT = 0.6;
-        const PANEL_THICKNESS = 0.015;
-        
-        // Lower panels (two bays)
-        solids.push(createBox(
-          -PANEL_WIDTH/2 - 0.02,
-          -depth/2 + PANEL_THICKNESS/2 + 0.02,
-          postBaseZ + 0.35,
-          PANEL_WIDTH,
-          PANEL_THICKNESS,
-          BACK_PANEL_HEIGHT
-        ));
-        solids.push(createBox(
-          PANEL_WIDTH/2 + 0.02,
-          -depth/2 + PANEL_THICKNESS/2 + 0.02,
-          postBaseZ + 0.35,
-          PANEL_WIDTH,
-          PANEL_THICKNESS,
-          BACK_PANEL_HEIGHT
-        ));
-      }
     }
+    
+    console.log(`IFC: Above-bench ${aboveBenchOption} added with shelves and panels`);
   }
   
   // Create single shape representation with all geometry components

@@ -62,41 +62,78 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
       });
 
       if (response.success) {
+        // Check if expected URLs are present
+        const expectedUrl = exportType === 'IFC' ? response.ifcUrl : 
+                           exportType === 'OBJ' ? response.objUrl :
+                           exportType === 'BLENDER_SCRIPT' ? response.blenderScriptUrl :
+                           exportType === 'DATA' ? response.dataUrls : response.ifcUrl;
+        
+        if (!expectedUrl && exportType !== 'SPEC_PACK') {
+          console.warn('Export succeeded but no download URL returned:', response);
+          setExportStatus({ success: false, message: 'File generated but download URL not available. Check console for details.' });
+          return;
+        }
+        
         setExportStatus({ success: true, message: 'Export generated successfully! Files downloading...' });
         
-        // Helper to trigger download
-        const downloadFile = (url: string, filename: string) => {
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          // Clean up blob URLs after download
-          if (url.startsWith('blob:')) {
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        // Helper to trigger download - handles both blob URLs and cross-origin signed URLs
+        const downloadFile = async (url: string, filename: string) => {
+          try {
+            // For blob URLs, use direct download
+            if (url.startsWith('blob:')) {
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            } else {
+              // For cross-origin URLs (like Supabase signed URLs), fetch and create blob
+              const response = await fetch(url);
+              if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`);
+              const blob = await response.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = blobUrl;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+            }
+          } catch (error) {
+            console.error('Download failed:', error);
+            // Fallback: open in new tab
+            window.open(url, '_blank');
           }
         };
         
         const baseFilename = `Boscotek_${product.id}_${referenceCode}`;
         
-        // Download files
+        // Download files (using Promise.all for parallel downloads where appropriate)
         if (exportType === 'IFC' && response.ifcUrl) {
-          downloadFile(response.ifcUrl, `${baseFilename}.ifc`);
+          await downloadFile(response.ifcUrl, `${baseFilename}.ifc`);
         } else if (exportType === 'OBJ') {
-          if (response.objUrl) downloadFile(response.objUrl, `${baseFilename}.obj`);
-          if (response.mtlUrl) downloadFile(response.mtlUrl, `${baseFilename}.mtl`);
+          const downloads = [];
+          if (response.objUrl) downloads.push(downloadFile(response.objUrl, `${baseFilename}.obj`));
+          if (response.mtlUrl) downloads.push(downloadFile(response.mtlUrl, `${baseFilename}.mtl`));
+          await Promise.all(downloads);
         } else if (exportType === 'BLENDER_SCRIPT' && response.blenderScriptUrl) {
-          downloadFile(response.blenderScriptUrl, `${baseFilename}_blender.py`);
+          await downloadFile(response.blenderScriptUrl, `${baseFilename}_blender.py`);
         } else if (exportType === 'DATA' && response.dataUrls) {
-          if (response.dataUrls.csv) downloadFile(response.dataUrls.csv, `${baseFilename}.csv`);
-          if (response.dataUrls.json) downloadFile(response.dataUrls.json, `${baseFilename}.json`);
-          if (response.dataUrls.txt) downloadFile(response.dataUrls.txt, `${baseFilename}.txt`);
+          const downloads = [];
+          if (response.dataUrls.csv) downloads.push(downloadFile(response.dataUrls.csv, `${baseFilename}.csv`));
+          if (response.dataUrls.json) downloads.push(downloadFile(response.dataUrls.json, `${baseFilename}.json`));
+          if (response.dataUrls.txt) downloads.push(downloadFile(response.dataUrls.txt, `${baseFilename}.txt`));
+          await Promise.all(downloads);
         } else if (exportType === 'SPEC_PACK') {
-          if (response.ifcUrl) downloadFile(response.ifcUrl, `${baseFilename}.ifc`);
-          if (response.dataUrls?.csv) downloadFile(response.dataUrls.csv, `${baseFilename}.csv`);
-          if (response.dataUrls?.json) downloadFile(response.dataUrls.json, `${baseFilename}.json`);
-          if (response.dataUrls?.txt) downloadFile(response.dataUrls.txt, `${baseFilename}.txt`);
+          const downloads = [];
+          if (response.ifcUrl) downloads.push(downloadFile(response.ifcUrl, `${baseFilename}.ifc`));
+          if (response.dataUrls?.csv) downloads.push(downloadFile(response.dataUrls.csv, `${baseFilename}.csv`));
+          if (response.dataUrls?.json) downloads.push(downloadFile(response.dataUrls.json, `${baseFilename}.json`));
+          if (response.dataUrls?.txt) downloads.push(downloadFile(response.dataUrls.txt, `${baseFilename}.txt`));
+          await Promise.all(downloads);
         }
       } else {
         setExportStatus({ success: false, message: response.error || 'Export failed' });
