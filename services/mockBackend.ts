@@ -1,8 +1,8 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
 import { supabase } from "./supabaseClient";
-import { ImportBatch, ImportItem, User, ImportStatus, ProductDefinition, DrawerInteriorOption, QuoteRequest, PricingResult, Quote, QuoteLineItem, CustomerDetails, QuoteStatus } from "../types";
-import { CATALOG as SEED_CATALOG, INTERIOR_OPTIONS as SEED_INTERIORS, resolvePartitionCode } from '../data/catalog';
+import { ImportBatch, ImportItem, User, ImportStatus, ProductDefinition, DrawerInteriorOption, DrawerAccessory, QuoteRequest, PricingResult, Quote, QuoteLineItem, CustomerDetails, QuoteStatus } from "../types";
+import { CATALOG as SEED_CATALOG, INTERIOR_OPTIONS as SEED_INTERIORS, DRAWER_ACCESSORIES as SEED_ACCESSORIES, resolvePartitionCode, resolveAccessoryCode } from '../data/catalog';
 import { seedCatalog } from "./catalogApi";
 import { submitQuoteFunction } from "./quotesApi";
 
@@ -24,6 +24,7 @@ const GEMINI_API_KEY = resolveGeminiApiKey();
 let CACHE = {
   products: [] as ProductDefinition[],
   interiors: [] as DrawerInteriorOption[],
+  accessories: [] as DrawerAccessory[],
   quotes: [] as Quote[],
   batches: [] as ImportBatch[],
   isLoaded: false
@@ -100,6 +101,14 @@ const refreshCache = async () => {
   if (intData) {
     CACHE.interiors = intData.map((row: any) => row.data as DrawerInteriorOption);
   }
+
+  // Fetch Accessories (if table exists, otherwise use seed)
+  const { data: accData } = await supabase.from('drawer_accessories').select('*');
+  if (accData && accData.length > 0) {
+    CACHE.accessories = accData.map((row: any) => row.data as DrawerAccessory);
+  } else {
+    CACHE.accessories = SEED_ACCESSORIES;
+  }
   
   CACHE.isLoaded = true;
 };
@@ -124,6 +133,16 @@ export const getInteriors = async (): Promise<DrawerInteriorOption[]> => {
     return SEED_INTERIORS;
   }
   return CACHE.interiors;
+};
+
+export const getAccessories = async (): Promise<DrawerAccessory[]> => {
+  if (!CACHE.isLoaded || CACHE.accessories.length === 0) {
+    await refreshCache();
+  }
+  if (CACHE.accessories.length === 0) {
+    return SEED_ACCESSORIES;
+  }
+  return CACHE.accessories;
 };
 
 // --- CATALOG API (WRITE / ADMIN) ---
@@ -177,11 +196,13 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
   // Ensure we have data
   if (CACHE.products.length === 0) await getProducts();
   if (CACHE.interiors.length === 0) await getInteriors();
+  if (CACHE.accessories.length === 0) await getAccessories();
 
   // 1. Find Product
   // Fallback to SEED if cache is empty (safety net)
   const products = CACHE.products.length > 0 ? CACHE.products : SEED_CATALOG;
   const interiors = CACHE.interiors.length > 0 ? CACHE.interiors : SEED_INTERIORS;
+  const accessories = CACHE.accessories.length > 0 ? CACHE.accessories : SEED_ACCESSORIES;
 
   const product = products.find(p => p.id === request.productId);
   if (!product) {
@@ -278,6 +299,7 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
          const counts: Record<number, number> = {};
          let drawerCost = 0;
          const interiorItems: Record<string, { count: number, price: number, desc: string, code: string }> = {};
+         const accessoryItems: Record<string, { count: number, price: number, name: string, code: string }> = {};
 
          request.customDrawers.forEach(drawer => {
             const shellOpt = drawerGroup.options.find(o => o.id === drawer.id);
@@ -296,6 +318,20 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
                    }
                    interiorItems[code].count++;
                }
+            }
+            // Process accessories
+            if (drawer.accessories && drawer.accessories.length > 0) {
+               const h = shellOpt?.meta?.front || 0;
+               drawer.accessories.forEach(accSel => {
+                  const accessory = accessories.find(a => a.id === accSel.accessoryId);
+                  if (accessory && accSel.quantity > 0) {
+                     const code = resolveAccessoryCode(accessory, h);
+                     if (!accessoryItems[code]) {
+                        accessoryItems[code] = { count: 0, price: accessory.price, name: accessory.name, code: code };
+                     }
+                     accessoryItems[code].count += accSel.quantity;
+                  }
+               });
             }
          });
 
@@ -317,6 +353,17 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
              breakdown.push({
                  code: item.code,
                  label: `${item.desc} (x${item.count})`,
+                 price: itemTotal
+             });
+         });
+
+         // Add accessory line items
+         Object.values(accessoryItems).forEach(item => {
+             const itemTotal = item.price * item.count;
+             total += itemTotal;
+             breakdown.push({
+                 code: item.code,
+                 label: `${item.name} (x${item.count})`,
                  price: itemTotal
              });
          });
@@ -344,6 +391,23 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
                   price: interior.price
                });
              }
+           }
+           // Process accessories for this drawer
+           if (drawer.accessories && drawer.accessories.length > 0) {
+             const h = shellOpt?.meta?.front || 0;
+             drawer.accessories.forEach(accSel => {
+                const accessory = accessories.find(a => a.id === accSel.accessoryId);
+                if (accessory && accSel.quantity > 0) {
+                   const code = resolveAccessoryCode(accessory, h);
+                   const lineTotal = accessory.price * accSel.quantity;
+                   total += lineTotal;
+                   breakdown.push({
+                      code: code,
+                      label: `  ↳ ${accessory.name} (x${accSel.quantity})`,
+                      price: lineTotal
+                   });
+                }
+             });
            }
          });
       }

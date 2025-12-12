@@ -1,5 +1,5 @@
 
-import { ProductDefinition, DrawerInteriorOption } from '../types';
+import { ProductDefinition, DrawerInteriorOption, DrawerAccessory } from '../types';
 
 // --- DRAWER INTERIOR DEFINITIONS ---
 
@@ -46,8 +46,8 @@ export const INTERIOR_OPTIONS: DrawerInteriorOption[] = [
   { id: 'ps-66-x-4-4', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.4.4', price: 58, supported_drawer_heights_mm: [100, 150, 225, 300], layout_description: '100mm x 100mm (36 Compartments)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 36 },
   { id: 'ps-66-x-4-8', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.4.8', price: 55, supported_drawer_heights_mm: [100, 150, 225, 300], layout_description: '100mm x 200mm (18 Compartments)', cell_width_mm: 100, cell_depth_mm: 200, cell_count: 18 },
   { id: 'ps-66-x-6-6', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.6.6', price: 52, supported_drawer_heights_mm: [150, 225, 300], layout_description: '150mm x 150mm (16 Compartments)', cell_width_mm: 150, cell_depth_mm: 150, cell_count: 16 },
-  { id: 'ps-66-x-8-6', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.8.6', price: 50, supported_drawer_heights_mm: [200, 225, 300], layout_description: '200mm x 150mm (12 Compartments)', cell_width_mm: 200, cell_depth_mm: 150, cell_count: 12 },
-  { id: 'ps-66-x-8-8', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.8.8', price: 48, supported_drawer_heights_mm: [200, 225, 300], layout_description: '200mm x 200mm (9 Compartments)', cell_width_mm: 200, cell_depth_mm: 200, cell_count: 9 },
+  { id: 'ps-66-x-8-6', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.8.6', price: 50, supported_drawer_heights_mm: [225, 300], layout_description: '200mm x 150mm (12 Compartments)', cell_width_mm: 200, cell_depth_mm: 150, cell_count: 12 },
+  { id: 'ps-66-x-8-8', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.8.8', price: 48, supported_drawer_heights_mm: [225, 300], layout_description: '200mm x 200mm (9 Compartments)', cell_width_mm: 200, cell_depth_mm: 200, cell_count: 9 },
   { id: 'ps-66-x-12-8', type: 'partition_set', width_mm: 710, depth_type: 'D', code_base: 'PS.66.X.12.8', price: 45, supported_drawer_heights_mm: [300], layout_description: '300mm x 200mm (6 Compartments)', cell_width_mm: 300, cell_depth_mm: 200, cell_count: 6 },
   
   // Bin Sets (BS.66)
@@ -118,6 +118,204 @@ export const resolvePartitionCode = (option: DrawerInteriorOption, drawerHeight:
   }
   return option.code_base;
 };
+
+
+// --- DRAWER ACCESSORIES ---
+// Individual items that can be added to any drawer (separate from pre-configured sets)
+
+export const DRAWER_ACCESSORIES: DrawerAccessory[] = [
+  // ==========================================================
+  // STEEL PARTITIONS (P.X.600)
+  // Run front to rear, slotted at 25mm increments for dividers
+  // ==========================================================
+  { 
+    id: 'part-600', 
+    category: 'partition', 
+    code_base: 'P.X.600', 
+    name: 'Steel Partition', 
+    description: '600mm depth steel partition - front to rear',
+    price: 18,
+    depth_mm: 600,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+
+  // ==========================================================
+  // STEEL DRAWER TRAYS (T.75.xx.600)
+  // Removable compartments for holding contents
+  // ==========================================================
+  { 
+    id: 'tray-50-600', 
+    category: 'tray', 
+    code_base: 'T.75.50.600', 
+    name: 'Steel Tray 50mm', 
+    description: '50mm (h) x 50mm (w) removable tray',
+    price: 12,
+    width_mm: 50,
+    height_mm: 50,
+    depth_mm: 600,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+  { 
+    id: 'tray-100-600', 
+    category: 'tray', 
+    code_base: 'T.75.100.600', 
+    name: 'Steel Tray 100mm', 
+    description: '50mm (h) x 100mm (w) removable tray',
+    price: 15,
+    width_mm: 100,
+    height_mm: 50,
+    depth_mm: 600,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+
+  // ==========================================================
+  // TRAY DIVIDERS (TD.75.xx)
+  // ==========================================================
+  { 
+    id: 'td-50', 
+    category: 'tray_divider', 
+    code_base: 'TD.75.50', 
+    name: 'Tray Divider 50mm', 
+    description: '50mm (h) tray divider',
+    price: 5,
+    height_mm: 50,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+  { 
+    id: 'td-100', 
+    category: 'tray_divider', 
+    code_base: 'TD.75.100', 
+    name: 'Tray Divider 100mm', 
+    description: '100mm (h) tray divider',
+    price: 6,
+    height_mm: 100,
+    supported_drawer_heights_mm: [100, 150, 225, 300]
+  },
+
+  // ==========================================================
+  // POWDERCOATED STEEL DIVIDERS (D.X.xxx)
+  // Run left to right, interconnect with partitions
+  // ==========================================================
+  { id: 'div-steel-75', category: 'divider_steel', code_base: 'D.X.75', name: 'Steel Divider 75mm', description: '75mm width powdercoated steel divider', price: 8, width_mm: 75, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-100', category: 'divider_steel', code_base: 'D.X.100', name: 'Steel Divider 100mm', description: '100mm width powdercoated steel divider', price: 9, width_mm: 100, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-150', category: 'divider_steel', code_base: 'D.X.150', name: 'Steel Divider 150mm', description: '150mm width powdercoated steel divider', price: 10, width_mm: 150, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-200', category: 'divider_steel', code_base: 'D.X.200', name: 'Steel Divider 200mm', description: '200mm width powdercoated steel divider', price: 11, width_mm: 200, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-225', category: 'divider_steel', code_base: 'D.X.225', name: 'Steel Divider 225mm', description: '225mm width powdercoated steel divider', price: 12, width_mm: 225, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-250', category: 'divider_steel', code_base: 'D.X.250', name: 'Steel Divider 250mm', description: '250mm width powdercoated steel divider', price: 13, width_mm: 250, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-300', category: 'divider_steel', code_base: 'D.X.300', name: 'Steel Divider 300mm', description: '300mm width powdercoated steel divider', price: 14, width_mm: 300, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-350', category: 'divider_steel', code_base: 'D.X.350', name: 'Steel Divider 350mm', description: '350mm width powdercoated steel divider', price: 15, width_mm: 350, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+  { id: 'div-steel-450', category: 'divider_steel', code_base: 'D.X.450', name: 'Steel Divider 450mm', description: '450mm width powdercoated steel divider', price: 17, width_mm: 450, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+
+  // ==========================================================
+  // ALUMINIUM DIVIDERS (D.X-A.xxx)
+  // ==========================================================
+  { id: 'div-alu-75', category: 'divider_alu', code_base: 'D.X-A.75', name: 'Aluminium Divider 75mm', description: '75mm width aluminium divider', price: 10, width_mm: 75, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-100', category: 'divider_alu', code_base: 'D.X-A.100', name: 'Aluminium Divider 100mm', description: '100mm width aluminium divider', price: 11, width_mm: 100, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-150', category: 'divider_alu', code_base: 'D.X-A.150', name: 'Aluminium Divider 150mm', description: '150mm width aluminium divider', price: 12, width_mm: 150, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-200', category: 'divider_alu', code_base: 'D.X-A.200', name: 'Aluminium Divider 200mm', description: '200mm width aluminium divider', price: 13, width_mm: 200, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-250', category: 'divider_alu', code_base: 'D.X-A.250', name: 'Aluminium Divider 250mm', description: '250mm width aluminium divider', price: 15, width_mm: 250, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-350', category: 'divider_alu', code_base: 'D.X-A.350', name: 'Aluminium Divider 350mm', description: '350mm width aluminium divider', price: 17, width_mm: 350, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-alu-450', category: 'divider_alu', code_base: 'D.X-A.450', name: 'Aluminium Divider 450mm', description: '450mm width aluminium divider', price: 19, width_mm: 450, supported_drawer_heights_mm: [75, 100, 150] },
+
+  // ==========================================================
+  // BLUE PLASTIC DIVIDERS (D.X-P.xxx)
+  // ==========================================================
+  { id: 'div-plastic-75', category: 'divider_plastic', code_base: 'D.X-P.75', name: 'Plastic Divider 75mm', description: '75mm width blue plastic divider', price: 6, width_mm: 75, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-plastic-100', category: 'divider_plastic', code_base: 'D.X-P.100', name: 'Plastic Divider 100mm', description: '100mm width blue plastic divider', price: 7, width_mm: 100, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-plastic-150', category: 'divider_plastic', code_base: 'D.X-P.150', name: 'Plastic Divider 150mm', description: '150mm width blue plastic divider', price: 8, width_mm: 150, supported_drawer_heights_mm: [75, 100, 150] },
+  { id: 'div-plastic-200', category: 'divider_plastic', code_base: 'D.X-P.200', name: 'Plastic Divider 200mm', description: '200mm width blue plastic divider', price: 9, width_mm: 200, supported_drawer_heights_mm: [150, 225] },
+  { id: 'div-plastic-225', category: 'divider_plastic', code_base: 'D.X-P.225', name: 'Plastic Divider 225mm', description: '225mm width blue plastic divider', price: 10, width_mm: 225, supported_drawer_heights_mm: [75, 100, 150, 225, 300] },
+
+  // ==========================================================
+  // PLASTIC DRAWER BINS (B55.xxx)
+  // Suitable for 75mm high drawers
+  // ==========================================================
+  { id: 'bin-50-50', category: 'bin', code_base: 'B55.50.50', name: 'Plastic Bin 50x50', description: '50mm (h) x 50mm (w) x 50mm (d)', price: 3, width_mm: 50, height_mm: 50, depth_mm: 50, supported_drawer_heights_mm: [75] },
+  { id: 'bin-100-50', category: 'bin', code_base: 'B55.100.50', name: 'Plastic Bin 100x50', description: '50mm (h) x 100mm (w) x 50mm (d)', price: 4, width_mm: 100, height_mm: 50, depth_mm: 50, supported_drawer_heights_mm: [75] },
+  { id: 'bin-100-100', category: 'bin', code_base: 'B55.100.100', name: 'Plastic Bin 100x100', description: '50mm (h) x 100mm (w) x 100mm (d)', price: 5, width_mm: 100, height_mm: 50, depth_mm: 100, supported_drawer_heights_mm: [75] },
+  { id: 'bin-200-100', category: 'bin', code_base: 'B55.200.100', name: 'Plastic Bin 200x100', description: '50mm (h) x 200mm (w) x 100mm (d)', price: 7, width_mm: 200, height_mm: 50, depth_mm: 100, supported_drawer_heights_mm: [75] },
+  { id: 'bin-200-200', category: 'bin', code_base: 'B55.200.200', name: 'Plastic Bin 200x200', description: '50mm (h) x 200mm (w) x 200mm (d)', price: 10, width_mm: 200, height_mm: 50, depth_mm: 200, supported_drawer_heights_mm: [75] },
+
+  // ==========================================================
+  // GROOVE TRAYS (GT.xxx)
+  // For sensitive tools and components
+  // ==========================================================
+  { 
+    id: 'groove-tray-192', 
+    category: 'groove_tray', 
+    code_base: 'GT.28.192', 
+    name: 'Groove Tray', 
+    description: '28mm (h) x 192mm (w) x 195mm (d) groove tray',
+    price: 25,
+    width_mm: 192,
+    height_mm: 28,
+    depth_mm: 195,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+  { 
+    id: 'groove-divider', 
+    category: 'groove_divider', 
+    code_base: 'GT.DIV', 
+    name: 'Groove Tray Divider', 
+    description: 'Divider for groove trays',
+    price: 8,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+
+  // ==========================================================
+  // FOAM INSERTS (BT.FOAM.xxx)
+  // Pick 'n' pluck foam for custom layouts
+  // ==========================================================
+  { 
+    id: 'foam-30-500', 
+    category: 'foam', 
+    code_base: 'BT.FOAM.30.500', 
+    name: 'Foam Insert', 
+    description: "30mm (h) x 500mm (w) x 300mm (d) Pick 'n' Pluck foam",
+    price: 45,
+    width_mm: 500,
+    height_mm: 30,
+    depth_mm: 300,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+
+  // ==========================================================
+  // TOOL SUPPORTS (TS.xxx)
+  // For spanners and irregular tools
+  // ==========================================================
+  { 
+    id: 'tool-support-455', 
+    category: 'tool_support', 
+    code_base: 'TS.40.455', 
+    name: 'Tool Support', 
+    description: '40mm (h) x 455mm (w) mild steel tool support',
+    price: 35,
+    width_mm: 455,
+    height_mm: 40,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+];
+
+// Helper to resolve accessory code (replace X with drawer height)
+export const resolveAccessoryCode = (accessory: DrawerAccessory, drawerHeight: number): string => {
+  if (accessory.code_base.includes('X')) {
+    return accessory.code_base.replace('X', drawerHeight.toString());
+  }
+  return accessory.code_base;
+};
+
+// Filter accessories by drawer height
+export const filterAccessoriesForDrawer = (accessories: DrawerAccessory[], drawerHeight: number): DrawerAccessory[] => {
+  return accessories.filter(acc => {
+    if (acc.isVisible === false) return false;
+    if (!acc.supported_drawer_heights_mm.includes(drawerHeight)) return false;
+    return true;
+  });
+};
+
+// Get accessory by ID
+export const getAccessoryById = (id: string): DrawerAccessory | undefined => 
+  DRAWER_ACCESSORIES.find(a => a.id === id);
 
 
 // PDF Color Palette

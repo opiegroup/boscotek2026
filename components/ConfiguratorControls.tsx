@@ -1,10 +1,25 @@
 
 import React, { useMemo, useState } from 'react';
-import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet } from '../types';
-import { resolvePartitionCode } from '../data/catalog';
+import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet, DrawerAccessorySelection } from '../types';
+import { resolvePartitionCode, DRAWER_ACCESSORIES, filterAccessoriesForDrawer, resolveAccessoryCode } from '../data/catalog';
 import { useCatalog } from '../contexts/CatalogContext';
 import { calculateUsedHeight, filterInteriorsForDrawer, normalizeDrawerStack, summarizeDrawers } from '../services/drawerUtils';
 import { CheckboxField, ColorField, QtyListField, RadioField, SelectField } from './fields/OptionFields';
+
+// Accessory categories for grouping in UI
+const ACCESSORY_CATEGORIES = [
+  { id: 'partition', label: 'Partitions', icon: '▤' },
+  { id: 'divider_steel', label: 'Steel Dividers', icon: '│' },
+  { id: 'divider_alu', label: 'Aluminium Dividers', icon: '┃' },
+  { id: 'divider_plastic', label: 'Plastic Dividers', icon: '┆' },
+  { id: 'tray', label: 'Trays', icon: '▢' },
+  { id: 'tray_divider', label: 'Tray Dividers', icon: '┝' },
+  { id: 'bin', label: 'Bins', icon: '▣' },
+  { id: 'groove_tray', label: 'Groove Trays', icon: '≡' },
+  { id: 'groove_divider', label: 'Groove Dividers', icon: '≢' },
+  { id: 'foam', label: 'Foam Inserts', icon: '▦' },
+  { id: 'tool_support', label: 'Tool Supports', icon: '⚙' },
+] as const;
 
 interface ConfiguratorControlsProps {
   product: ProductDefinition;
@@ -80,6 +95,8 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   // --- SUB-COMPONENT: DRAWER INTERIOR CONFIG ---
   const InteriorConfigurator = ({ group, currentConfig, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
      const [activeTab, setActiveTab] = useState<DrawerInteriorType>('partition_set');
+     const [configMode, setConfigMode] = useState<'sets' | 'accessories'>('sets');
+     const [accessoryCategory, setAccessoryCategory] = useState<string>('partition');
 
      if (activeDrawerIndex === null) return null;
      
@@ -107,6 +124,10 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
     depthType = depth > 700 ? 'D' : 'S';
     const allOptions = filterInteriorsForDrawer(interiors, width, depthType, drawerHeight);
      const tabOptions = allOptions.filter(o => o.type === activeTab);
+     
+     // Get compatible accessories for this drawer height
+     const compatibleAccessories = filterAccessoriesForDrawer(DRAWER_ACCESSORIES, drawerHeight);
+     const categoryAccessories = compatibleAccessories.filter(a => a.category === accessoryCategory);
 
      const handleSelectInterior = (partId: string) => {
         const newStack = [...currentConfig.customDrawers];
@@ -119,6 +140,43 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
         newStack[activeDrawerIndex] = { ...newStack[activeDrawerIndex], interiorId: undefined };
         if (onDrawerStackChange) onDrawerStackChange(newStack);
      };
+
+     // Accessory quantity handlers
+     const getAccessoryQty = (accessoryId: string): number => {
+        const selection = drawerConfig.accessories?.find(a => a.accessoryId === accessoryId);
+        return selection?.quantity || 0;
+     };
+
+     const handleAccessoryQtyChange = (accessoryId: string, qty: number) => {
+        const newStack = [...currentConfig.customDrawers];
+        const currentDrawer = { ...newStack[activeDrawerIndex] };
+        
+        let accessories = [...(currentDrawer.accessories || [])];
+        const existingIdx = accessories.findIndex(a => a.accessoryId === accessoryId);
+        
+        if (qty <= 0) {
+           // Remove if qty is 0
+           if (existingIdx >= 0) {
+              accessories.splice(existingIdx, 1);
+           }
+        } else {
+           if (existingIdx >= 0) {
+              accessories[existingIdx] = { accessoryId, quantity: qty };
+           } else {
+              accessories.push({ accessoryId, quantity: qty });
+           }
+        }
+        
+        currentDrawer.accessories = accessories.length > 0 ? accessories : undefined;
+        newStack[activeDrawerIndex] = currentDrawer;
+        if (onDrawerStackChange) onDrawerStackChange(newStack);
+     };
+
+     // Calculate total accessories cost for this drawer
+     const totalAccessoriesCost = (drawerConfig.accessories || []).reduce((sum, sel) => {
+        const acc = DRAWER_ACCESSORIES.find(a => a.id === sel.accessoryId);
+        return sum + (acc ? acc.price * sel.quantity : 0);
+     }, 0);
 
      const Tabs = () => (
         <div className="flex border-b border-zinc-700 mb-4">
@@ -139,6 +197,48 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
            ))}
         </div>
      );
+
+     // Mode toggle between Sets and Individual Accessories
+     const ModeToggle = () => (
+        <div className="flex mb-4 bg-zinc-900 rounded-lg p-1 border border-zinc-700">
+           <button
+              onClick={() => setConfigMode('sets')}
+              className={`flex-1 py-2 px-3 text-xs font-bold rounded transition-all ${configMode === 'sets' ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+           >
+              Pre-Configured Sets
+           </button>
+           <button
+              onClick={() => setConfigMode('accessories')}
+              className={`flex-1 py-2 px-3 text-xs font-bold rounded transition-all ${configMode === 'accessories' ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}
+           >
+              Individual Accessories
+           </button>
+        </div>
+     );
+
+     // Accessory category tabs
+     const AccessoryCategoryTabs = () => {
+        const availableCategories = ACCESSORY_CATEGORIES.filter(cat => 
+           compatibleAccessories.some(a => a.category === cat.id)
+        );
+        
+        return (
+           <div className="flex flex-wrap gap-1 mb-4">
+              {availableCategories.map(cat => (
+                 <button
+                    key={cat.id}
+                    onClick={() => setAccessoryCategory(cat.id)}
+                    className={`px-2 py-1 text-[10px] font-bold rounded border transition-all ${accessoryCategory === cat.id 
+                       ? 'bg-amber-500/20 border-amber-500 text-amber-500' 
+                       : 'bg-zinc-900 border-zinc-700 text-zinc-500 hover:border-zinc-500 hover:text-zinc-300'}`}
+                 >
+                    <span className="mr-1">{cat.icon}</span>
+                    {cat.label}
+                 </button>
+              ))}
+           </div>
+        );
+     };
 
      return (
         <div className="bg-zinc-800 p-4 rounded-lg border border-amber-500/50 animate-in fade-in zoom-in-95 duration-200">
@@ -163,54 +263,133 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
               </div>
            </div>
 
-           <Tabs />
+           <ModeToggle />
 
-           <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              <button 
-                 onClick={handleClearInterior}
-                 className={`w-full text-left p-3 rounded border text-xs mb-2 transition-all ${!drawerConfig.interiorId ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}`}
-              >
-                 No Interior (Empty)
-              </button>
+           {configMode === 'sets' ? (
+              <>
+                 <Tabs />
+                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    <button 
+                       onClick={handleClearInterior}
+                       className={`w-full text-left p-3 rounded border text-xs mb-2 transition-all ${!drawerConfig.interiorId ? 'bg-amber-900/20 border-amber-500 text-amber-500' : 'bg-zinc-900 border-zinc-700 text-zinc-400'}`}
+                    >
+                       No Interior (Empty)
+                    </button>
 
-              {tabOptions.length === 0 ? (
-                 <div className="text-zinc-500 text-xs text-center py-4 italic bg-zinc-900/50 rounded flex flex-col gap-2">
-                    <span>No {activeTab.replace('_', ' ')}s available for this drawer size ({drawerHeight}mm).</span>
-                    {allOptions.length === 0 && (
-                        <span className="text-red-400">No compatible interiors found for {width}mm width.</span>
+                    {tabOptions.length === 0 ? (
+                       <div className="text-zinc-500 text-xs text-center py-4 italic bg-zinc-900/50 rounded flex flex-col gap-2">
+                          <span>No {activeTab.replace('_', ' ')}s available for this drawer size ({drawerHeight}mm).</span>
+                          {allOptions.length === 0 && (
+                              <span className="text-red-400">No compatible interiors found for {width}mm width.</span>
+                          )}
+                       </div>
+                    ) : (
+                       tabOptions.map(part => {
+                          const isSelected = drawerConfig.interiorId === part.id;
+                          const finalCode = resolvePartitionCode(part, drawerHeight);
+                          
+                          return (
+                             <button
+                                key={part.id}
+                                onClick={() => handleSelectInterior(part.id)}
+                                className={`
+                                   w-full text-left p-3 rounded border transition-all flex justify-between items-start group relative overflow-hidden
+                                   ${isSelected 
+                                      ? 'bg-zinc-700 border-amber-500 text-white shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
+                                      : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}
+                                `}
+                             >
+                                <div className="flex-1 pr-2 z-10">
+                                   <div className="font-bold text-xs group-hover:text-amber-500 transition-colors mb-0.5">{part.layout_description}</div>
+                                   <div className="text-[10px] text-zinc-500 font-mono mb-1">{finalCode}</div>
+                                   {part.components_summary && (
+                                      <div className="text-[10px] text-zinc-400 leading-tight italic border-t border-zinc-700/50 pt-1 mt-1">{part.components_summary}</div>
+                                   )}
+                                </div>
+                                <div className="text-right z-10">
+                                   <div className="text-xs font-bold text-amber-500">${part.price}</div>
+                                </div>
+                             </button>
+                          )
+                       })
                     )}
                  </div>
-              ) : (
-                 tabOptions.map(part => {
-                    const isSelected = drawerConfig.interiorId === part.id;
-                    const finalCode = resolvePartitionCode(part, drawerHeight);
-                    
-                    return (
-                       <button
-                          key={part.id}
-                          onClick={() => handleSelectInterior(part.id)}
-                          className={`
-                             w-full text-left p-3 rounded border transition-all flex justify-between items-start group relative overflow-hidden
-                             ${isSelected 
-                                ? 'bg-zinc-700 border-amber-500 text-white shadow-[0_0_10px_rgba(245,158,11,0.2)]' 
-                                : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-500'}
-                          `}
-                       >
-                          <div className="flex-1 pr-2 z-10">
-                             <div className="font-bold text-xs group-hover:text-amber-500 transition-colors mb-0.5">{part.layout_description}</div>
-                             <div className="text-[10px] text-zinc-500 font-mono mb-1">{finalCode}</div>
-                             {part.components_summary && (
-                                <div className="text-[10px] text-zinc-400 leading-tight italic border-t border-zinc-700/50 pt-1 mt-1">{part.components_summary}</div>
-                             )}
-                          </div>
-                          <div className="text-right z-10">
-                             <div className="text-xs font-bold text-amber-500">${part.price}</div>
-                          </div>
-                       </button>
-                    )
-                 })
-              )}
-           </div>
+              </>
+           ) : (
+              <>
+                 <AccessoryCategoryTabs />
+                 
+                 {/* Show current accessories cost */}
+                 {totalAccessoriesCost > 0 && (
+                    <div className="mb-3 p-2 bg-amber-500/10 border border-amber-500/30 rounded text-xs">
+                       <div className="flex justify-between items-center">
+                          <span className="text-zinc-400">Accessories for this drawer:</span>
+                          <span className="font-bold text-amber-500">${totalAccessoriesCost}</span>
+                       </div>
+                    </div>
+                 )}
+                 
+                 <div className="space-y-2 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                    {categoryAccessories.length === 0 ? (
+                       <div className="text-zinc-500 text-xs text-center py-4 italic bg-zinc-900/50 rounded">
+                          No {ACCESSORY_CATEGORIES.find(c => c.id === accessoryCategory)?.label || 'accessories'} available for {drawerHeight}mm drawers.
+                       </div>
+                    ) : (
+                       categoryAccessories.map(acc => {
+                          const qty = getAccessoryQty(acc.id);
+                          const finalCode = resolveAccessoryCode(acc, drawerHeight);
+                          
+                          return (
+                             <div
+                                key={acc.id}
+                                className={`p-3 rounded border transition-all ${qty > 0 
+                                   ? 'bg-zinc-700 border-amber-500/50' 
+                                   : 'bg-zinc-900 border-zinc-700'}`}
+                             >
+                                <div className="flex justify-between items-start mb-2">
+                                   <div className="flex-1">
+                                      <div className="font-bold text-xs text-zinc-200">{acc.name}</div>
+                                      <div className="text-[10px] text-zinc-500 font-mono">{finalCode}</div>
+                                      <div className="text-[10px] text-zinc-400 mt-0.5">{acc.description}</div>
+                                   </div>
+                                   <div className="text-right">
+                                      <div className="text-xs font-bold text-amber-500">${acc.price}</div>
+                                      <div className="text-[10px] text-zinc-500">each</div>
+                                   </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                   <button
+                                      onClick={() => handleAccessoryQtyChange(acc.id, Math.max(0, qty - 1))}
+                                      className="w-7 h-7 rounded bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 transition-colors flex items-center justify-center text-sm font-bold"
+                                   >
+                                      −
+                                   </button>
+                                   <input
+                                      type="number"
+                                      min="0"
+                                      value={qty}
+                                      onChange={(e) => handleAccessoryQtyChange(acc.id, Math.max(0, parseInt(e.target.value) || 0))}
+                                      className="w-12 h-7 bg-zinc-800 border border-zinc-600 rounded text-center text-white text-xs font-bold focus:outline-none focus:border-amber-500"
+                                   />
+                                   <button
+                                      onClick={() => handleAccessoryQtyChange(acc.id, qty + 1)}
+                                      className="w-7 h-7 rounded bg-zinc-800 border border-zinc-600 text-zinc-400 hover:text-white hover:border-zinc-400 transition-colors flex items-center justify-center text-sm font-bold"
+                                   >
+                                      +
+                                   </button>
+                                   {qty > 0 && (
+                                      <span className="ml-auto text-xs font-bold text-amber-500">
+                                         = ${acc.price * qty}
+                                      </span>
+                                   )}
+                                </div>
+                             </div>
+                          )
+                       })
+                    )}
+                 </div>
+              </>
+           )}
         </div>
      );
   };
@@ -297,15 +476,26 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                   {currentConfig.customDrawers.map((drawer, idx) => {
                      const opt = group.options.find(o => o.id === drawer.id);
                      const interior = drawer.interiorId ? interiors.find(i => i.id === drawer.interiorId) : null;
+                     const accessoryCount = drawer.accessories?.reduce((sum, a) => sum + a.quantity, 0) || 0;
+                     const hasConfig = interior || accessoryCount > 0;
                      return (
                         <div key={`${drawer.id}-${idx}`} className="flex items-center justify-between bg-zinc-900 border border-zinc-700 p-2 rounded text-xs hover:border-zinc-500 group transition-all">
                            <div className="flex-1 cursor-pointer" onClick={() => onSelectDrawer(idx)}>
                               <div className="flex items-center gap-2">
                                  <div className="w-6 text-center text-zinc-600 font-mono text-[10px]">{idx + 1}</div>
-                                 <div className="w-1 h-6 bg-zinc-700 rounded-full group-hover:bg-amber-500 transition-colors"></div>
+                                 <div className={`w-1 h-6 rounded-full transition-colors ${hasConfig ? 'bg-amber-500' : 'bg-zinc-700 group-hover:bg-amber-500'}`}></div>
                                  <div className="flex flex-col">
                                     <span className="font-mono font-bold text-zinc-300 group-hover:text-white">{opt?.meta?.front}mm Front</span>
-                                    {interior ? <span className="text-[10px] text-amber-500 font-medium">{interior.layout_description}</span> : <span className="text-[10px] text-zinc-600">Empty • Click to configure</span>}
+                                    {interior ? (
+                                       <span className="text-[10px] text-amber-500 font-medium">{interior.layout_description}</span>
+                                    ) : accessoryCount > 0 ? (
+                                       <span className="text-[10px] text-blue-400 font-medium">{accessoryCount} accessory item{accessoryCount > 1 ? 's' : ''}</span>
+                                    ) : (
+                                       <span className="text-[10px] text-zinc-600">Empty • Click to configure</span>
+                                    )}
+                                    {interior && accessoryCount > 0 && (
+                                       <span className="text-[10px] text-blue-400">+ {accessoryCount} accessory item{accessoryCount > 1 ? 's' : ''}</span>
+                                    )}
                                  </div>
                               </div>
                            </div>

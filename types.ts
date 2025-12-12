@@ -38,9 +38,15 @@ export interface Catalog {
 
 // --- APP STATE ---
 
+export interface DrawerAccessorySelection {
+  accessoryId: string;  // References DrawerAccessory.id
+  quantity: number;
+}
+
 export interface DrawerConfiguration {
   id: string; // The option ID (e.g. 'dr-150')
   interiorId?: string; // The selected partition set ID (e.g. 'ps-64-3')
+  accessories?: DrawerAccessorySelection[]; // Individual accessories for this drawer
 }
 
 export type EmbeddedCabinetPlacement = 'left' | 'right' | 'center';
@@ -118,6 +124,37 @@ export interface Quote {
 // --- INTERIOR CONFIGURATION TYPES ---
 
 export type DrawerInteriorType = 'partition_set' | 'bin_set' | 'mixed_set';
+
+// --- DRAWER ACCESSORY TYPES ---
+
+export type DrawerAccessoryCategory = 
+  | 'partition'      // Steel partitions (P.X.600)
+  | 'divider_steel'  // Powdercoated steel dividers (D.X.xxx)
+  | 'divider_alu'    // Aluminium dividers (D.X-A.xxx)
+  | 'divider_plastic'// Blue plastic dividers (D.X-P.xxx)
+  | 'tray'           // Steel drawer trays (T.75.xxx)
+  | 'tray_divider'   // Tray dividers (TD.75.xxx)
+  | 'bin'            // Plastic bins (B55.xxx)
+  | 'groove_tray'    // Groove trays (GT.xxx)
+  | 'groove_divider' // Groove tray dividers (GT.DIV)
+  | 'foam'           // Foam inserts (BT.FOAM.xxx)
+  | 'tool_support';  // Tool supports (TS.xxx)
+
+export interface DrawerAccessory {
+  id: string;
+  category: DrawerAccessoryCategory;
+  code_base: string;         // Base code - X gets replaced with drawer height
+  name: string;
+  description: string;
+  price: number;
+  width_mm?: number;         // Accessory width (for dividers, trays)
+  height_mm?: number;        // Accessory height
+  depth_mm?: number;         // Accessory depth
+  supported_drawer_heights_mm: number[];  // Which drawer heights this works with
+  max_per_drawer?: number;   // Max quantity per drawer (optional limit)
+  requires_interior?: boolean; // Whether this requires a partition/bin set first
+  isVisible?: boolean;
+}
 
 export interface DrawerInteriorOption {
   id: string;
