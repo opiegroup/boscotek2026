@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCatalog } from '../../contexts/CatalogContext';
-import { login, checkSession, logout, uploadFile, runAiExtraction, approveItem, getCurrentUser, getImportHistory, updateBatchStatus, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
-import { ImportBatch, ImportItem, ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
+import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
+import { ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
 import BoscotekLogo from '../BoscotekLogo';
 import BIMLeadsManager from './BIMLeadsManager';
 
@@ -11,7 +11,7 @@ interface AdminDashboardProps {
 }
 
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
-  const { addProduct, products, updateProduct, refreshCatalog } = useCatalog();
+  const { products, refreshCatalog } = useCatalog();
   
   // Auth State
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -20,16 +20,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [password, setPassword] = useState('');
   
   // Data State
-  const [history, setHistory] = useState<ImportBatch[]>([]);
   const [interiors, setInteriors] = useState<DrawerInteriorOption[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
-  // View State
-  // 0: Dashboard, 1: Pricing/Options, 2: Import (Upload), 5: Reports/History, 6: Quotes, 7: BIM Leads
+  // View State: 0: Dashboard, 1: Pricing/Options, 6: Quotes, 7: BIM Leads
   const [activeStep, setActiveStep] = useState<number>(0); 
-  const [uploadFileRef, setUploadFileRef] = useState<File | null>(null);
-  const [currentBatch, setCurrentBatch] = useState<ImportBatch | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   
   // --- LOAD DATA ---
@@ -42,16 +37,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
   useEffect(() => {
     if (isAuthenticated) {
-      loadHistory();
       loadInteriors();
       loadQuotes();
     }
   }, [isAuthenticated, activeStep]); 
-
-  const loadHistory = async () => {
-    const data = await getImportHistory();
-    setHistory(data);
-  };
 
   const loadInteriors = async () => {
     const data = await getInteriors();
@@ -117,93 +106,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
      }
   };
 
-  // --- DRAG & DROP HANDLERS ---
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragging(false);
-    
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      const file = e.dataTransfer.files[0];
-      setUploadFileRef(file);
-    }
-  };
-
-  // --- IMPORT FLOW HANDLERS ---
-  const handleUpload = async () => {
-    if (!uploadFileRef) return;
-    setActiveStep(3); // Processing
-    try {
-      const batch = await uploadFile(uploadFileRef, "1-5");
-      const processedBatch = await runAiExtraction(batch.id);
-      setCurrentBatch(processedBatch);
-      setActiveStep(4); // Review
-    } catch (e) {
-      console.error(e);
-      alert("Extraction failed.");
-      setActiveStep(2);
-    }
-  };
-
-  const handleApproveAndApply = async () => {
-    if (!currentBatch) return;
-
-    let addedCount = 0;
-    
-    currentBatch.items.forEach(item => {
-      if (item.status === 'approved') {
-        addedCount++;
-        
-        if (item.type === 'product_family') {
-           const newProd = {
-             ...item.data,
-             groups: [] 
-           } as ProductDefinition;
-           addProduct(newProd);
-
-        } else if (item.type === 'option' && item.targetGroupId) {
-           let targetProd = products.find(p => p.id === item.targetFamilyId);
-           if (!targetProd) targetProd = products.find(p => p.id === 'prod-workbench-heavy'); 
-           
-           if (targetProd) {
-             const updatedProd = { ...targetProd };
-             let group = updatedProd.groups.find(g => g.id === item.targetGroupId);
-             if (!group) {
-                group = {
-                  id: item.targetGroupId,
-                  label: item.targetGroupId.charAt(0).toUpperCase() + item.targetGroupId.slice(1).replace('_', ' '),
-                  type: 'select', 
-                  options: []
-                };
-                updatedProd.groups.push(group);
-             }
-             if (!group.options.find(o => o.id === item.data.id)) {
-                group.options.push(item.data);
-                updateProduct(updatedProd);
-             }
-           }
-        }
-      }
-    });
-
-    await updateBatchStatus(currentBatch.id, 'approved');
-    alert(`Applied ${addedCount} changes to the Live Catalog.`);
-    setCurrentBatch(null);
-    setActiveStep(5); // History
-  };
-
   if (authLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">Checking session...</div>;
 
   // --- RENDER: LOGIN ---
@@ -258,10 +160,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         <nav className="flex-1 p-4 space-y-2">
           <button onClick={() => setActiveStep(0)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 0 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Dashboard</button>
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
-          <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads & Exports</button>
+          <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads</button>
           <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Pricing & Options</button>
-          <button onClick={() => setActiveStep(2)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 2 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>New Import (AI)</button>
-          <button onClick={() => setActiveStep(5)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 5 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Reports / History</button>
         </nav>
         <div className="p-4 border-t border-zinc-800 space-y-2">
            <button onClick={handleLogout} className="w-full text-xs text-zinc-500 hover:text-white text-left p-2">Sign Out</button>
@@ -286,7 +186,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                </div>
             </div>
             
-            <div className="grid grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-3 gap-6 mb-8">
               <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
                 <div className="text-zinc-500 text-sm font-mono mb-2">QUOTES RECEIVED</div>
                 <div className="text-4xl font-bold text-amber-500">{quotes.length}</div>
@@ -298,10 +198,6 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
                  <div className="text-zinc-500 text-sm font-mono mb-2">PARTITION SETS</div>
                  <div className="text-4xl font-bold text-zinc-300">{interiors.length}</div>
-              </div>
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
-                 <div className="text-zinc-500 text-sm font-mono mb-2">AI REPORTS</div>
-                 <div className="text-4xl font-bold text-blue-500">{history.length}</div>
               </div>
             </div>
           </div>
@@ -344,10 +240,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     <div className="p-6 border-b border-zinc-800 flex justify-between items-start">
                        <div>
                           <h1 className="text-2xl font-bold mb-1">{selectedQuote.reference}</h1>
-                          <div className="text-zinc-400 text-sm">
-                             Requested by <span className="text-white font-bold">{selectedQuote.customer.name}</span> ({selectedQuote.customer.email})
+                          <div className="text-xs text-zinc-500 mb-2">
+                             Submitted: {new Date(selectedQuote.createdAt).toLocaleString()}
                           </div>
-                          {selectedQuote.customer.company && <div className="text-zinc-500 text-sm">{selectedQuote.customer.company}</div>}
                        </div>
                        <div className="text-right">
                           <select 
@@ -366,32 +261,124 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                        </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 space-y-8">
-                       {/* Notes */}
-                       {selectedQuote.customer.notes && (
-                          <div className="bg-amber-900/10 border border-amber-900/30 p-4 rounded text-sm text-amber-200">
-                             <strong>Customer Notes:</strong> {selectedQuote.customer.notes}
+                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                       {/* Customer Details Section */}
+                       <div className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+                          <div className="bg-zinc-800 px-4 py-2 border-b border-zinc-700">
+                             <h3 className="font-bold uppercase text-zinc-400 text-xs">Customer Details</h3>
                           </div>
-                       )}
+                          <div className="p-4 grid grid-cols-2 gap-4">
+                             <div>
+                                <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Full Name</div>
+                                <div className="text-white font-bold">{selectedQuote.customer.name}</div>
+                             </div>
+                             <div>
+                                <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Email Address</div>
+                                <div className="text-white">
+                                   <a href={`mailto:${selectedQuote.customer.email}`} className="text-amber-500 hover:underline">
+                                      {selectedQuote.customer.email}
+                                   </a>
+                                </div>
+                             </div>
+                             <div>
+                                <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Company</div>
+                                <div className="text-white">{selectedQuote.customer.company || <span className="text-zinc-600 italic">Not provided</span>}</div>
+                             </div>
+                             <div>
+                                <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Phone</div>
+                                <div className="text-white">
+                                   {selectedQuote.customer.phone ? (
+                                      <a href={`tel:${selectedQuote.customer.phone}`} className="text-amber-500 hover:underline">
+                                         {selectedQuote.customer.phone}
+                                      </a>
+                                   ) : (
+                                      <span className="text-zinc-600 italic">Not provided</span>
+                                   )}
+                                </div>
+                             </div>
+                          </div>
+                          {selectedQuote.customer.notes && (
+                             <div className="px-4 pb-4">
+                                <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Notes / Special Requirements</div>
+                                <div className="bg-amber-900/10 border border-amber-900/30 p-3 rounded text-sm text-amber-200">
+                                   {selectedQuote.customer.notes}
+                                </div>
+                             </div>
+                          )}
+                       </div>
 
-                       {/* Line Items */}
+                       {/* Line Items with Full Detail */}
                        <div>
-                          <h3 className="font-bold uppercase text-zinc-500 text-xs mb-3">Line Items</h3>
+                          <h3 className="font-bold uppercase text-zinc-500 text-xs mb-3">Products ({selectedQuote.items.length})</h3>
                           <div className="space-y-4">
                              {selectedQuote.items.map((item, idx) => (
-                                <div key={idx} className="bg-zinc-950 border border-zinc-800 p-4 rounded flex gap-4">
-                                   <div className="flex-1">
-                                      <h4 className="font-bold text-white">{item.productName}</h4>
-                                      <div className="text-xs text-zinc-500 mt-1 space-x-2">
-                                         {item.specsSummary.map((s, i) => (
-                                            <span key={i} className="bg-zinc-900 px-1.5 py-0.5 rounded border border-zinc-800">{s}</span>
-                                         ))}
+                                <div key={idx} className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+                                   {/* Product Header */}
+                                   <div className="bg-zinc-900 px-4 py-3 border-b border-zinc-800 flex justify-between items-start">
+                                      <div className="flex-1">
+                                         <h4 className="font-bold text-white text-lg">{item.productName}</h4>
+                                         <div className="text-xs text-zinc-400 mt-1">Qty: {item.quantity}</div>
+                                      </div>
+                                      <div className="text-right">
+                                         <div className="text-amber-500 font-bold text-xl font-mono">${item.totalPrice.toLocaleString()}</div>
+                                         {item.quantity > 1 && (
+                                            <div className="text-xs text-zinc-500">${item.unitPrice.toLocaleString()} each</div>
+                                         )}
                                       </div>
                                    </div>
-                                   <div className="text-right">
-                                      <div className="text-zinc-400 text-xs mb-1">${item.unitPrice} x {item.quantity}</div>
-                                      <div className="text-white font-bold font-mono">${item.totalPrice.toLocaleString()}</div>
-                                   </div>
+                                   
+                                   {/* Configuration Code */}
+                                   {item.configurationCode && (
+                                      <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/50">
+                                         <div className="text-[10px] text-zinc-500 uppercase font-mono mb-1">Configuration Code</div>
+                                         <div className="font-mono text-amber-500 text-sm break-all leading-relaxed bg-zinc-950 p-2 rounded border border-zinc-800">
+                                            {item.configurationCode}
+                                         </div>
+                                      </div>
+                                   )}
+
+                                   {/* Specs Summary */}
+                                   {item.specsSummary && item.specsSummary.length > 0 && (
+                                      <div className="px-4 py-3 border-b border-zinc-800">
+                                         <div className="text-[10px] text-zinc-500 uppercase font-mono mb-2">Specifications</div>
+                                         <div className="flex flex-wrap gap-2">
+                                            {item.specsSummary.map((s, i) => (
+                                               <span key={i} className="bg-zinc-900 px-2 py-1 rounded text-xs border border-zinc-800 text-zinc-300">{s}</span>
+                                            ))}
+                                         </div>
+                                      </div>
+                                   )}
+                                   
+                                   {/* Detailed Breakdown Table */}
+                                   {item.breakdown && item.breakdown.length > 0 && (
+                                      <div className="px-4 py-3">
+                                         <div className="text-[10px] text-zinc-500 uppercase font-mono mb-2">Price Breakdown</div>
+                                         <table className="w-full text-sm">
+                                            <thead className="text-[10px] text-zinc-500 uppercase border-b border-zinc-800">
+                                               <tr>
+                                                  <th className="text-left py-2 font-medium">Code</th>
+                                                  <th className="text-left py-2 font-medium">Description</th>
+                                                  <th className="text-right py-2 font-medium">Price</th>
+                                               </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-zinc-800/50">
+                                               {item.breakdown.map((line, bidx) => (
+                                                  <tr key={bidx} className={line.code === 'SUBTOTAL' ? 'bg-zinc-900/50 font-bold' : ''}>
+                                                     <td className="py-2 font-mono text-xs text-zinc-500">
+                                                        {line.code !== line.label && !line.code.includes('SUBTOTAL') ? line.code : ''}
+                                                     </td>
+                                                     <td className={`py-2 text-xs ${line.code === 'SUBTOTAL' ? 'text-amber-500' : 'text-zinc-300'}`}>
+                                                        {line.label}
+                                                     </td>
+                                                     <td className={`py-2 text-right font-mono text-xs ${line.code === 'SUBTOTAL' ? 'text-amber-500' : 'text-zinc-400'}`}>
+                                                        {line.price > 0 ? `$${line.price}` : '-'}
+                                                     </td>
+                                                  </tr>
+                                               ))}
+                                            </tbody>
+                                         </table>
+                                      </div>
+                                   )}
                                 </div>
                              ))}
                           </div>
@@ -399,18 +386,18 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
                        {/* Totals */}
                        <div className="flex justify-end">
-                          <div className="w-64 space-y-2 text-sm">
+                          <div className="w-72 bg-zinc-950 border border-zinc-800 rounded-lg p-4 space-y-2 text-sm">
                              <div className="flex justify-between text-zinc-400">
-                                <span>Subtotal</span>
-                                <span>${selectedQuote.totals.subtotal.toLocaleString()}</span>
+                                <span>Subtotal (Ex GST)</span>
+                                <span className="font-mono">${selectedQuote.totals.subtotal.toLocaleString()}</span>
                              </div>
                              <div className="flex justify-between text-zinc-400">
                                 <span>GST (10%)</span>
-                                <span>${selectedQuote.totals.gst.toLocaleString()}</span>
+                                <span className="font-mono">${selectedQuote.totals.gst.toLocaleString()}</span>
                              </div>
-                             <div className="flex justify-between text-white font-bold text-lg border-t border-zinc-700 pt-2 mt-2">
-                                <span>Total</span>
-                                <span>${selectedQuote.totals.total.toLocaleString()}</span>
+                             <div className="flex justify-between text-white font-bold text-xl border-t border-zinc-700 pt-3 mt-3">
+                                <span>Total (Inc GST)</span>
+                                <span className="text-amber-500 font-mono">${selectedQuote.totals.total.toLocaleString()}</span>
                              </div>
                           </div>
                        </div>
@@ -523,26 +510,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
            </div>
         )}
 
-        {/* BIM LEADS & EXPORTS */}
+        {/* BIM LEADS */}
         {activeStep === 7 && (
           <BIMLeadsManager />
         )}
-
-        {/* AI IMPORT / HISTORY STEPS (Simplified for brevity as they match previous logic) */}
-        {activeStep === 2 && (
-          <div className="max-w-2xl mx-auto">
-             <h1 className="text-3xl font-bold mb-2">Import Data</h1>
-             <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`bg-zinc-900 border-2 border-dashed rounded-xl p-12 text-center ${isDragging ? 'border-amber-500' : 'border-zinc-700'}`}>
-                <input type="file" id="fileUpload" className="hidden" onChange={(e) => setUploadFileRef(e.target.files ? e.target.files[0] : null)} />
-                <label htmlFor="fileUpload" className="cursor-pointer block">
-                   <div className="text-xl font-bold text-white mb-2">{uploadFileRef ? uploadFileRef.name : "Click or Drop PDF"}</div>
-                </label>
-             </div>
-             {uploadFileRef && <button onClick={handleUpload} className="w-full mt-6 bg-amber-500 text-black font-bold py-4 rounded-lg">Start Extraction</button>}
-          </div>
-        )}
-
-        {/* PROCESSING & REVIEW STEPS OMITTED FOR BREVITY BUT WOULD BE SAME AS BEFORE */}
       </main>
     </div>
   );

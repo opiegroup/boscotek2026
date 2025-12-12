@@ -76,7 +76,13 @@ const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onEditItem, 
                                    <div className="flex justify-between items-start">
                                       <div>
                                          <h4 className="font-bold text-lg text-white">{item.productName}</h4>
-                                         <div className="text-sm text-zinc-400 mt-1">
+                                         {item.configurationCode && (
+                                            <div className="mt-1 p-2 bg-zinc-950 border border-zinc-800 rounded">
+                                               <div className="text-[10px] text-zinc-500 uppercase font-mono mb-0.5">Configuration Code</div>
+                                               <div className="text-xs font-mono text-amber-500 break-all leading-relaxed">{item.configurationCode}</div>
+                                            </div>
+                                         )}
+                                         <div className="text-sm text-zinc-400 mt-2">
                                             Quantity: <span className="text-white font-bold">{item.quantity}</span>
                                          </div>
                                       </div>

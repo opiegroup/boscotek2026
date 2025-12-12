@@ -147,6 +147,7 @@ const BoscotekApp: React.FC = () => {
       const updatedItem: QuoteLineItem = {
         id: editingItemId, // Keep the same ID
         productName: activeProduct.name,
+        configurationCode: referenceCode,
         configuration: { ...config },
         quantity: quantity,
         unitPrice: pricing.totalPrice,
@@ -165,6 +166,7 @@ const BoscotekApp: React.FC = () => {
       const newItem: QuoteLineItem = {
         id: `line-${Date.now()}`,
         productName: activeProduct.name,
+        configurationCode: referenceCode,
         configuration: { ...config },
         quantity: quantity,
         unitPrice: pricing.totalPrice,

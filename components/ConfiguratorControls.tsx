@@ -635,9 +635,10 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
         
         <button 
           onClick={onBack}
-          className="text-xs text-zinc-500 hover:text-white flex items-center gap-1 mb-4 transition-colors"
+          className="px-4 py-2 text-sm font-bold text-black bg-amber-500 hover:bg-amber-400 rounded-lg flex items-center gap-2 mb-4 transition-all"
         >
-          ← Back to Product List
+          <span>←</span>
+          Back to Product List
         </button>
 
         {isEditingCartItem && (

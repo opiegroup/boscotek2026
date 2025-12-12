@@ -97,6 +97,7 @@ export type QuoteStatus = 'new' | 'viewed' | 'contacted' | 'sent_to_customer' | 
 export interface QuoteLineItem {
   id: string;
   productName: string;
+  configurationCode: string; // Full Boscotek product code (e.g. BTCS.1000.560.100...)
   configuration: ConfigurationState;
   quantity: number;
   unitPrice: number;
@@ -265,6 +266,23 @@ export interface QuoteRequest {
 
 export type LeadRole = 'Architect' | 'Builder' | 'Designer' | 'Engineer' | 'Buyer' | 'Other';
 
+// Pipeline stages for BIM leads
+export type LeadStage = 
+  | 'bim_downloaded'
+  | 'not_contacted'
+  | 'initial_email_sent'
+  | 'follow_up_sent'
+  | 'call_meeting_booked'
+  | 'quoted'
+  | 'negotiation'
+  | 'won_order_placed'
+  | 'lost_no_project'
+  | 'lost_competitor'
+  | 'on_hold';
+
+// Sales reps for lead assignment
+export type SalesRep = 'Unassigned' | 'Tristan' | 'Marcus' | 'Sarah' | 'Other';
+
 export interface BIMLeadData {
   name: string;
   email: string;
@@ -282,8 +300,16 @@ export interface BIMLead extends BIMLeadData {
   ipAddress?: string;
   sessionId?: string;
   userAgent?: string;
-  createdAt: string;
-  updatedAt: string;
+  created_at: string;  // Database column name
+  updated_at: string;  // Database column name
+  
+  // Pipeline fields
+  lead_stage: LeadStage;
+  assigned_rep?: SalesRep;
+  contacted: boolean;
+  last_contact_date?: string;
+  next_action?: string;
+  notes?: string;
 }
 
 export interface ConfigurationRecord {
