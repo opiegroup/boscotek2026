@@ -1524,14 +1524,21 @@ function addPropertySets(
       properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'RightBayDrawerHeights', null, createEntity('IFCLABEL', sortedRightDrawers.join('/') + 'mm (bottom to top)'), null));
     }
     
-    // Worktop material
+    // Worktop material with full specification
     const worktopId = configuration.selections?.worktop;
     if (worktopId) {
       const worktopGroup = product.groups?.find((g: any) => g.id === 'worktop');
       const worktopOption = worktopGroup?.options?.find((o: any) => o.id === worktopId);
       if (worktopOption) {
         properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterial', null, createEntity('IFCLABEL', worktopOption.label), null));
-        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterialCode', null, createEntity('IFCLABEL', worktopOption.code || 'ST'), null));
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterialCode', null, createEntity('IFCLABEL', worktopOption.code || 'L'), null));
+        // Include thickness and description if available
+        if (worktopOption.meta?.thickness) {
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopThickness', null, createEntity('IFCLENGTHMEASURE', worktopOption.meta.thickness), null));
+        }
+        if (worktopOption.meta?.description) {
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopDescription', null, createEntity('IFCTEXT', worktopOption.meta.description), null));
+        }
       }
     }
     
@@ -1602,13 +1609,21 @@ function addPropertySets(
   } else if (isWorkbench) {
     // --- WORKBENCH PROPERTIES ---
     
-    // Worktop material
+    // Worktop material with full specification
     const worktopId = configuration.selections?.worktop;
     if (worktopId) {
       const worktopGroup = product.groups?.find((g: any) => g.id === 'worktop');
       const worktopOption = worktopGroup?.options?.find((o: any) => o.id === worktopId);
       if (worktopOption) {
         properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterial', null, createEntity('IFCLABEL', worktopOption.label), null));
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterialCode', null, createEntity('IFCLABEL', worktopOption.code || 'L'), null));
+        // Include thickness and description if available
+        if (worktopOption.meta?.thickness) {
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopThickness', null, createEntity('IFCLENGTHMEASURE', worktopOption.meta.thickness), null));
+        }
+        if (worktopOption.meta?.description) {
+          properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopDescription', null, createEntity('IFCTEXT', worktopOption.meta.description), null));
+        }
       }
     }
     

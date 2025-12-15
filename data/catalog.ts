@@ -406,13 +406,15 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Bench Top Material',
         type: 'radio',
         step: 2,
+        description: 'Select worktop material and finish',
         options: [
-          { id: 'top-lam', label: 'Laminated Timber', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#a1a1aa' } },
-          { id: 'top-oak', label: 'Oak Hardwood', value: 'oak', code: 'O', priceDelta: 350, meta: { color: '#d97706' } },
-          { id: 'top-ss', label: 'Stainless Steel', value: 'ss', code: 'SS', priceDelta: 450, meta: { color: '#e4e4e7' } },
-          { id: 'top-mild2', label: '2mm Mild Steel', value: 'mild', code: 'M2', priceDelta: 250, meta: { color: '#18181b' } },
-          { id: 'top-mild3', label: '3mm Mild Steel', value: 'mild3', code: 'M3', priceDelta: 350, meta: { color: '#3f3f46' } },
-          { id: 'top-galv', label: 'Galvanised Steel', value: 'galv', code: 'G', priceDelta: 200, meta: { color: '#9ca3af' } },
+          { id: 'top-lam', label: 'Laminated Timber (42mm HDF)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 42, description: '42mm grey laminated compressed (HDF) timber. Durable and strong, resists most acids and oil.' } },
+          { id: 'top-oak', label: 'Oak Hardwood (40mm Solid)', value: 'oak', code: 'O', priceDelta: 350, meta: { color: '#b45309', thickness: 40, description: '40mm solid hardwood oak oiled top. Hardwearing with low maintenance properties.' } },
+          { id: 'top-ss', label: 'Stainless Steel Wet Edge', value: 'ss', code: 'SS', priceDelta: 450, meta: { color: '#d4d4d8', thickness: 43.2, description: '1.2mm 2B/304 stainless steel top over 42mm compressed timber with wet edge lip to contain liquids and rolling items.' } },
+          { id: 'top-rubber', label: 'Rubber Mat Surface', value: 'rubber', code: 'R', priceDelta: 80, meta: { color: '#1c1917', thickness: 45, description: 'Anti-fatigue rubber mat surface over laminated timber base. Oil and chemical resistant.' } },
+          { id: 'top-mild2', label: '2mm Mild Steel', value: 'mild', code: 'M2', priceDelta: 250, meta: { color: '#27272a', thickness: 44, description: '2mm mild steel top over 42mm timber base. Heavy duty industrial surface.' } },
+          { id: 'top-mild3', label: '3mm Mild Steel', value: 'mild3', code: 'M3', priceDelta: 350, meta: { color: '#3f3f46', thickness: 45, description: '3mm mild steel top over 42mm timber base. Extra heavy duty for welding and heavy work.' } },
+          { id: 'top-galv', label: 'Galvanised Steel', value: 'galv', code: 'G', priceDelta: 200, meta: { color: '#a1a1aa', thickness: 44, description: 'Galvanised steel top over timber base. Corrosion resistant for wet environments.' } },
         ]
       },
       {
@@ -590,14 +592,16 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Bench Top Material',
         type: 'select',
         step: 2,
+        description: 'Select worktop material and finish',
         options: [
-          { id: 'iw-top-mild', label: 'Mild Steel (3mm)', value: 'mild', code: 'M', priceDelta: 0, meta: { color: '#3f3f46' } },
-          { id: 'iw-top-formica', label: 'Formica (White)', value: 'formica', code: 'F', priceDelta: 50, meta: { color: '#f3f4f6' } }, // White
-          { id: 'iw-top-masonite', label: 'Masonite', value: 'masonite', code: 'MAS', priceDelta: 80, meta: { color: '#7c5e42' } },
-          { id: 'iw-top-hardwood', label: 'Oak Hardwood', value: 'hardwood', code: 'HW', priceDelta: 300, meta: { color: '#d97706' } },
-          { id: 'iw-top-ss', label: 'Stainless Steel', value: 'ss', code: 'SS', priceDelta: 400, meta: { color: '#e4e4e7' } },
-          { id: 'iw-top-duraloid', label: 'Duraloid', value: 'duraloid', code: 'DUR', priceDelta: 150, meta: { color: '#525252' } },
-          { id: 'iw-top-antistatic', label: 'Anti-Static', value: 'antistatic', code: 'AS', priceDelta: 250, meta: { color: '#d4d4d8' } },
+          { id: 'iw-top-lam', label: 'Laminated Timber (42mm HDF)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 42, description: '42mm grey laminated compressed (HDF) timber. Durable and strong, resists most acids and oil.' } },
+          { id: 'iw-top-oak', label: 'Oak Hardwood (40mm Solid)', value: 'oak', code: 'O', priceDelta: 300, meta: { color: '#b45309', thickness: 40, description: '40mm solid hardwood oak oiled top. Hardwearing with low maintenance properties.' } },
+          { id: 'iw-top-ss', label: 'Stainless Steel Wet Edge', value: 'ss', code: 'SS', priceDelta: 400, meta: { color: '#d4d4d8', thickness: 43.2, description: '1.2mm 2B/304 stainless steel top over 42mm compressed timber with wet edge lip to contain liquids and rolling items.' } },
+          { id: 'iw-top-rubber', label: 'Rubber Mat Surface', value: 'rubber', code: 'R', priceDelta: 80, meta: { color: '#1c1917', thickness: 45, description: 'Anti-fatigue rubber mat surface over laminated timber base. Oil and chemical resistant.' } },
+          { id: 'iw-top-mild', label: 'Mild Steel (3mm)', value: 'mild', code: 'M', priceDelta: 150, meta: { color: '#3f3f46', thickness: 45, description: '3mm mild steel top over 42mm timber base. Heavy duty industrial surface.' } },
+          { id: 'iw-top-formica', label: 'Formica (White)', value: 'formica', code: 'F', priceDelta: 50, meta: { color: '#f5f5f4', thickness: 42, description: 'White formica laminate surface. Clean and easy to maintain.' } },
+          { id: 'iw-top-duraloid', label: 'Duraloid', value: 'duraloid', code: 'DUR', priceDelta: 150, meta: { color: '#525252', thickness: 42, description: 'Duraloid composite surface. Chemical and heat resistant.' } },
+          { id: 'iw-top-antistatic', label: 'Anti-Static (ESD)', value: 'antistatic', code: 'AS', priceDelta: 250, meta: { color: '#d4d4d8', thickness: 42, description: 'Anti-static ESD safe surface for electronics assembly and sensitive equipment.' } },
         ]
       },
       {
@@ -770,12 +774,13 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Worktop Material',
         type: 'radio',
         step: 3,
-        defaultValue: 'tcs-top-steel',
+        defaultValue: 'tcs-top-lam',
+        description: 'Select worktop material and finish',
         options: [
-          { id: 'tcs-top-steel', label: 'Steel Top (Standard)', value: 'steel', code: 'ST', priceDelta: 0, meta: { color: '#27272a' } },
-          { id: 'tcs-top-rubber', label: 'Rubber Mat Surface', value: 'rubber', code: 'R', priceDelta: 80, meta: { color: '#1f1f1f' } },
-          { id: 'tcs-top-ss', label: 'Stainless Steel', value: 'ss', code: 'SS', priceDelta: 350, meta: { color: '#d4d4d8' } },
-          { id: 'tcs-top-lam', label: 'Laminated Timber', value: 'lam', code: 'L', priceDelta: 50, meta: { color: '#a1a1aa' } }
+          { id: 'tcs-top-lam', label: 'Laminated Timber (42mm HDF)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 42, description: '42mm grey laminated compressed (HDF) timber. Durable and strong, resists most acids and oil.' } },
+          { id: 'tcs-top-oak', label: 'Oak Hardwood (40mm Solid)', value: 'oak', code: 'O', priceDelta: 300, meta: { color: '#b45309', thickness: 40, description: '40mm solid hardwood oak oiled top. Hardwearing with low maintenance properties.' } },
+          { id: 'tcs-top-ss', label: 'Stainless Steel Wet Edge', value: 'ss', code: 'SS', priceDelta: 350, meta: { color: '#d4d4d8', thickness: 43.2, description: '1.2mm 2B/304 stainless steel top over 42mm compressed timber with wet edge lip to contain liquids and rolling items.' } },
+          { id: 'tcs-top-rubber', label: 'Rubber Mat Surface', value: 'rubber', code: 'R', priceDelta: 80, meta: { color: '#1c1917', thickness: 45, description: 'Anti-fatigue rubber mat surface over laminated timber base. Oil and chemical resistant.' } }
         ]
       },
       // 4. Rear Accessory System
