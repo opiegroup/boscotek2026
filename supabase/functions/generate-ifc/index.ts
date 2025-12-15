@@ -985,15 +985,23 @@ function createWorkbenchGeometry(
 
 /**
  * Create Mobile Tool Cart geometry with all components
- * Matching Viewer3D.tsx MobileToolCartGroup exactly
+ * BIM-ready IFC export matching Viewer3D.tsx MobileToolCartGroup exactly
+ * 
+ * GEOMETRY REQUIREMENTS (per specification):
+ * - Use IfcExtrudedAreaSolid with IfcRectangleProfileDef
+ * - Model as assembled solids, not one combined box
+ * - Drawers stack from bottom up, larger drawers at bottom
+ * - No floating benchtop gap
+ * - Plinth integrated into cabinet shell
  * 
  * Components:
  * 1. 4 Castors at corners
- * 2. Cabinet body shell (sides, back, top, bottom, center divider)
- * 3. Worktop surface
- * 4. Dual drawer bays (or cupboards)
- * 5. Side grab handles
- * 6. Rear accessory system (posts, crossbar, panels, tray shelves)
+ * 2. Integrated plinth (recessed base)
+ * 3. Cabinet body shell (sides, back, top, bottom, center divider)
+ * 4. Worktop surface (flush, no gap)
+ * 5. Dual drawer bays with individual drawer fronts + handles
+ * 6. Side grab handles
+ * 7. Rear accessory system (posts, crossbar, panels, tray shelves)
  */
 function createMobileToolCartGeometry(
   dimensions: any,
@@ -1036,31 +1044,45 @@ function createMobileToolCartGeometry(
   const trayCount = getAccessoryCount('rear_trays');
   
   // ========================================
-  // FIXED DIMENSIONS (matching Viewer3D.tsx)
+  // FIXED DIMENSIONS (matching Viewer3D.tsx exactly)
+  // All dimensions in METERS internally, converted from mm
   // ========================================
-  const depth = 0.56;
-  const castorHeight = 0.10;
-  const worktopThickness = 0.035;
-  const shellThickness = 0.018;
-  const drawerReveal = 0.002;
-  const drawerStackHeight = 0.475;
-  const accessCompartmentHeight = 0.120;
+  const depth = 0.56;                          // 560mm
+  const castorHeight = 0.10;                   // 100mm castor height
+  const plinthHeight = 0.02;                   // 20mm integrated plinth
+  const plinthSetback = 0.015;                 // 15mm plinth recessed from front
+  const worktopThickness = 0.035;              // 35mm worktop
+  const shellThickness = 0.018;                // 18mm shell panels
+  const drawerReveal = 0.002;                  // 2mm gap between drawers
+  const drawerStackHeight = 0.475;             // 475mm for drawer stack area
+  const accessCompartmentHeight = 0.120;       // 120mm top compartment
   const cabinetBodyHeight = drawerStackHeight + accessCompartmentHeight + shellThickness * 2;
-  const rearPanelHeight = 0.825;
-  const worktopOverhangFront = 0.025;
-  const worktopOverhangSide = 0.015;
+  const rearPanelHeight = 0.825;               // 825mm rear accessory height
+  const worktopOverhangFront = 0.025;          // 25mm front overhang
+  const worktopOverhangSide = 0.015;           // 15mm side overhang
   const bayWidth = (cabinetWidth - shellThickness * 3) / 2;
   
-  console.log('Creating Mobile Tool Cart geometry:', {
-    cabinetWidth, depth, castorHeight, cabinetBodyHeight,
+  // Drawer handle dimensions
+  const drawerHandleWidth_factor = 0.85;       // Handle is 85% of drawer width
+  const drawerHandleHeight = 0.016;            // 16mm tall handle bar
+  const drawerHandleDepth = 0.012;             // 12mm deep handle
+  const drawerHandleOffset = 0.012;            // 12mm from top of drawer
+  
+  console.log('Creating Mobile Tool Cart geometry (BIM-ready):', {
+    cabinetWidth: `${(cabinetWidth * 1000).toFixed(0)}mm`,
+    depth: `${(depth * 1000).toFixed(0)}mm`,
+    totalHeight: `${((castorHeight + cabinetBodyHeight + worktopThickness) * 1000).toFixed(0)}mm`,
     hasRearPosts, toolboardCount, louvreCount, trayCount,
-    leftDrawers, rightDrawers, leftCupboard, rightCupboard
+    leftDrawers: leftDrawers.join('/'),
+    rightDrawers: rightDrawers.join('/'),
+    leftCupboard, rightCupboard
   });
   
   const solids: number[] = [];
   const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
   
   // Helper function to create a vertical extrusion (box) at specified position
+  // Uses IfcExtrudedAreaSolid with IfcRectangleProfileDef for BIM compliance
   const createBox = (centerX: number, centerY: number, baseZ: number, boxWidth: number, boxDepth: number, boxHeight: number): number => {
     const origin = createEntity('IFCCARTESIANPOINT', [centerX, centerY, baseZ]);
     const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
@@ -1076,7 +1098,7 @@ function createMobileToolCartGeometry(
   };
   
   // ========================================
-  // 1. CASTORS (4 at corners)
+  // 1. CASTORS (4 at corners - simplified cylinders as boxes)
   // ========================================
   const castorPositions = [
     [-cabinetWidth/2 + 0.07, depth/2 - 0.07],   // Front-left
@@ -1086,158 +1108,243 @@ function createMobileToolCartGeometry(
   ];
   
   castorPositions.forEach(([x, y]) => {
-    // Castor housing
+    // Castor housing plate (top)
     solids.push(createBox(x, y, castorHeight - 0.012, 0.055, 0.055, 0.012));
-    // Castor stem
-    solids.push(createBox(x, y, castorHeight * 0.55 - castorHeight * 0.25, 0.04, 0.04, castorHeight * 0.5));
-    // Wheel (simplified as box)
+    // Castor stem/fork
+    solids.push(createBox(x, y, 0.035, 0.04, 0.04, castorHeight - 0.035 - 0.012));
+    // Wheel (simplified as box - 64mm diameter, 22mm wide)
     solids.push(createBox(x, y, 0.005, 0.022, 0.064, 0.054));
   });
   
   // ========================================
-  // 2. CABINET BODY SHELL
+  // 2. INTEGRATED PLINTH (recessed base - part of cabinet shell)
+  // Plinth is set back from front face, same color as cabinet body
   // ========================================
-  // Left side panel
-  solids.push(createBox(-cabinetWidth/2 + shellThickness/2, 0, castorHeight, shellThickness, depth, cabinetBodyHeight));
-  // Right side panel
-  solids.push(createBox(cabinetWidth/2 - shellThickness/2, 0, castorHeight, shellThickness, depth, cabinetBodyHeight));
-  // Back panel (drawer stack area)
-  solids.push(createBox(0, -depth/2 + shellThickness/2, castorHeight + shellThickness, cabinetWidth - shellThickness * 2, shellThickness, drawerStackHeight));
-  // Back panel top section
-  solids.push(createBox(0, -depth/2 + shellThickness/2, castorHeight + cabinetBodyHeight - shellThickness, cabinetWidth - shellThickness * 2, shellThickness, shellThickness));
-  // Bottom panel
-  solids.push(createBox(0, 0, castorHeight, cabinetWidth - shellThickness * 2, depth - shellThickness, shellThickness));
-  // Top panel (internal)
-  solids.push(createBox(0, 0, castorHeight + cabinetBodyHeight - shellThickness, cabinetWidth - shellThickness * 2, depth - shellThickness, shellThickness));
-  // Center divider (between left and right bays)
-  solids.push(createBox(0, 0, castorHeight + shellThickness, shellThickness, depth - shellThickness * 2, drawerStackHeight));
-  // Shelf above drawer stacks (access compartment floor)
-  solids.push(createBox(0, 0, castorHeight + shellThickness + drawerStackHeight, cabinetWidth - shellThickness * 2, depth - shellThickness * 2, shellThickness));
+  const plinthZ = castorHeight;
+  const plinthDepth = depth - plinthSetback;
+  const plinthCenterY = -plinthSetback / 2;
+  
+  // Plinth base (recessed from front)
+  solids.push(createBox(0, plinthCenterY, plinthZ, cabinetWidth - 0.004, plinthDepth, plinthHeight));
   
   // ========================================
-  // 3. WORKTOP
+  // 3. CABINET BODY SHELL (above plinth, flush connection)
+  // No gap between plinth and cabinet body
+  // ========================================
+  const cabinetBaseZ = castorHeight + plinthHeight;
+  const adjustedBodyHeight = cabinetBodyHeight - plinthHeight;
+  
+  // Left side panel (full height from plinth to worktop)
+  solids.push(createBox(-cabinetWidth/2 + shellThickness/2, 0, cabinetBaseZ, shellThickness, depth, adjustedBodyHeight));
+  // Right side panel
+  solids.push(createBox(cabinetWidth/2 - shellThickness/2, 0, cabinetBaseZ, shellThickness, depth, adjustedBodyHeight));
+  // Back panel (full height of drawer stack area)
+  solids.push(createBox(0, -depth/2 + shellThickness/2, cabinetBaseZ, cabinetWidth - shellThickness * 2, shellThickness, drawerStackHeight - plinthHeight));
+  // Back panel upper section (access compartment back)
+  solids.push(createBox(0, -depth/2 + shellThickness/2, cabinetBaseZ + drawerStackHeight - plinthHeight, cabinetWidth - shellThickness * 2, shellThickness, accessCompartmentHeight + shellThickness * 2));
+  // Bottom panel (floor of drawer bays)
+  solids.push(createBox(0, 0, cabinetBaseZ, cabinetWidth - shellThickness * 2, depth - shellThickness, shellThickness));
+  // Top panel (internal ceiling)
+  solids.push(createBox(0, 0, castorHeight + cabinetBodyHeight - shellThickness, cabinetWidth - shellThickness * 2, depth - shellThickness, shellThickness));
+  // Center divider (between left and right bays - only drawer stack height)
+  solids.push(createBox(0, 0, cabinetBaseZ + shellThickness, shellThickness, depth - shellThickness * 2, drawerStackHeight - plinthHeight - shellThickness));
+  // Shelf above drawer stacks (access compartment floor)
+  solids.push(createBox(0, 0, cabinetBaseZ + drawerStackHeight - plinthHeight, cabinetWidth - shellThickness * 2, depth - shellThickness * 2, shellThickness));
+  
+  // ========================================
+  // 4. WORKTOP (flush with cabinet, no floating gap)
   // ========================================
   const worktopWidth = cabinetWidth + worktopOverhangSide * 2;
   const worktopDepth = depth + worktopOverhangFront;
-  const worktopZ = castorHeight + cabinetBodyHeight;
+  const worktopZ = castorHeight + cabinetBodyHeight;  // Sits directly on top of cabinet
   
-  solids.push(createBox(worktopOverhangSide/2, worktopOverhangFront/2, worktopZ, worktopWidth, worktopDepth, worktopThickness));
+  solids.push(createBox(0, worktopOverhangFront/2, worktopZ, worktopWidth, worktopDepth, worktopThickness));
   
   // ========================================
-  // 4. DRAWER FRONTS (Left and Right Bays)
+  // 5. DRAWER FRONTS WITH HANDLES (Left and Right Bays)
+  // CRITICAL: Drawers stack from BOTTOM UP, larger drawers at BOTTOM
   // ========================================
   const drawerFrontThickness = shellThickness;
   const drawerWidth = bayWidth - 0.006;
+  const handleWidth = drawerWidth * drawerHandleWidth_factor;
   
-  // Helper to add drawer stack
-  const addDrawerStack = (xPos: number, drawerHeights: number[]) => {
+  // Helper to add drawer stack with handles - BOTTOM TO TOP, LARGER AT BOTTOM
+  const addDrawerStackWithHandles = (xPos: number, drawerHeights: number[]) => {
+    // Sort drawers: LARGER at BOTTOM (descending order = bottom first when stacking)
     const sortedDrawers = [...drawerHeights].sort((a, b) => b - a);
-    let currentZ = castorHeight + shellThickness;
+    let currentZ = cabinetBaseZ + shellThickness;  // Start from bottom of drawer bay
     
-    sortedDrawers.forEach((heightMm) => {
+    sortedDrawers.forEach((heightMm, index) => {
       const heightM = heightMm / 1000;
       const drawerZ = currentZ;
+      const drawerFrontHeight = heightM - drawerReveal;
       
-      // Drawer front
-      solids.push(createBox(xPos, depth/2 - drawerFrontThickness/2, drawerZ, drawerWidth, drawerFrontThickness, heightM - drawerReveal));
+      // Drawer front panel
+      solids.push(createBox(xPos, depth/2 - drawerFrontThickness/2, drawerZ, drawerWidth, drawerFrontThickness, drawerFrontHeight));
       
-      currentZ += heightM + drawerReveal;
+      // Drawer handle - centered horizontally, positioned near top of drawer
+      const handleZ = drawerZ + drawerFrontHeight - drawerHandleOffset - drawerHandleHeight;
+      solids.push(createBox(xPos, depth/2 + drawerHandleDepth/2, handleZ, handleWidth, drawerHandleDepth, drawerHandleHeight));
+      
+      currentZ += heightM;
+      
+      console.log(`Drawer ${index + 1}: ${heightMm}mm at Z=${(drawerZ * 1000).toFixed(0)}mm`);
     });
   };
   
-  // Helper to add cupboard door
-  const addCupboardDoor = (xPos: number) => {
-    const doorHeight = drawerStackHeight;
+  // Helper to add cupboard door with handle
+  const addCupboardDoorWithHandle = (xPos: number) => {
+    const doorHeight = drawerStackHeight - plinthHeight - shellThickness;
     const doorWidth = bayWidth - 0.006;
-    const doorZ = castorHeight + shellThickness;
+    const doorZ = cabinetBaseZ + shellThickness;
     
+    // Door panel
     solids.push(createBox(xPos, depth/2 - drawerFrontThickness/2, doorZ, doorWidth, drawerFrontThickness, doorHeight));
+    
+    // Vertical door handle (right side of door)
+    const doorHandleHeight = 0.10;  // 100mm tall handle
+    const doorHandleWidth = 0.012;  // 12mm wide
+    const doorHandleX = xPos + doorWidth/2 - 0.025;  // 25mm from right edge
+    const doorHandleZ = doorZ + doorHeight/2 - doorHandleHeight/2;
+    solids.push(createBox(doorHandleX, depth/2 + drawerHandleDepth/2, doorHandleZ, doorHandleWidth, drawerHandleDepth, doorHandleHeight));
   };
   
   // Add left bay
   const leftBayX = -cabinetWidth/4 - shellThickness/4;
   if (leftCupboard) {
-    addCupboardDoor(leftBayX);
+    addCupboardDoorWithHandle(leftBayX);
   } else if (leftDrawers.length > 0) {
-    addDrawerStack(leftBayX, leftDrawers);
+    addDrawerStackWithHandles(leftBayX, leftDrawers);
   }
   
   // Add right bay
   const rightBayX = cabinetWidth/4 + shellThickness/4;
   if (rightCupboard) {
-    addCupboardDoor(rightBayX);
+    addCupboardDoorWithHandle(rightBayX);
   } else if (rightDrawers.length > 0) {
-    addDrawerStack(rightBayX, rightDrawers);
+    addDrawerStackWithHandles(rightBayX, rightDrawers);
   }
   
   // ========================================
-  // 5. SIDE GRAB HANDLES (simplified as boxes)
+  // 6. SIDE GRAB HANDLES (push handles on left and right)
   // ========================================
-  const handleY = castorHeight + cabinetBodyHeight - 0.04;
-  const handleLength = 0.32;
-  const handleRadius = 0.010;
-  const standoff = 0.025;
+  const sideHandleZ = castorHeight + cabinetBodyHeight - 0.04;
+  const sideHandleLength = 0.32;              // 320mm long
+  const sideHandleRadius = 0.010;             // 10mm radius tube (20mm diameter)
+  const sideHandleStandoff = 0.025;           // 25mm standoff from cabinet
   
-  // Left handle
-  solids.push(createBox(-cabinetWidth/2 - standoff, 0, handleY - handleRadius, handleRadius * 2, handleLength, handleRadius * 2));
-  // Right handle
-  solids.push(createBox(cabinetWidth/2 + standoff, 0, handleY - handleRadius, handleRadius * 2, handleLength, handleRadius * 2));
+  // Left side handle (tube)
+  solids.push(createBox(-cabinetWidth/2 - sideHandleStandoff, 0, sideHandleZ - sideHandleRadius, sideHandleRadius * 2, sideHandleLength, sideHandleRadius * 2));
+  // Left handle mounting brackets
+  solids.push(createBox(-cabinetWidth/2 - sideHandleStandoff/2, sideHandleLength/2 - 0.02, sideHandleZ - sideHandleRadius, sideHandleStandoff, 0.035, 0.035));
+  solids.push(createBox(-cabinetWidth/2 - sideHandleStandoff/2, -sideHandleLength/2 + 0.02, sideHandleZ - sideHandleRadius, sideHandleStandoff, 0.035, 0.035));
+  
+  // Right side handle (tube)
+  solids.push(createBox(cabinetWidth/2 + sideHandleStandoff, 0, sideHandleZ - sideHandleRadius, sideHandleRadius * 2, sideHandleLength, sideHandleRadius * 2));
+  // Right handle mounting brackets
+  solids.push(createBox(cabinetWidth/2 + sideHandleStandoff/2, sideHandleLength/2 - 0.02, sideHandleZ - sideHandleRadius, sideHandleStandoff, 0.035, 0.035));
+  solids.push(createBox(cabinetWidth/2 + sideHandleStandoff/2, -sideHandleLength/2 + 0.02, sideHandleZ - sideHandleRadius, sideHandleStandoff, 0.035, 0.035));
   
   // ========================================
-  // 6. REAR ACCESSORIES (if enabled)
+  // 7. REAR ACCESSORIES (if enabled)
+  // Posts sit on top of worktop, panels and shelves attach to posts
   // ========================================
   if (hasRearPosts) {
-    const postSize = 0.04;
-    const crossbarHeight = 0.03;
-    const baseZ = castorHeight + cabinetBodyHeight + worktopThickness;
-    const postHeight = rearPanelHeight;
+    const postSize = 0.04;               // 40mm square posts
+    const crossbarHeight = 0.03;         // 30mm crossbar
+    const rearPostBaseZ = worktopZ + worktopThickness;  // Start on top of worktop
+    const postHeight = rearPanelHeight;  // 825mm tall
     const panelWidth = cabinetWidth - postSize * 2 - 0.01;
-    const panelHeight = 0.30;
-    const panelThickness = 0.012;
+    const panelHeight = 0.30;            // 300mm panel height
+    const panelThickness = 0.012;        // 12mm thick panels
     
     // Left upright post
-    solids.push(createBox(-cabinetWidth/2 + postSize/2 + 0.005, -depth/2 + postSize/2, baseZ, postSize, postSize, postHeight));
+    solids.push(createBox(-cabinetWidth/2 + postSize/2 + 0.005, -depth/2 + postSize/2, rearPostBaseZ, postSize, postSize, postHeight));
     // Right upright post
-    solids.push(createBox(cabinetWidth/2 - postSize/2 - 0.005, -depth/2 + postSize/2, baseZ, postSize, postSize, postHeight));
+    solids.push(createBox(cabinetWidth/2 - postSize/2 - 0.005, -depth/2 + postSize/2, rearPostBaseZ, postSize, postSize, postHeight));
     // Top crossbar
-    solids.push(createBox(0, -depth/2 + postSize/2, baseZ + postHeight - crossbarHeight, cabinetWidth - postSize, postSize, crossbarHeight));
+    solids.push(createBox(0, -depth/2 + postSize/2, rearPostBaseZ + postHeight - crossbarHeight, cabinetWidth - postSize, postSize, crossbarHeight));
     
     // Panel positioning - stack from top down
-    const topShelfHeight = 0.095 + 0.02;
-    const stackStartZ = baseZ + postHeight - crossbarHeight - topShelfHeight - 0.02;
-    let currentPanelZ = stackStartZ;
+    const topMargin = 0.115;  // 115mm from top for shelf clearance
+    let currentPanelZ = rearPostBaseZ + postHeight - crossbarHeight - topMargin;
     
-    // Add louvre panels
+    // Add louvre panels (slotted panels for bins)
     for (let i = 0; i < louvreCount; i++) {
       currentPanelZ -= panelHeight / 2;
       solids.push(createBox(0, -depth/2 + 0.035, currentPanelZ, panelWidth, panelThickness, panelHeight));
       currentPanelZ -= panelHeight / 2 + 0.005;
     }
     
-    // Add toolboard panels
+    // Add toolboard panels (perforated panels for hooks)
     for (let i = 0; i < toolboardCount; i++) {
       currentPanelZ -= panelHeight / 2;
       solids.push(createBox(0, -depth/2 + 0.035, currentPanelZ, panelWidth, panelThickness, panelHeight));
       currentPanelZ -= panelHeight / 2 + 0.005;
     }
     
-    // Add tray shelves
+    // Add tray shelves with wedge brackets
     if (trayCount > 0) {
-      const shelfHeight = 0.095;
-      const shelfGap = 0.004;
+      const shelfBaseThickness = 0.003;  // 3mm base plate
+      const shelfHeight = 0.095;         // 95mm rear lip height (wedge height)
+      const shelfGap = 0.004;            // 4mm between shelves
       const trayWidth = cabinetWidth - postSize;
-      const trayDepth = 0.208;
-      const trayZ_base = -depth/2 + trayDepth/2 + postSize;
-      const topShelfZ = baseZ + postHeight - crossbarHeight - shelfHeight;
+      const trayDepth = 0.208;           // 208mm shelf depth (wedge depth)
+      const wedgeThickness = 0.003;      // 3mm sheet metal thickness
+      const tipCutoff = 0.012;           // 12mm chamfer at tip
+      const trayY = -depth/2 + trayDepth/2 + postSize;
+      const topShelfZ = rearPostBaseZ + postHeight - crossbarHeight - shelfHeight - 0.02;
       const bottomMargin = 0.05;
-      const usableBottom = baseZ + bottomMargin;
+      const usableBottom = rearPostBaseZ + bottomMargin;
+      
+      // Helper to create a triangular wedge bracket using IfcArbitraryClosedProfileDef
+      // The wedge is a right triangle with chamfered tip, extruded along X axis
+      const createWedgeBracket = (centerX: number, centerY: number, baseZ: number, isRight: boolean): number => {
+        // Define the triangular profile in YZ plane (will be extruded along X)
+        // Profile points (going counter-clockwise for correct normals):
+        // - v0: bottom-rear (at shelf base, back edge)
+        // - v1: top-rear (full wedge height, back edge)  
+        // - v2: top-front-chamfer (sloped down to chamfer start)
+        // - v3: bottom-front-chamfer (chamfer end at base level)
+        const pt0 = createEntity('IFCCARTESIANPOINT', [0., 0.]);                              // bottom-rear
+        const pt1 = createEntity('IFCCARTESIANPOINT', [0., shelfHeight]);                     // top-rear
+        const pt2 = createEntity('IFCCARTESIANPOINT', [trayDepth - tipCutoff, tipCutoff]);    // top of chamfer (near front)
+        const pt3 = createEntity('IFCCARTESIANPOINT', [trayDepth, 0.]);                       // bottom-front
+        
+        // Create closed polyline for the profile
+        const polyline = createEntity('IFCPOLYLINE', [pt0, pt1, pt2, pt3, pt0]);
+        
+        // Create the arbitrary closed profile
+        const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', 
+          createEntity('IFCCARTESIANPOINT', [0., 0.]),
+          createEntity('IFCDIRECTION', [1., 0.])
+        );
+        const wedgeProfile = createEntity('IFCARBITRARYCLOSEDPROFILEDEF', E('AREA'), 'WedgeBracket', polyline);
+        
+        // Position the wedge - the profile is in YZ, extrude along X
+        // For right bracket, mirror by extruding in negative X direction
+        const xPos = isRight ? centerX + wedgeThickness/2 : centerX - wedgeThickness/2;
+        const origin = createEntity('IFCCARTESIANPOINT', [xPos, centerY - trayDepth/2, baseZ]);
+        
+        // Extrusion direction and placement
+        // Profile is in YZ plane, so we rotate it to extrude along X
+        const zDir = createEntity('IFCDIRECTION', [1., 0., 0.]);  // Extrude along X
+        const xDir = createEntity('IFCDIRECTION', [0., 1., 0.]);  // Profile Y becomes world Y
+        const position = createEntity('IFCAXIS2PLACEMENT3D', origin, zDir, xDir);
+        
+        // Extrude the profile
+        const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+        return createEntity('IFCEXTRUDEDAREASOLID', wedgeProfile, position, extrusionDir, wedgeThickness);
+      };
       
       for (let i = 0; i < trayCount; i++) {
         let shelfZ: number;
         
         if (trayCount === 1) {
+          // Single shelf: at top
           shelfZ = topShelfZ;
         } else if (trayCount === 2) {
+          // Two shelves: top and evenly distributed
           if (i === 0) {
             shelfZ = topShelfZ;
           } else {
@@ -1245,23 +1352,26 @@ function createMobileToolCartGeometry(
             shelfZ = usableBottom + remainingSpace / 2;
           }
         } else {
-          // 3+ shelves: stack from top with gaps
+          // 3+ shelves: stack from top with 4mm gaps
           shelfZ = topShelfZ - (i * (shelfHeight + shelfGap));
         }
         
-        // Shelf base plate
-        solids.push(createBox(0, trayZ_base, shelfZ, trayWidth, trayDepth, 0.003));
-        // Rear lip (95mm tall)
-        solids.push(createBox(0, trayZ_base - trayDepth/2 + 0.003, shelfZ + shelfHeight/2, trayWidth, 0.006, shelfHeight));
-        // Front lip (12mm tall)
-        solids.push(createBox(0, trayZ_base + trayDepth/2 - 0.003, shelfZ + 0.006, trayWidth, 0.006, 0.012));
-        // Wedge brackets (simplified as triangular approximation - small boxes at ends)
-        solids.push(createBox(-cabinetWidth/2 + postSize/2, trayZ_base - trayDepth/2 + 0.05, shelfZ + 0.03, 0.003, 0.1, 0.06));
-        solids.push(createBox(cabinetWidth/2 - postSize/2, trayZ_base - trayDepth/2 + 0.05, shelfZ + 0.03, 0.003, 0.1, 0.06));
+        // Shelf base plate (3mm thick)
+        solids.push(createBox(0, trayY, shelfZ, trayWidth, trayDepth, shelfBaseThickness));
+        // Rear lip (95mm tall, 6mm thick)
+        solids.push(createBox(0, trayY - trayDepth/2 + 0.003, shelfZ + shelfHeight/2, trayWidth, 0.006, shelfHeight));
+        // Front lip (12mm tall, 6mm thick)
+        solids.push(createBox(0, trayY + trayDepth/2 - 0.003, shelfZ + 0.006, trayWidth, 0.006, 0.012));
+        
+        // Triangular wedge brackets (proper wedge shape matching the 3D viewer)
+        const leftBracketX = -cabinetWidth/2 + postSize/2;
+        const rightBracketX = cabinetWidth/2 - postSize/2;
+        solids.push(createWedgeBracket(leftBracketX, trayY, shelfZ, false));
+        solids.push(createWedgeBracket(rightBracketX, trayY, shelfZ, true));
       }
     }
     
-    console.log(`Rear accessories added: ${louvreCount} louvre, ${toolboardCount} toolboard, ${trayCount} trays`);
+    console.log(`Rear accessories added: ${louvreCount} louvre panels, ${toolboardCount} toolboard panels, ${trayCount} tray shelves`);
   }
   
   // Create single shape representation with all geometry components
@@ -1304,15 +1414,41 @@ function addPropertySets(
   // ==========================================================
   // Dimensions (in millimeters as per specification)
   // ==========================================================
-  let widthMm = isWorkbench ? 1800 : 560;
-  let depthMm = isWorkbench ? 750 : 750;
-  let heightMm = isWorkbench ? 900 : 850;
+  let widthMm: number;
+  let depthMm: number;
+  let heightMm: number;
+  
+  if (isMobileToolCart) {
+    // Mobile Tool Cart fixed dimensions (from Viewer3D.tsx)
+    depthMm = 560;  // Fixed depth
+    
+    // Width from configuration
+    const widthGroup = product.groups?.find((g: any) => g.id === 'width');
+    const selectedWidthId = configuration.selections?.['width'];
+    const widthOption = widthGroup?.options?.find((o: any) => o.id === selectedWidthId);
+    widthMm = widthOption?.meta?.width ? widthOption.meta.width * 1000 : 850;
+    
+    // Height calculated from fixed dimensions
+    const castorHeight = 100;           // 100mm castors
+    const cabinetBodyHeight = 631;      // 475 + 120 + 18*2 mm
+    const worktopThickness = 35;        // 35mm worktop
+    heightMm = castorHeight + cabinetBodyHeight + worktopThickness;  // ~766mm to worktop
+    
+  } else if (isWorkbench) {
+    widthMm = 1800;
+    depthMm = 750;
+    heightMm = 900;
+  } else {
+    widthMm = 560;
+    depthMm = 750;
+    heightMm = 850;
+  }
   
   if (configuration.dimensions) {
     widthMm = configuration.dimensions.width || widthMm;
     depthMm = configuration.dimensions.depth || depthMm;
     heightMm = configuration.dimensions.height || heightMm;
-  } else {
+  } else if (!isMobileToolCart) {
     const getOptionValueMm = (groupId: string): number | null => {
       const selectionId = configuration.selections?.[groupId];
       if (!selectionId) return null;
@@ -1341,17 +1477,51 @@ function addPropertySets(
   // Product-specific properties
   // ==========================================================
   if (isMobileToolCart) {
-    // --- MOBILE TOOL CART PROPERTIES ---
+    // --- MOBILE TOOL CART PROPERTIES (Comprehensive BIM Metadata) ---
     
-    // Bay configuration
+    // Product range identification
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductRange', null, createEntity('IFCLABEL', 'Mobile Tool Cart Station'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Brand', null, createEntity('IFCLABEL', 'Boscotek'), null));
+    
+    // Extract bay configuration details
     const bayPresetId = configuration.selections?.bay_preset;
-    if (bayPresetId) {
-      const bayPresetGroup = product.groups?.find((g: any) => g.id === 'bay_preset');
-      const bayPresetOption = bayPresetGroup?.options?.find((o: any) => o.id === bayPresetId);
-      if (bayPresetOption) {
-        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BayConfiguration', null, createEntity('IFCLABEL', bayPresetOption.label), null));
-        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalDrawers', null, createEntity('IFCINTEGER', bayPresetOption.meta?.totalDrawers || 0), null));
-      }
+    const bayPresetGroup = product.groups?.find((g: any) => g.id === 'bay_preset');
+    const bayPresetOption = bayPresetGroup?.options?.find((o: any) => o.id === bayPresetId);
+    const leftDrawers = bayPresetOption?.meta?.leftDrawers || [];
+    const rightDrawers = bayPresetOption?.meta?.rightDrawers || [];
+    const leftCupboard = bayPresetOption?.meta?.leftCupboard || false;
+    const rightCupboard = bayPresetOption?.meta?.rightCupboard || false;
+    
+    // Product code (e.g., TCS.B27)
+    const bayCode = bayPresetOption?.code || 'B25';
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductCode', null, createEntity('IFCLABEL', `TCS.${bayCode}`), null));
+    
+    // Bay configuration summary
+    if (bayPresetOption) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BayConfiguration', null, createEntity('IFCLABEL', bayPresetOption.label), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BayConfigurationCode', null, createEntity('IFCLABEL', bayCode), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalDrawers', null, createEntity('IFCINTEGER', bayPresetOption.meta?.totalDrawers || 0), null));
+    }
+    
+    // Left bay details
+    if (leftCupboard) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LeftBayType', null, createEntity('IFCLABEL', 'Cupboard'), null));
+    } else if (leftDrawers.length > 0) {
+      // Sort drawers bottom to top (largest first)
+      const sortedLeftDrawers = [...leftDrawers].sort((a: number, b: number) => b - a);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LeftBayType', null, createEntity('IFCLABEL', 'Drawer Stack'), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LeftBayDrawerCount', null, createEntity('IFCINTEGER', leftDrawers.length), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LeftBayDrawerHeights', null, createEntity('IFCLABEL', sortedLeftDrawers.join('/') + 'mm (bottom to top)'), null));
+    }
+    
+    // Right bay details
+    if (rightCupboard) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'RightBayType', null, createEntity('IFCLABEL', 'Cupboard'), null));
+    } else if (rightDrawers.length > 0) {
+      const sortedRightDrawers = [...rightDrawers].sort((a: number, b: number) => b - a);
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'RightBayType', null, createEntity('IFCLABEL', 'Drawer Stack'), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'RightBayDrawerCount', null, createEntity('IFCINTEGER', rightDrawers.length), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'RightBayDrawerHeights', null, createEntity('IFCLABEL', sortedRightDrawers.join('/') + 'mm (bottom to top)'), null));
     }
     
     // Worktop material
@@ -1361,6 +1531,29 @@ function addPropertySets(
       const worktopOption = worktopGroup?.options?.find((o: any) => o.id === worktopId);
       if (worktopOption) {
         properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterial', null, createEntity('IFCLABEL', worktopOption.label), null));
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterialCode', null, createEntity('IFCLABEL', worktopOption.code || 'ST'), null));
+      }
+    }
+    
+    // Color selections
+    const housingColorId = configuration.selections?.housing_color;
+    const faciaColorId = configuration.selections?.facia_color;
+    
+    if (housingColorId) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'CabinetBodyColor', null, createEntity('IFCLABEL', mapColorCodeToFinish(housingColorId)), null));
+      const housingColorGroup = product.groups?.find((g: any) => g.id === 'housing_color');
+      const housingColorOption = housingColorGroup?.options?.find((o: any) => o.id === housingColorId);
+      if (housingColorOption?.code) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'CabinetBodyColorCode', null, createEntity('IFCLABEL', housingColorOption.code), null));
+      }
+    }
+    
+    if (faciaColorId) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerFrontColor', null, createEntity('IFCLABEL', mapColorCodeToFinish(faciaColorId)), null));
+      const faciaColorGroup = product.groups?.find((g: any) => g.id === 'facia_color');
+      const faciaColorOption = faciaColorGroup?.options?.find((o: any) => o.id === faciaColorId);
+      if (faciaColorOption?.code) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerFrontColorCode', null, createEntity('IFCLABEL', faciaColorOption.code), null));
       }
     }
     
@@ -1386,14 +1579,25 @@ function addPropertySets(
       properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ToolboardPanelCount', null, createEntity('IFCINTEGER', toolboardCount), null));
       properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LouvrePanelCount', null, createEntity('IFCINTEGER', louvreCount), null));
       properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TrayShelfCount', null, createEntity('IFCINTEGER', trayCount), null));
+      
+      // Total rear accessories
+      const totalRearAccessories = toolboardCount + louvreCount + trayCount;
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TotalRearAccessories', null, createEntity('IFCINTEGER', totalRearAccessories), null));
     }
     
     // Mobile features - always has castors
     properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'HasCastors', null, createEntity('IFCBOOLEAN', '.T.'), null));
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'CastorType', null, createEntity('IFCLABEL', 'Anti-tilt lockable castors'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'CastorType', null, createEntity('IFCLABEL', 'Anti-tilt lockable castors (100mm)'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'CastorCount', null, createEntity('IFCINTEGER', 4), null));
     
     // Load capacity
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopLoadCapacity', null, createEntity('IFCLABEL', '500 kg (Mobile Tool Cart)'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopLoadCapacity', null, createEntity('IFCLABEL', '500 kg UDL'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DrawerLoadCapacity', null, createEntity('IFCLABEL', '200 kg per drawer'), null));
+    
+    // Configuration reference
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ConfigurationReferenceID', null, createEntity('IFCIDENTIFIER', referenceCode), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'GeneratedDate', null, createEntity('IFCTEXT', new Date().toISOString()), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'IFCVersion', null, createEntity('IFCLABEL', 'IFC4'), null));
     
   } else if (isWorkbench) {
     // --- WORKBENCH PROPERTIES ---
@@ -1629,7 +1833,7 @@ serve(async (req) => {
       .from('bim-exports')
       .upload(filePath, ifcContent, {
         contentType: 'application/x-step',
-        upsert: false
+        upsert: true
       });
 
     if (uploadError) {
