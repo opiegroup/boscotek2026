@@ -81,13 +81,13 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
           try {
             // For blob URLs, use direct download
             if (url.startsWith('blob:')) {
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = filename;
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-              setTimeout(() => URL.revokeObjectURL(url), 1000);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
             } else {
               // For cross-origin URLs (like Supabase signed URLs), fetch and create blob
               const response = await fetch(url);

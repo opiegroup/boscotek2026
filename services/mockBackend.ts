@@ -285,7 +285,7 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
           if (posOpt) {
             labelSuffix = ` (${posOpt.label})`;
           }
-        }
+         }
       }
 
       total += priceToAdd;

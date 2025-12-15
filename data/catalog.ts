@@ -8,35 +8,42 @@ const _id = (prefix: string, code: string) => `${prefix}-${code.replace(/\./g, '
 
 export const INTERIOR_OPTIONS: DrawerInteriorOption[] = [
   // ==========================================================
-  // SERIES 46 (560mm Wide / Deep Depth 'D') - 10 Styles
+  // SERIES 46 (560mm Wide / Deep Depth 'D') - 10 Partition Set Styles
   // Usable Approx: 450mm W x 600mm D
+  // Code format: PS.46.X.{width_code}.{depth_code} where X = drawer height
+  // Note: # suffix indicates available with plastic dividers up to 150mm drawer
   // ==========================================================
+  // Row 1: Shallow depth (75mm cells)
   { id: 'ps-46-x-3-3', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.3.3', price: 45, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '75mm x 75mm (48 Compartments)', cell_width_mm: 75, cell_depth_mm: 75, cell_count: 48 },
+  { id: 'ps-46-x-3-4', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.3.4', price: 44, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '75mm x 100mm (36 Compartments)', cell_width_mm: 75, cell_depth_mm: 100, cell_count: 36 },
+  { id: 'ps-46-x-3-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.3.6', price: 42, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '75mm x 150mm (24 Compartments)', cell_width_mm: 75, cell_depth_mm: 150, cell_count: 24 },
   { id: 'ps-46-x-6-3', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.6.3', price: 42, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '150mm x 75mm (24 Compartments)', cell_width_mm: 150, cell_depth_mm: 75, cell_count: 24 },
-  { id: 'ps-46-x-9-3', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.9.3', price: 40, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '225mm x 75mm (16 Compartments)', cell_width_mm: 225, cell_depth_mm: 75, cell_count: 16 },
+  { id: 'ps-46-x-6-4', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.6.4', price: 40, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '150mm x 100mm (18 Compartments)', cell_width_mm: 150, cell_depth_mm: 100, cell_count: 18 },
+  // Row 2: Medium/Deep cells
+  { id: 'ps-46-x-6-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.6.6', price: 38, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '150mm x 150mm (12 Compartments)', cell_width_mm: 150, cell_depth_mm: 150, cell_count: 12 },
+  { id: 'ps-46-x-9-4', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.9.4', price: 40, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '225mm x 100mm (12 Compartments)', cell_width_mm: 225, cell_depth_mm: 100, cell_count: 12 },
+  { id: 'ps-46-x-9-8', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.9.8', price: 36, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '225mm x 200mm (6 Compartments)', cell_width_mm: 225, cell_depth_mm: 200, cell_count: 6 },
   { id: 'ps-46-x-18-3', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.18.3', price: 38, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '450mm x 75mm (8 Compartments)', cell_width_mm: 450, cell_depth_mm: 75, cell_count: 8 },
-  
-  { id: 'ps-46-x-3-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.3.6', price: 42, supported_drawer_heights_mm: [150, 225, 300], layout_description: '75mm x 150mm (24 Compartments)', cell_width_mm: 75, cell_depth_mm: 150, cell_count: 24 },
-  { id: 'ps-46-x-6-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.6.6', price: 38, supported_drawer_heights_mm: [150, 225, 300], layout_description: '150mm x 150mm (12 Compartments)', cell_width_mm: 150, cell_depth_mm: 150, cell_count: 12 },
-  { id: 'ps-46-x-9-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.9.6', price: 36, supported_drawer_heights_mm: [150, 225, 300], layout_description: '225mm x 150mm (8 Compartments)', cell_width_mm: 225, cell_depth_mm: 150, cell_count: 8 },
+  { id: 'ps-46-x-18-6', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.18.6', price: 35, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '450mm x 150mm (4 Compartments)', cell_width_mm: 450, cell_depth_mm: 150, cell_count: 4 },
 
-  { id: 'ps-46-x-3-9', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.3.9', price: 40, supported_drawer_heights_mm: [225, 300], layout_description: '75mm x 225mm (12 Compartments)', cell_width_mm: 75, cell_depth_mm: 225, cell_count: 12 },
-  { id: 'ps-46-x-6-9', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.6.9', price: 36, supported_drawer_heights_mm: [225, 300], layout_description: '150mm x 225mm (6 Compartments)', cell_width_mm: 150, cell_depth_mm: 225, cell_count: 6 },
-  { id: 'ps-46-x-9-9', type: 'partition_set', width_mm: 560, depth_type: 'D', code_base: 'PS.46.X.9.9', price: 34, supported_drawer_heights_mm: [225, 300], layout_description: '225mm x 225mm (4 Compartments)', cell_width_mm: 225, cell_depth_mm: 225, cell_count: 4 },
+  // ==========================================================
+  // Bin Sets (BS.46) - 5 Styles (Recommended in 75mm drawers only)
+  // ==========================================================
+  { id: 'bs-46-001', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.001', price: 110, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: '50x100mm (6) + 100x100mm (24) = 30 Bins', components_summary: '50mm x 100mm (6), 100mm x 100mm (24)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 30 },
+  { id: 'bs-46-002', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.002', price: 125, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: '100x50 (14) + 100x100 (4) + 100x200 (4) + 200x200 (2) = 24 Bins', components_summary: '100mm x 50mm (14), 100mm x 100mm (4), 100mm x 200mm (4), 200mm x 200mm (2)', cell_width_mm: 100, cell_depth_mm: 125, cell_count: 24 },
+  { id: 'bs-46-003', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.003', price: 150, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: '50mm x 50mm (108 Bins)', components_summary: '50mm x 50mm (108)', cell_width_mm: 50, cell_depth_mm: 50, cell_count: 108 },
+  { id: 'bs-46-004', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.004', price: 90, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: '50x100mm (6) + 200x200mm (6) = 12 Bins', components_summary: '50mm x 100mm (6), 200mm x 200mm (6)', cell_width_mm: 150, cell_depth_mm: 150, cell_count: 12 },
+  { id: 'bs-46-005', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.005', price: 115, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: '50x100 (14) + 100x100 (4) + 100x200 (8) = 26 Bins', components_summary: '50mm x 100mm (14), 100mm x 100mm (4), 100mm x 200mm (8)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 26 },
 
-  // Bin Sets (BS.46)
-  { id: 'bs-46-001', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.001', price: 110, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (30 Total)', components_summary: '50x100mm (6), 100x100mm (24)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 30 },
-  { id: 'bs-46-002', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.002', price: 125, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (24 Total)', components_summary: '100x50 (14), 100x100 (4), 100x200 (4), 200x200 (2)', cell_width_mm: 100, cell_depth_mm: 125, cell_count: 24 },
-  { id: 'bs-46-003', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.003', price: 150, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: '50mm x 50mm (108 Bins)', components_summary: '108 small plastic bins', cell_width_mm: 50, cell_depth_mm: 50, cell_count: 108 },
-  { id: 'bs-46-004', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.004', price: 90, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (12 Total)', components_summary: '50x100 (6), 200x200 (6)', cell_width_mm: 150, cell_depth_mm: 150, cell_count: 12 },
-  { id: 'bs-46-005', type: 'bin_set', width_mm: 560, depth_type: 'D', code_base: 'BS.46.005', price: 115, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (26 Total)', components_summary: '50x100 (14), 100x100 (4), 100x200 (8)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 26 },
-
-  // Mixed Sets (MS.46)
-  { id: 'ms-46-001', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.001', price: 180, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Partition (1), Tool Supports (1), Tray (1)', components_summary: 'Specialized tool layout with groove tray', cell_width_mm: 100, cell_depth_mm: 100 },
-  { id: 'ms-46-002', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.002', price: 165, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Partition (2), Divider (7), Bins (8), Tray (2)', components_summary: 'Hybrid storage for small parts and tools', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 8 },
-  { id: 'ms-46-003', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.003', price: 170, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Partition (2), Divider (7), Bins (8), Tray (1)', components_summary: 'Balanced mixed layout with large groove tray', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 8 },
-  { id: 'ms-46-004', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.004', price: 175, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Partition (2), Divider (10), Bins (21)', components_summary: 'High density bin and partition combo', cell_width_mm: 50, cell_depth_mm: 50, cell_count: 21 },
-  { id: 'ms-46-005', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.005', price: 190, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Partition (3), Divider (12), Bins (9), Tray (3)', components_summary: 'Complex layout with multiple trays', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 9 },
+  // ==========================================================
+  // Mixed Sets (MS.46) - 5 Styles (Recommended in 75mm drawers only)
+  // Combines partitions, dividers, bins, trays, and tool supports
+  // ==========================================================
+  { id: 'ms-46-001', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.001', price: 180, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partition (1), Tool Supports (1), Tray - 100/7 (1)', components_summary: 'Partition (1), Tool Supports (1), Tray 100/7 (1)', cell_width_mm: 100, cell_depth_mm: 100 },
+  { id: 'ms-46-002', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.002', price: 165, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partition (2), Divider AL-75 (7), AL-150 (3), Bins 50x100 (8), Groove Tray (2)', components_summary: 'Partitions (2), Dividers AL-75mm (7) + AL-150mm (3), Bins 50x100mm (8), Groove Trays (2)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 8 },
+  { id: 'ms-46-003', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.003', price: 170, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (2), Divider AL-75 (7), AL-150 (3), Bins: 50x50 (4), 50x100 (2), 100x100 (2), 200x200 (1), Groove Tray', components_summary: 'Partitions (2), Dividers AL-75mm (7) + AL-150mm (3), Bins 50x50mm (4) + 50x100mm (2) + 100x100mm (2) + 200x200mm (1), Groove Tray (1)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 9 },
+  { id: 'ms-46-004', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.004', price: 175, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (2), Dividers AL-75 (10), Bins: 50x50 (12), 50x100 (6), 100x100 (4), 100x200 (1)', components_summary: 'Partitions (2), Dividers AL-75mm (10), Bins 50x50mm (12) + 50x100mm (6) + 100x100mm (4) + 100x200mm (1)', cell_width_mm: 50, cell_depth_mm: 50, cell_count: 23 },
+  { id: 'ms-46-005', type: 'mixed_set', width_mm: 560, depth_type: 'D', code_base: 'MS.46.005', price: 190, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (3), Dividers AL-75 (7), AL-100 (5), Bins: 50x50 (2), 50x100 (3), 100x100 (2), 100x200 (1), Trays 50/6, 100/3', components_summary: 'Partitions (3), Dividers AL-75mm (7) + AL-100mm (5), Bins 50x50mm (2) + 50x100mm (3) + 100x100mm (2) + 100x200mm (1), Trays 50/6 + 100/3', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 8 },
 
   // ==========================================================
   // SERIES 66 (710mm Wide / Deep)
@@ -80,12 +87,15 @@ export const INTERIOR_OPTIONS: DrawerInteriorOption[] = [
   { id: 'bs-44-004', type: 'bin_set', width_mm: 560, depth_type: 'S', code_base: 'BS.44.004', price: 105, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (23 Total)', components_summary: '50x50 (17), 100x200 (4), 200x200 (2)', cell_width_mm: 50, cell_depth_mm: 100, cell_count: 23 },
   { id: 'bs-44-005', type: 'bin_set', width_mm: 560, depth_type: 'S', code_base: 'BS.44.005', price: 110, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Bins (32 Total)', components_summary: '50x50 (17), 50x100 (8), 100x100 (4), 100x200 (2), 200x200 (1)', cell_width_mm: 50, cell_depth_mm: 50, cell_count: 32 },
 
-  // Mixed Sets (MS.44)
-  { id: 'ms-44-001', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.001', price: 140, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Set 1', components_summary: 'Partition (2), Dividers (5), Groove Tray (2), Bins: 50x50 (7), 50x100 (8), 100x100 (2)' },
-  { id: 'ms-44-002', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.002', price: 145, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Set 2', components_summary: 'Partition (2), Dividers (7), Bins: 50x50 (4), 50x100 (4), 100x100 (2), 100x200 (2)' },
-  { id: 'ms-44-003', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.003', price: 150, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Set 3', components_summary: 'Partitions (3), Dividers (9), Tray (2), Bins: 50x100 (3), 100x100 (3)' },
-  { id: 'ms-44-004', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.004', price: 155, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Set 4', components_summary: 'Partitions (3), Dividers (9), Groove tray (1), Bins: 50x50 (4), 50x100 (4), 100x100 (2)' },
-  { id: 'ms-44-005', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.005', price: 160, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm', layout_description: 'Mixed Set 5', components_summary: 'Partitions (2), Dividers (7), Bins: 50x50 (6), 50x100 (4), 100x100 (4), 100x200 (1), 200x200 (1)' },
+  // ==========================================================
+  // Mixed Sets (MS.44) - 5 Styles (Recommended in 75mm drawers only)
+  // S Series - Standard Depth 560mm Wide
+  // ==========================================================
+  { id: 'ms-44-001', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.001', price: 140, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partition (2), Divider AL-100 (5), Groove Tray (2), Bins: 50x50 (7), 50x100 (8), 100x100 (2)', components_summary: 'Partitions (2), Dividers AL-100mm (5), Groove Trays (2), Bins 50x50mm (7) + 50x100mm (8) + 100x100mm (2)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 17 },
+  { id: 'ms-44-002', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.002', price: 145, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partition (2), Dividers AL-100 (5), AL-150 (2), Bins: 50x50 (4), 50x100 (4), 100x100 (2), 100x200 (2)', components_summary: 'Partitions (2), Dividers AL-100mm (5) + AL-150mm (2), Bins 50x50mm (4) + 50x100mm (4) + 100x100mm (2) + 100x200mm (2)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 12 },
+  { id: 'ms-44-003', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.003', price: 150, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (3), Divider AL-75 (5), AL-100 (4), Tray 50/4 + 100/4, Bins: 50x100 (3), 100x100 (3)', components_summary: 'Partitions (3), Dividers AL-75mm (5) + AL-100mm (4), Trays 50/4 + 100/4, Bins 50x100mm (3) + 100x100mm (3)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 6 },
+  { id: 'ms-44-004', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.004', price: 155, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (3), Dividers AL-75 (4), AL-100 (5), Groove Tray (1), Bins: 50x50 (4), 50x100 (4), 100x100 (2)', components_summary: 'Partitions (3), Dividers AL-75mm (4) + AL-100mm (5), Groove Tray (1), Bins 50x50mm (4) + 50x100mm (4) + 100x100mm (2)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 10 },
+  { id: 'ms-44-005', type: 'mixed_set', width_mm: 560, depth_type: 'S', code_base: 'MS.44.005', price: 160, supported_drawer_heights_mm: [75], drawer_height_note: 'Recommended in 75mm drawers only', layout_description: 'Partitions (2), Dividers AL-75 (7), Bins: 50x50 (6), 50x100 (4), 100x100 (4), 100x200 (1), 200x200 (1)', components_summary: 'Partitions (2), Dividers AL-75mm (7), Bins 50x50mm (6) + 50x100mm (4) + 100x100mm (4) + 100x200mm (1) + 200x200mm (1)', cell_width_mm: 100, cell_depth_mm: 100, cell_count: 16 },
 
   // --- SERIES 96 (1010mm Wide / Deep Depth 'D') ---
   { id: 'ps-96-x-3-3', type: 'partition_set', width_mm: 1010, depth_type: 'D', code_base: 'PS.96.X.3.3', price: 95, supported_drawer_heights_mm: [75, 100, 150, 225, 300], layout_description: '75mm x 75mm (96 Compartments)', cell_width_mm: 75, cell_depth_mm: 75, cell_count: 96 },
@@ -125,30 +135,54 @@ export const resolvePartitionCode = (option: DrawerInteriorOption, drawerHeight:
 
 export const DRAWER_ACCESSORIES: DrawerAccessory[] = [
   // ==========================================================
-  // STEEL PARTITIONS (P.X.600)
+  // STEEL PARTITIONS (P.X.depth)
   // Run front to rear, slotted at 25mm increments for dividers
+  // X = drawer height (75/100/150/225/300)
   // ==========================================================
+  { 
+    id: 'part-450', 
+    category: 'partition', 
+    code_base: 'P.X.450', 
+    name: 'Steel Partition 450mm', 
+    description: '450mm depth steel partition (S Series) - front to rear',
+    price: 15,
+    depth_mm: 450,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
   { 
     id: 'part-600', 
     category: 'partition', 
     code_base: 'P.X.600', 
-    name: 'Steel Partition', 
-    description: '600mm depth steel partition - front to rear',
+    name: 'Steel Partition 600mm', 
+    description: '600mm depth steel partition (D Series) - front to rear',
     price: 18,
     depth_mm: 600,
     supported_drawer_heights_mm: [75, 100, 150, 225, 300]
   },
 
   // ==========================================================
-  // STEEL DRAWER TRAYS (T.75.xx.600)
+  // STEEL DRAWER TRAYS (T.height.width.depth)
   // Removable compartments for holding contents
+  // S Series = 450mm depth, D Series = 600mm depth
   // ==========================================================
+  { 
+    id: 'tray-50-450', 
+    category: 'tray', 
+    code_base: 'T.75.50.450', 
+    name: 'Steel Tray 50mm (S)', 
+    description: '50mm (h) x 50mm (w) removable tray - 450mm deep (S Series)',
+    price: 10,
+    width_mm: 50,
+    height_mm: 50,
+    depth_mm: 450,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
   { 
     id: 'tray-50-600', 
     category: 'tray', 
     code_base: 'T.75.50.600', 
-    name: 'Steel Tray 50mm', 
-    description: '50mm (h) x 50mm (w) removable tray',
+    name: 'Steel Tray 50mm (D)', 
+    description: '50mm (h) x 50mm (w) removable tray - 600mm deep (D Series)',
     price: 12,
     width_mm: 50,
     height_mm: 50,
@@ -156,11 +190,23 @@ export const DRAWER_ACCESSORIES: DrawerAccessory[] = [
     supported_drawer_heights_mm: [75, 100, 150, 225, 300]
   },
   { 
+    id: 'tray-100-450', 
+    category: 'tray', 
+    code_base: 'T.75.100.450', 
+    name: 'Steel Tray 100mm (S)', 
+    description: '50mm (h) x 100mm (w) removable tray - 450mm deep (S Series)',
+    price: 13,
+    width_mm: 100,
+    height_mm: 50,
+    depth_mm: 450,
+    supported_drawer_heights_mm: [75, 100, 150, 225, 300]
+  },
+  { 
     id: 'tray-100-600', 
     category: 'tray', 
     code_base: 'T.75.100.600', 
-    name: 'Steel Tray 100mm', 
-    description: '50mm (h) x 100mm (w) removable tray',
+    name: 'Steel Tray 100mm (D)', 
+    description: '50mm (h) x 100mm (w) removable tray - 600mm deep (D Series)',
     price: 15,
     width_mm: 100,
     height_mm: 50,

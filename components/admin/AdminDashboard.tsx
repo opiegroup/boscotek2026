@@ -303,8 +303,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                 <div className="bg-amber-900/10 border border-amber-900/30 p-3 rounded text-sm text-amber-200">
                                    {selectedQuote.customer.notes}
                                 </div>
-                             </div>
-                          )}
+                          </div>
+                       )}
                        </div>
 
                        {/* Line Items with Full Detail */}
@@ -315,7 +315,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                 <div key={idx} className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
                                    {/* Product Header */}
                                    <div className="bg-zinc-900 px-4 py-3 border-b border-zinc-800 flex justify-between items-start">
-                                      <div className="flex-1">
+                                   <div className="flex-1">
                                          <h4 className="font-bold text-white text-lg">{item.productName}</h4>
                                          <div className="text-xs text-zinc-400 mt-1">Qty: {item.quantity}</div>
                                       </div>
@@ -377,7 +377,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                                ))}
                                             </tbody>
                                          </table>
-                                      </div>
+                                   </div>
                                    )}
                                 </div>
                              ))}

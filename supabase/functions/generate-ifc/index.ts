@@ -686,7 +686,7 @@ function createWorkbenchGeometry(
     const addDrawerUnit = (x: number, drawerCount: number, suspended: boolean = true) => {
       const unitHeight = drawerCount * DRAWER_HEIGHT + 0.05;
       const unitZ = suspended ? (height - unitHeight - 0.05) : (shelfHeight + SHELF_THICK);
-      
+    
       // Cabinet shell/body
       solids.push(createBox(x, 0, unitZ, DRAWER_UNIT_WIDTH, UNIT_DEPTH, unitHeight));
       
@@ -913,7 +913,7 @@ function createWorkbenchGeometry(
         
         // TOP CROSSBAR (connects all posts) - at top of posts
         solids.push(createBox(
-          0, 
+          0,
           backY, 
           baseZ + POST_HEIGHT - POST_SIZE, // Top of posts minus crossbar thickness
           width - 0.04,
@@ -948,14 +948,14 @@ function createWorkbenchGeometry(
           ));
           
           // Right bay panel (between center and right post)
-          solids.push(createBox(
+        solids.push(createBox(
             bayWidth/2 + POST_SIZE/2,
             backY,
             panelZ,
             bayWidth,
             PANEL_THICK,
             PANEL_HEIGHT
-          ));
+        ));
         });
         
         // Power panel for SP (Shelf + Power) options
@@ -964,8 +964,8 @@ function createWorkbenchGeometry(
                          aboveBenchOption === 'iw-ab-shelf-power';
         if (hasPower) {
           solids.push(createBox(0, backY + 0.02, baseZ + 0.15, width - 0.12, 0.04, 0.1));
-        }
       }
+    }
     }
     
     console.log(`IFC: Above-bench ${aboveBenchOption} added with shelves and panels`);

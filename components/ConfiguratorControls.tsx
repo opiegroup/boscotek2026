@@ -51,6 +51,11 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   // State for Embedded Cabinet Config Modal
   const [editingCabinet, setEditingCabinet] = useState<EmbeddedCabinet | null>(null);
 
+  // State for Interior Configurator tabs (lifted to parent to persist across re-renders)
+  const [interiorActiveTab, setInteriorActiveTab] = useState<DrawerInteriorType>('partition_set');
+  const [interiorConfigMode, setInteriorConfigMode] = useState<'sets' | 'accessories'>('sets');
+  const [interiorAccessoryCategory, setInteriorAccessoryCategory] = useState<string>('partition');
+
   // Helper to extract Cabinet Dimensions
   const getCabinetDimensions = () => {
     const wGroup = product.groups.find(g => g.id === 'width');
@@ -93,10 +98,15 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   };
 
   // --- SUB-COMPONENT: DRAWER INTERIOR CONFIG ---
+  // Note: activeTab, configMode, accessoryCategory state is lifted to parent to persist across re-renders
   const InteriorConfigurator = ({ group, currentConfig, onDrawerStackChange }: { group: OptionGroup, currentConfig: ConfigurationState, onDrawerStackChange?: (stack: DrawerConfiguration[]) => void }) => {
-     const [activeTab, setActiveTab] = useState<DrawerInteriorType>('partition_set');
-     const [configMode, setConfigMode] = useState<'sets' | 'accessories'>('sets');
-     const [accessoryCategory, setAccessoryCategory] = useState<string>('partition');
+     // Use lifted state from parent (avoids reset on re-render)
+     const activeTab = interiorActiveTab;
+     const setActiveTab = setInteriorActiveTab;
+     const configMode = interiorConfigMode;
+     const setConfigMode = setInteriorConfigMode;
+     const accessoryCategory = interiorAccessoryCategory;
+     const setAccessoryCategory = setInteriorAccessoryCategory;
 
      if (activeDrawerIndex === null) return null;
      

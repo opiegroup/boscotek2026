@@ -272,7 +272,7 @@ const Drawer3D = ({ config, width, height, depth, faciaColor, isOpen, isGhost }:
    );
 };
 
-export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex, showFullExtension = false }: any) => {
+export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.75, frameColor = '#333', faciaColor = '#ccc', product, activeDrawerIndex, antiTiltDemoIndex = null }: any) => {
   // Get usable height from product configuration
   const heightGroup = product.groups.find((g: any) => g.id === 'height');
   const selectedHeightId = config.selections['height'];
@@ -385,7 +385,9 @@ export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.
          {drawerStack.map((d, i) => {
             const isActive = d.originalIndex === activeDrawerIndex;
             const isDrawerGhost = isGhost && !isActive;
-            const shouldOpen = showFullExtension || isActive;
+            // Anti-tilt mechanism: only one drawer can be open at a time
+            const isAntiTiltDemo = antiTiltDemoIndex !== null && d.originalIndex === antiTiltDemoIndex;
+            const shouldOpen = isAntiTiltDemo || isActive;
             return (
                <group key={i} position={[0, d.y, 0]}>
                   <Drawer3D 
@@ -1005,7 +1007,7 @@ const SceneCapture = ({ onCapture }: { onCapture: (captureFunc: () => string | n
 export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, product, activeDrawerIndex }, ref) => {
     const [bgMode, setBgMode] = useState<BackgroundMode>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
-    const [showFullExtension, setShowFullExtension] = useState(false);
+    const [antiTiltDemoIndex, setAntiTiltDemoIndex] = useState<number | null>(null); // Cycles through drawers one at a time
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const captureRef = useRef<(() => string | null) | null>(null);
@@ -1118,7 +1120,7 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
            {bgMode !== 'photo' && <Grid position={[0, -0.01, 0]} args={[10.5, 10.5]} cellSize={0.5} cellThickness={0.5} cellColor={bgMode === 'light' ? '#a1a1aa' : '#3f3f46'} sectionSize={1} sectionThickness={1} sectionColor={bgMode === 'light' ? '#71717a' : '#52525b'} fadeDistance={5} fadeStrength={1} infiniteGrid />}
            <group position={[0, 0, 0]}>
               {product.id === 'prod-hd-cabinet' ? (
-                 <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} showFullExtension={showFullExtension} />
+                 <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} antiTiltDemoIndex={antiTiltDemoIndex} />
               ) : (
                  <Center bottom>
                     <group>
@@ -1139,15 +1141,27 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
             <button onClick={() => setBgMode('photo')} className={`px-3 py-1 text-xs font-medium rounded transition-colors ${bgMode === 'photo' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}>Photo</button>
             <div className="w-px bg-zinc-600 mx-1"></div>
             <button onClick={() => controlsRef.current?.reset()} className="px-3 py-1 text-xs font-medium rounded transition-colors text-zinc-300 hover:text-white hover:bg-zinc-700" title="Reset Camera View">Recenter</button>
-            {product.id === 'prod-hd-cabinet' && (
+            {product.id === 'prod-hd-cabinet' && config.customDrawers && config.customDrawers.length > 0 && (
               <>
                 <div className="w-px bg-zinc-600 mx-1"></div>
                 <button 
-                  onClick={() => setShowFullExtension(!showFullExtension)} 
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${showFullExtension ? 'bg-amber-500 text-black' : 'text-zinc-300 hover:text-white hover:bg-zinc-700'}`} 
-                  title="Show Full Extension Runners"
+                  onClick={() => {
+                    // Cycle through drawers one at a time (anti-tilt demo)
+                    const drawerCount = config.customDrawers.length;
+                    if (antiTiltDemoIndex === null) {
+                      setAntiTiltDemoIndex(0); // Start with first drawer
+                    } else if (antiTiltDemoIndex >= drawerCount - 1) {
+                      setAntiTiltDemoIndex(null); // Reset after last drawer
+                    } else {
+                      setAntiTiltDemoIndex(antiTiltDemoIndex + 1); // Next drawer
+                    }
+                  }} 
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${antiTiltDemoIndex !== null ? 'bg-amber-500 text-black' : 'text-zinc-300 hover:text-white hover:bg-zinc-700'}`} 
+                  title="Anti-Tilt Mechanism Demo - Only one drawer can extend at a time"
                 >
-                  {showFullExtension ? '🔓 Extended' : 'Full Extension'}
+                  {antiTiltDemoIndex !== null 
+                    ? `🔒 Drawer ${antiTiltDemoIndex + 1}/${config.customDrawers.length}` 
+                    : '🔐 Anti-Tilt Demo'}
                 </button>
               </>
             )}
