@@ -408,6 +408,244 @@ export const HdCabinetGroup = ({ config, width = 0.56, height = 0.85, depth = 0.
 };
 
 // ==========================================
+// MOBILE TOOL CART STATION COMPONENT
+// Accurate geometry per Boscotek spec
+// 1130mm W × 900mm H (to worktop) × 825mm rear panel
+// ==========================================
+
+export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faciaColor = '#ccc' }: any) => {
+  // ========================================
+  // CONFIGURATION EXTRACTION
+  // ========================================
+  
+  const widthGroup = product.groups.find((g: any) => g.id === 'width');
+  const selectedWidthId = config.selections['width'];
+  const widthOption = widthGroup?.options.find((o: any) => o.id === selectedWidthId);
+  const cabinetWidth = (widthOption?.meta?.width || 0.85);
+  
+  const bayPresetGroup = product.groups.find((g: any) => g.id === 'bay_preset');
+  const selectedBayPresetId = config.selections['bay_preset'];
+  const bayPreset = bayPresetGroup?.options.find((o: any) => o.id === selectedBayPresetId);
+  const leftDrawers = bayPreset?.meta?.leftDrawers || [];
+  const rightDrawers = bayPreset?.meta?.rightDrawers || [75, 75, 75, 100, 150];
+  const leftCupboard = bayPreset?.meta?.leftCupboard || false;
+  const rightCupboard = bayPreset?.meta?.rightCupboard || false;
+  
+  const worktopGroup = product.groups.find((g: any) => g.id === 'worktop');
+  const selectedWorktopId = config.selections['worktop'];
+  const worktopOption = worktopGroup?.options.find((o: any) => o.id === selectedWorktopId);
+  const worktopColor = worktopOption?.meta?.color || '#1a1a1a';
+  
+  const hasRearPosts = config.selections['rear_system'] === true;
+  
+  const getAccessoryCount = (groupId: string): number => {
+    const selectedId = config.selections[groupId];
+    if (!selectedId) return 0;
+    const group = product.groups.find((g: any) => g.id === groupId);
+    const option = group?.options?.find((o: any) => o.id === selectedId);
+    const val = option?.value;
+    return typeof val === 'number' ? val : 0;
+  };
+  
+  const toolboardCount = getAccessoryCount('rear_toolboard');
+  const louvreCount = getAccessoryCount('rear_louvre');
+  const trayCount = getAccessoryCount('rear_trays');
+  
+  // ========================================
+  // FIXED DIMENSIONS
+  // ========================================
+  const depth = 0.56;
+  const castorHeight = 0.10;
+  const worktopThickness = 0.035;
+  const shellThickness = 0.018;
+  const drawerReveal = 0.002;
+  const drawerStackHeight = 0.475;
+  const accessCompartmentHeight = 0.120;
+  const cabinetBodyHeight = drawerStackHeight + accessCompartmentHeight + shellThickness * 2;
+  const rearPanelHeight = 0.825;
+  const worktopOverhangFront = 0.025;
+  const worktopOverhangSide = 0.015;
+  const bayWidth = (cabinetWidth - shellThickness * 3) / 2;
+  
+  // ========================================
+  // MATERIALS
+  // ========================================
+  const shellMaterial = <meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.15} />;
+  const drawerHandleMaterial = <meshStandardMaterial color="#d4d4d4" roughness={0.3} metalness={0.5} />;
+  const blackHandleMaterial = <meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} />;
+  const castorMaterial = <meshStandardMaterial color="#71717a" roughness={0.4} metalness={0.4} />;
+  const wheelMaterial = <meshStandardMaterial color="#3f3f46" roughness={0.7} metalness={0.1} />;
+  
+  const Castor = ({ position }: { position: [number, number, number] }) => (
+    <group position={position}>
+      <mesh position={[0, castorHeight - 0.01, 0]}><boxGeometry args={[0.055, 0.012, 0.055]} />{castorMaterial}</mesh>
+      <mesh position={[0, castorHeight * 0.55, 0]}><boxGeometry args={[0.04, castorHeight * 0.5, 0.04]} />{castorMaterial}</mesh>
+      <mesh position={[0, 0.032, 0]} rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.032, 0.032, 0.022, 16]} />{wheelMaterial}</mesh>
+    </group>
+  );
+  
+  const SideGrabHandle = ({ side }: { side: 'left' | 'right' }) => {
+    const handleY = castorHeight + cabinetBodyHeight - 0.04;
+    const handleLength = 0.32;
+    const tubeRadius = 0.010;
+    const standoff = 0.025;
+    const xPos = side === 'left' ? -cabinetWidth/2 - standoff : cabinetWidth/2 + standoff;
+    
+    return (
+      <group position={[xPos, handleY, 0]}>
+        <mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[tubeRadius, tubeRadius, handleLength, 12]} />{blackHandleMaterial}</mesh>
+        <mesh position={[standoff/2 * (side === 'left' ? 1 : -1), 0, handleLength/2 - tubeRadius]}><boxGeometry args={[standoff, tubeRadius * 2, tubeRadius * 2]} />{blackHandleMaterial}</mesh>
+        <mesh position={[standoff/2 * (side === 'left' ? 1 : -1), 0, -handleLength/2 + tubeRadius]}><boxGeometry args={[standoff, tubeRadius * 2, tubeRadius * 2]} />{blackHandleMaterial}</mesh>
+        <mesh position={[standoff * (side === 'left' ? 1 : -1), 0, handleLength/2 - tubeRadius]}><boxGeometry args={[0.008, 0.035, 0.035]} />{blackHandleMaterial}</mesh>
+        <mesh position={[standoff * (side === 'left' ? 1 : -1), 0, -handleLength/2 + tubeRadius]}><boxGeometry args={[0.008, 0.035, 0.035]} />{blackHandleMaterial}</mesh>
+      </group>
+    );
+  };
+  
+  const CupboardBay = ({ xPos }: { xPos: number }) => {
+    const doorHeight = drawerStackHeight;
+    const doorWidth = bayWidth - 0.006;
+    return (
+      <group position={[xPos, castorHeight + shellThickness + doorHeight/2, 0]}>
+        <mesh position={[0, 0, depth/2 - shellThickness/2]}><boxGeometry args={[doorWidth, doorHeight, shellThickness]} /><meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.15} /></mesh>
+        <mesh position={[doorWidth/2 - 0.025, 0, depth/2 + 0.008]}><boxGeometry args={[0.012, 0.10, 0.015]} />{blackHandleMaterial}</mesh>
+      </group>
+    );
+  };
+  
+  const DrawerStack = ({ xPos, drawerHeights }: { xPos: number, drawerHeights: number[] }) => {
+    const sortedDrawers = [...drawerHeights].sort((a, b) => b - a);
+    const drawerWidth = bayWidth - 0.006;
+    const handleWidth = drawerWidth - 0.01;
+    let currentY = castorHeight + shellThickness;
+    
+    return (
+      <group position={[xPos, 0, 0]}>
+        {sortedDrawers.map((heightMm, i) => {
+          const heightM = heightMm / 1000;
+          const drawerY = currentY + heightM / 2;
+          currentY += heightM + drawerReveal;
+          const handleY = heightM/2 - 0.012;
+          return (
+            <group key={i} position={[0, drawerY, 0]}>
+              <mesh position={[0, 0, depth/2 - shellThickness/2]}><boxGeometry args={[drawerWidth, heightM - drawerReveal, shellThickness]} /><meshStandardMaterial color={faciaColor} roughness={0.35} metalness={0.15} /></mesh>
+              <mesh position={[0, handleY, depth/2 + 0.008]}><boxGeometry args={[handleWidth, 0.016, 0.012]} />{drawerHandleMaterial}</mesh>
+            </group>
+          );
+        })}
+      </group>
+    );
+  };
+  
+  const RearAccessories = () => {
+    if (!hasRearPosts) return null;
+    const postHeight = rearPanelHeight;
+    const postSize = 0.04;
+    const crossbarHeight = 0.03;
+    const baseY = castorHeight + cabinetBodyHeight + worktopThickness;
+    const panelInset = postSize + 0.005;
+    const panelWidth = cabinetWidth - panelInset * 2;
+    const panelHeight = 0.30;
+    
+    const SingleLouvrePanel = ({ yPos }: { yPos: number }) => (
+      <group position={[0, yPos, -depth/2 + 0.035]}>
+        <mesh><boxGeometry args={[panelWidth, panelHeight, 0.012]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.2} /></mesh>
+        {Array.from({ length: 8 }).map((_, i) => (
+          <mesh key={i} position={[0, -panelHeight/2 + (panelHeight/8) * (i + 0.5), 0.012]}><boxGeometry args={[panelWidth - 0.02, 0.028, 0.015]} /><meshStandardMaterial color={frameColor} roughness={0.35} metalness={0.25} /></mesh>
+        ))}
+      </group>
+    );
+    
+    const SingleToolboardPanel = ({ yPos }: { yPos: number }) => (
+      <group position={[0, yPos, -depth/2 + 0.035]}>
+        <mesh><boxGeometry args={[panelWidth, panelHeight, 0.012]} /><meshStandardMaterial color={frameColor} roughness={0.45} metalness={0.2} /></mesh>
+      </group>
+    );
+    
+    const TrayShelf = ({ yPos }: { yPos: number }) => {
+      const trayWidth = cabinetWidth - postSize * 2 - 0.01;
+      const trayDepth = 0.208;
+      const rearHeight = 0.095;
+      return (
+        <group position={[0, yPos, -depth/2 + trayDepth/2 + postSize]}>
+          <mesh><boxGeometry args={[trayWidth, 0.003, trayDepth]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} /></mesh>
+          <mesh position={[0, rearHeight/2, -trayDepth/2 + 0.003]}><boxGeometry args={[trayWidth, rearHeight, 0.006]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} /></mesh>
+        </group>
+      );
+    };
+    
+    const topShelfHeight = 0.095 + 0.02;
+    const stackStartY = baseY + postHeight - crossbarHeight - topShelfHeight - 0.02;
+    const panelPositions: { type: 'louvre' | 'toolboard', yCenter: number }[] = [];
+    let currentStackY = stackStartY;
+    
+    for (let i = 0; i < louvreCount; i++) {
+      currentStackY -= panelHeight / 2;
+      panelPositions.push({ type: 'louvre', yCenter: currentStackY });
+      currentStackY -= panelHeight / 2 + 0.005;
+    }
+    for (let i = 0; i < toolboardCount; i++) {
+      currentStackY -= panelHeight / 2;
+      panelPositions.push({ type: 'toolboard', yCenter: currentStackY });
+      currentStackY -= panelHeight / 2 + 0.005;
+    }
+    
+    return (
+      <group>
+        <mesh position={[-cabinetWidth/2 + postSize/2 + 0.005, baseY + postHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[postSize, postHeight, postSize]} />{shellMaterial}</mesh>
+        <mesh position={[cabinetWidth/2 - postSize/2 - 0.005, baseY + postHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[postSize, postHeight, postSize]} />{shellMaterial}</mesh>
+        <mesh position={[0, baseY + postHeight - crossbarHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[cabinetWidth - postSize, crossbarHeight, postSize]} />{shellMaterial}</mesh>
+        <TrayShelf yPos={baseY + postHeight - crossbarHeight - 0.095} />
+        {panelPositions.map((panel, idx) => (
+          panel.type === 'louvre' 
+            ? <SingleLouvrePanel key={idx} yPos={panel.yCenter} />
+            : <SingleToolboardPanel key={idx} yPos={panel.yCenter} />
+        ))}
+        {trayCount > 0 && Array.from({ length: trayCount }).map((_, i) => {
+          const usableTop = baseY + postHeight - crossbarHeight - 0.12;
+          const usableBottom = baseY + 0.05;
+          const spacing = (usableTop - usableBottom) / (trayCount + 1);
+          return <TrayShelf key={i} yPos={usableBottom + spacing * (i + 1)} />;
+        })}
+      </group>
+    );
+  };
+  
+  return (
+    <Center bottom>
+      <group>
+        <Castor position={[-cabinetWidth/2 + 0.07, 0, depth/2 - 0.07]} />
+        <Castor position={[cabinetWidth/2 - 0.07, 0, depth/2 - 0.07]} />
+        <Castor position={[-cabinetWidth/2 + 0.07, 0, -depth/2 + 0.07]} />
+        <Castor position={[cabinetWidth/2 - 0.07, 0, -depth/2 + 0.07]} />
+        
+        <mesh position={[-cabinetWidth/2 + shellThickness/2, castorHeight + cabinetBodyHeight/2, 0]}><boxGeometry args={[shellThickness, cabinetBodyHeight, depth]} />{shellMaterial}</mesh>
+        <mesh position={[cabinetWidth/2 - shellThickness/2, castorHeight + cabinetBodyHeight/2, 0]}><boxGeometry args={[shellThickness, cabinetBodyHeight, depth]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + shellThickness + drawerStackHeight/2, -depth/2 + shellThickness/2]}><boxGeometry args={[cabinetWidth - shellThickness * 2, drawerStackHeight, shellThickness]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + cabinetBodyHeight - shellThickness/2, -depth/2 + shellThickness/2]}><boxGeometry args={[cabinetWidth - shellThickness * 2, shellThickness, shellThickness]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + shellThickness/2, 0]}><boxGeometry args={[cabinetWidth - shellThickness * 2, shellThickness, depth - shellThickness]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + cabinetBodyHeight - shellThickness/2, 0]}><boxGeometry args={[cabinetWidth - shellThickness * 2, shellThickness, depth - shellThickness]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + shellThickness + drawerStackHeight/2, 0]}><boxGeometry args={[shellThickness, drawerStackHeight, depth - shellThickness * 2]} />{shellMaterial}</mesh>
+        <mesh position={[0, castorHeight + shellThickness + drawerStackHeight + shellThickness/2, 0]}><boxGeometry args={[cabinetWidth - shellThickness * 2, shellThickness, depth - shellThickness * 2]} />{shellMaterial}</mesh>
+        
+        <mesh position={[worktopOverhangSide/2, castorHeight + cabinetBodyHeight + worktopThickness/2, worktopOverhangFront/2]}>
+          <boxGeometry args={[cabinetWidth + worktopOverhangSide * 2, worktopThickness, depth + worktopOverhangFront]} />
+          <meshStandardMaterial color={worktopColor} roughness={0.3} metalness={0.2} />
+        </mesh>
+        
+        <SideGrabHandle side="left" />
+        <SideGrabHandle side="right" />
+        
+        {leftCupboard ? <CupboardBay xPos={-cabinetWidth/4 - shellThickness/4} /> : leftDrawers.length > 0 && <DrawerStack xPos={-cabinetWidth/4 - shellThickness/4} drawerHeights={leftDrawers} />}
+        {rightCupboard ? <CupboardBay xPos={cabinetWidth/4 + shellThickness/4} /> : rightDrawers.length > 0 && <DrawerStack xPos={cabinetWidth/4 + shellThickness/4} drawerHeights={rightDrawers} />}
+        
+        <RearAccessories />
+      </group>
+    </Center>
+  );
+};
+
+// ==========================================
 // 3. WORKBENCH VISUALIZER COMPONENTS
 // ==========================================
 
@@ -1121,6 +1359,8 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
            <group position={[0, 0, 0]}>
               {product.id === 'prod-hd-cabinet' ? (
                  <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} antiTiltDemoIndex={antiTiltDemoIndex} />
+              ) : product.id === 'prod-mobile-tool-cart' ? (
+                 <MobileToolCartGroup config={config} product={product} frameColor={frameColor} faciaColor={faciaColor} />
               ) : (
                  <Center bottom>
                     <group>

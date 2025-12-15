@@ -717,5 +717,121 @@ export const CATALOG: ProductDefinition[] = [
       { id: 'housing_color', label: 'Housing / Cavity Colour', type: 'color', step: 4, defaultValue: 'col-mg', description: 'Select the cabinet shell colour.', options: COLORS },
       { id: 'facia_color', label: 'Drawer Facia Colour', type: 'color', step: 5, defaultValue: 'col-sg', description: 'Select the drawer front colour.', options: COLORS }
     ]
+  },
+
+  // 4. MOBILE TOOL CART STATION
+  {
+    id: 'prod-mobile-tool-cart',
+    name: 'Mobile Tool Cart Station',
+    description: 'Heavy-duty mobile workstation with dual drawer bays, worktop, and optional rear accessories. Anti-tilt castor system included.',
+    basePrice: 1800,
+    groups: [
+      // 1. Cart Width
+      {
+        id: 'width',
+        label: 'Cart Width',
+        type: 'radio',
+        step: 1,
+        description: 'Overall cart width including castors',
+        options: [
+          { id: 'tcs-700', label: '700mm Wide', value: 700, code: '700', priceDelta: 0, meta: { width: 0.7, bayWidth: 0.28 } },
+          { id: 'tcs-850', label: '850mm Wide', value: 850, code: '850', priceDelta: 200, meta: { width: 0.85, bayWidth: 0.35 } }
+        ]
+      },
+      // 2. Bay Configuration Preset (defines left + right drawer stacks)
+      // TCS product codes follow Boscotek naming: B2x = specific configurations
+      {
+        id: 'bay_preset',
+        label: 'Bay Configuration',
+        type: 'select',
+        step: 2,
+        description: 'Select cabinet bay layout. All include floating worktop with recessed gap.',
+        options: [
+          // Dual Drawer Configurations
+          { id: 'B25', label: 'B25: Dual 5-Drawer Units (10 drawers total)', value: 'B25', code: 'B25', priceDelta: 0, 
+            meta: { leftDrawers: [75, 75, 75, 100, 150], rightDrawers: [75, 75, 75, 100, 150], totalDrawers: 10 } },
+          { id: 'B26', label: 'B26: Dual 6-Drawer Units (12 drawers total)', value: 'B26', code: 'B26', priceDelta: 150,
+            meta: { leftDrawers: [75, 75, 75, 75, 100, 100], rightDrawers: [75, 75, 75, 75, 100, 100], totalDrawers: 12 } },
+          { id: 'B28', label: 'B28: Dual 7-Drawer Units (14 drawers total)', value: 'B28', code: 'B28', priceDelta: 250,
+            meta: { leftDrawers: [75, 75, 75, 75, 75, 100, 100], rightDrawers: [75, 75, 75, 75, 75, 100, 100], totalDrawers: 14 } },
+          // Cupboard + Drawer Configurations (TCS.B27 style)
+          { id: 'B27', label: 'B27: Cupboard + 5-Drawer Unit', value: 'B27', code: 'B27', priceDelta: -50,
+            meta: { leftDrawers: [], leftCupboard: true, rightDrawers: [75, 75, 75, 100, 150], totalDrawers: 5 } },
+          { id: 'B27R', label: 'B27R: 5-Drawer Unit + Cupboard', value: 'B27R', code: 'B27R', priceDelta: -50,
+            meta: { leftDrawers: [75, 75, 75, 100, 150], rightDrawers: [], rightCupboard: true, totalDrawers: 5 } },
+          // Dual Cupboard
+          { id: 'BCC', label: 'BCC: Dual Cupboard Units', value: 'BCC', code: 'BCC', priceDelta: -200,
+            meta: { leftDrawers: [], leftCupboard: true, rightDrawers: [], rightCupboard: true, totalDrawers: 0 } }
+        ]
+      },
+      // 3. Worktop Material
+      {
+        id: 'worktop',
+        label: 'Worktop Material',
+        type: 'radio',
+        step: 3,
+        defaultValue: 'tcs-top-steel',
+        options: [
+          { id: 'tcs-top-steel', label: 'Steel Top (Standard)', value: 'steel', code: 'ST', priceDelta: 0, meta: { color: '#27272a' } },
+          { id: 'tcs-top-rubber', label: 'Rubber Mat Surface', value: 'rubber', code: 'R', priceDelta: 80, meta: { color: '#1f1f1f' } },
+          { id: 'tcs-top-ss', label: 'Stainless Steel', value: 'ss', code: 'SS', priceDelta: 350, meta: { color: '#d4d4d8' } },
+          { id: 'tcs-top-lam', label: 'Laminated Timber', value: 'lam', code: 'L', priceDelta: 50, meta: { color: '#a1a1aa' } }
+        ]
+      },
+      // 4. Rear Accessory System
+      {
+        id: 'rear_system',
+        label: 'Rear Accessory System',
+        type: 'checkbox',
+        step: 4,
+        description: 'Add rear upright posts for mounting accessories',
+        options: [
+          { id: 'rear-posts', label: 'Rear Upright Posts (Required for accessories)', value: true, code: 'RP', priceDelta: 250 }
+        ]
+      },
+      // 5. Rear Toolboard Panels (requires rear posts)
+      {
+        id: 'rear_toolboard',
+        label: 'Toolboard Panels',
+        type: 'select',
+        step: 4,
+        description: 'Perforated steel panels for hook accessories',
+        options: [
+          { id: 'tb-none', label: 'None', value: 'none', code: 'TB0', priceDelta: 0 },
+          { id: 'tb-1', label: '1× Toolboard Panel', value: 1, code: 'TB1', priceDelta: 85 },
+          { id: 'tb-2', label: '2× Toolboard Panels', value: 2, code: 'TB2', priceDelta: 160 }
+        ]
+      },
+      // 6. Rear Louvre Panels (requires rear posts)
+      {
+        id: 'rear_louvre',
+        label: 'Louvre Panels',
+        type: 'select',
+        step: 4,
+        description: 'Slotted panels for bin storage',
+        options: [
+          { id: 'lv-none', label: 'None', value: 'none', code: 'LV0', priceDelta: 0 },
+          { id: 'lv-1', label: '1× Louvre Panel', value: 1, code: 'LV1', priceDelta: 95 },
+          { id: 'lv-2', label: '2× Louvre Panels', value: 2, code: 'LV2', priceDelta: 180 }
+        ]
+      },
+      // 7. Rear Tray Shelves (requires rear posts)
+      {
+        id: 'rear_trays',
+        label: 'Adjustable Tray Shelves',
+        type: 'select',
+        step: 4,
+        description: 'Adjustable shelving for parts and tools',
+        options: [
+          { id: 'tr-none', label: 'None', value: 'none', code: 'T0', priceDelta: 0 },
+          { id: 'tr-4', label: '4× Tray Shelves', value: 4, code: 'T4', priceDelta: 120 },
+          { id: 'tr-6', label: '6× Tray Shelves', value: 6, code: 'T6', priceDelta: 170 },
+          { id: 'tr-8', label: '8× Tray Shelves', value: 8, code: 'T8', priceDelta: 220 }
+        ]
+      },
+      // 8. Colors
+      { id: 'housing_color', label: 'Housing / Cart Colour', type: 'color', step: 5, defaultValue: 'col-mg', description: 'Select the cart body colour.', options: COLORS },
+      { id: 'facia_color', label: 'Drawer Facia Colour', type: 'color', step: 5, defaultValue: 'col-sg', description: 'Select the drawer front colour.', options: COLORS }
+    ]
   }
 ];
