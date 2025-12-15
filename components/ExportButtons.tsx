@@ -229,45 +229,6 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
           </svg>
         </button>
 
-        {/* OBJ Export (for Blender) */}
-        <button
-          onClick={() => handleExportRequest('OBJ')}
-          disabled={isExporting}
-          className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-500 hover:to-purple-600 text-white rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
-        >
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <div className="text-left">
-              <div className="font-bold text-sm">Download OBJ Model</div>
-              <div className="text-xs text-purple-200">3D model for Blender, 3ds Max, Maya</div>
-            </div>
-          </div>
-          <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Blender Script Export */}
-        <button
-          onClick={() => handleExportRequest('BLENDER_SCRIPT')}
-          disabled={isExporting}
-          className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-500 hover:to-orange-600 text-white rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed group"
-        >
-          <div className="flex items-center gap-3">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
-            </svg>
-            <div className="text-left">
-              <div className="font-bold text-sm">Blender Python Script</div>
-              <div className="text-xs text-orange-200">Auto-generate model in Blender</div>
-            </div>
-          </div>
-          <svg className="w-5 h-5 transform group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
       </div>
 
       {/* Loading Indicator */}
@@ -280,7 +241,7 @@ export const ExportButtons: React.FC<ExportButtonsProps> = ({
 
       {/* Info Text */}
       <div className="bg-zinc-800/30 border border-zinc-700/50 rounded p-3 text-[10px] text-zinc-500 leading-relaxed">
-        <strong className="text-zinc-400">Note:</strong> All exports include complete product specifications, dimensions, materials, and pricing information. IFC files work with Revit/ArchiCAD. OBJ files and Blender scripts are perfect for testing geometry in Blender.
+        <strong className="text-zinc-400">Note:</strong> All exports include complete product specifications, dimensions, materials, and pricing information. IFC files are compatible with Revit, ArchiCAD, Navisworks, and other BIM software.
       </div>
 
       {/* Lead Capture Modal */}

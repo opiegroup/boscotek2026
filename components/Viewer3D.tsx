@@ -556,20 +556,142 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
       </group>
     );
     
-    const SingleToolboardPanel = ({ yPos }: { yPos: number }) => (
-      <group position={[0, yPos, -depth/2 + 0.035]}>
-        <mesh><boxGeometry args={[panelWidth, panelHeight, 0.012]} /><meshStandardMaterial color={frameColor} roughness={0.45} metalness={0.2} /></mesh>
-      </group>
-    );
+    const SingleToolboardPanel = ({ yPos }: { yPos: number }) => {
+      // Grid of square holes - approx 25mm spacing, 8mm square holes
+      const holeSpacing = 0.025; // 25mm between hole centers
+      const holeSize = 0.008;    // 8mm square holes
+      const cols = Math.floor((panelWidth - 0.04) / holeSpacing);
+      const rows = Math.floor((panelHeight - 0.02) / holeSpacing);
+      
+      return (
+        <group position={[0, yPos, -depth/2 + 0.035]}>
+          {/* Main panel */}
+          <mesh><boxGeometry args={[panelWidth, panelHeight, 0.012]} /><meshStandardMaterial color={frameColor} roughness={0.45} metalness={0.2} /></mesh>
+          
+          {/* Square holes grid */}
+          {Array.from({ length: rows }).map((_, row) => 
+            Array.from({ length: cols }).map((_, col) => {
+              const x = -panelWidth/2 + 0.03 + col * holeSpacing;
+              const y = -panelHeight/2 + 0.02 + row * holeSpacing;
+              return (
+                <mesh key={`${row}-${col}`} position={[x, y, 0.007]}>
+                  <boxGeometry args={[holeSize, holeSize, 0.006]} />
+                  <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+                </mesh>
+              );
+            })
+          )}
+        </group>
+      );
+    };
+    
+    // Wedge-shaped shelf end bracket - hooks into holes in middle of upright posts
+    // Creates a right-triangle bracket that runs the full length of the base plate
+    const WedgeBracket = ({ side }: { side: 'left' | 'right' }) => {
+      // Wedge dimensions matching the tray shelf exactly (see reference image)
+      const wedgeHeight = 0.095;     // Vertical height at back (95mm) - matches rear lip
+      const wedgeDepth = 0.208;      // Full depth of base plate (208mm)
+      const wedgeThickness = 0.003;  // Sheet metal thickness (3mm)
+      const tipCutoff = 0.012;       // Small chamfer at bottom-front tip (12mm)
+      
+      // Create wedge geometry defined in YZ plane (Y=height, Z=depth forward)
+      // so we don't need complex rotations - just mirror X for right side
+      const geometry = useMemo(() => {
+        const geo = new THREE.BufferGeometry();
+        const t = wedgeThickness;
+        const mirrorX = side === 'right' ? -1 : 1;
+        
+        // Define wedge profile in YZ plane, extruded in X direction:
+        // Looking from the left side of the shelf (-X direction):
+        //   v0: Top rear corner (0, wedgeHeight, 0)
+        //   v1: Bottom rear corner (0, 0, 0)  
+        //   v2: Bottom front before chamfer (0, 0, wedgeDepth - tipCutoff)
+        //   v3: Chamfer tip (0, tipCutoff, wedgeDepth)
+        // The hypotenuse goes from v0 (top rear) to v3 (chamfer tip)
+        
+        // Inner face (toward shelf center, X = 0)
+        const v0 = [0, wedgeHeight, 0];                    // Top rear
+        const v1 = [0, 0, 0];                               // Bottom rear
+        const v2 = [0, 0, wedgeDepth - tipCutoff];          // Bottom front (before chamfer)
+        const v3 = [0, tipCutoff, wedgeDepth];              // Chamfer tip
+        
+        // Outer face (away from shelf center, X = thickness)
+        const v4 = [t * mirrorX, wedgeHeight, 0];
+        const v5 = [t * mirrorX, 0, 0];
+        const v6 = [t * mirrorX, 0, wedgeDepth - tipCutoff];
+        const v7 = [t * mirrorX, tipCutoff, wedgeDepth];
+        
+        const positions = new Float32Array([
+          // Inner face (2 triangles forming the wedge profile)
+          ...v0, ...v1, ...v2,
+          ...v0, ...v2, ...v3,
+          
+          // Outer face (reversed winding for correct normals)
+          ...v4, ...v6, ...v5,
+          ...v4, ...v7, ...v6,
+          
+          // Bottom edge (horizontal base of triangle)
+          ...v1, ...v5, ...v6,
+          ...v1, ...v6, ...v2,
+          
+          // Rear edge (vertical back of triangle)
+          ...v0, ...v4, ...v5,
+          ...v0, ...v5, ...v1,
+          
+          // Hypotenuse edge (sloped front, from top-rear to chamfer tip)
+          ...v0, ...v3, ...v7,
+          ...v0, ...v7, ...v4,
+          
+          // Chamfer edge (small vertical edge at front tip)
+          ...v2, ...v6, ...v7,
+          ...v2, ...v7, ...v3,
+        ]);
+        
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.computeVertexNormals();
+        
+        return geo;
+      }, [side]);
+      
+      // Position bracket at edge of shelf - halfway into the upright post (hooks into center holes)
+      const xOffset = side === 'left' 
+        ? -cabinetWidth/2 + postSize/2  // Left: halfway into left post
+        : cabinetWidth/2 - postSize/2;  // Right: halfway into right post
+      
+      return (
+        <mesh 
+          geometry={geometry} 
+          position={[xOffset, 0, 0]}
+        >
+          <meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} side={THREE.DoubleSide} />
+        </mesh>
+      );
+    };
     
     const TrayShelf = ({ yPos }: { yPos: number }) => {
-      const trayWidth = cabinetWidth - postSize * 2 - 0.01;
-      const trayDepth = 0.208;
-      const rearHeight = 0.095;
+      // Shelf width spans between the wedge brackets (which are at postSize/2 from post edges)
+      const trayWidth = cabinetWidth - postSize; // Shelf sits between the bracket attachment points
+      const trayDepth = 0.208;      // 208mm depth
+      const rearHeight = 0.095;     // 95mm rear lip height
+      const frontLipHeight = 0.012; // Small front lip (12mm)
+      const shelfZ = -depth/2 + trayDepth/2 + postSize;
+      
       return (
-        <group position={[0, yPos, -depth/2 + trayDepth/2 + postSize]}>
+        <group position={[0, yPos, shelfZ]}>
+          {/* Main shelf surface (base plate) */}
           <mesh><boxGeometry args={[trayWidth, 0.003, trayDepth]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} /></mesh>
+          
+          {/* Rear lip (95mm tall) */}
           <mesh position={[0, rearHeight/2, -trayDepth/2 + 0.003]}><boxGeometry args={[trayWidth, rearHeight, 0.006]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} /></mesh>
+          
+          {/* Front lip / joining edge (small edge at front of base plate) */}
+          <mesh position={[0, frontLipHeight/2, trayDepth/2 - 0.003]}><boxGeometry args={[trayWidth, frontLipHeight, 0.006]} /><meshStandardMaterial color={frameColor} roughness={0.4} metalness={0.25} /></mesh>
+          
+          {/* Wedge-shaped side brackets - run full length of base plate */}
+          <group position={[0, 0, -trayDepth/2]}>
+            <WedgeBracket side="left" />
+            <WedgeBracket side="right" />
+          </group>
         </group>
       );
     };
@@ -592,20 +714,62 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
     
     return (
       <group>
+        {/* Upright posts */}
         <mesh position={[-cabinetWidth/2 + postSize/2 + 0.005, baseY + postHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[postSize, postHeight, postSize]} />{shellMaterial}</mesh>
         <mesh position={[cabinetWidth/2 - postSize/2 - 0.005, baseY + postHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[postSize, postHeight, postSize]} />{shellMaterial}</mesh>
+        {/* Top crossbar */}
         <mesh position={[0, baseY + postHeight - crossbarHeight/2, -depth/2 + postSize/2]}><boxGeometry args={[cabinetWidth - postSize, crossbarHeight, postSize]} />{shellMaterial}</mesh>
-        <TrayShelf yPos={baseY + postHeight - crossbarHeight - 0.095} />
+        {/* Panels (louvre/toolboard) */}
         {panelPositions.map((panel, idx) => (
           panel.type === 'louvre' 
             ? <SingleLouvrePanel key={idx} yPos={panel.yCenter} />
             : <SingleToolboardPanel key={idx} yPos={panel.yCenter} />
         ))}
         {trayCount > 0 && Array.from({ length: trayCount }).map((_, i) => {
-          const usableTop = baseY + postHeight - crossbarHeight - 0.12;
-          const usableBottom = baseY + 0.05;
-          const spacing = (usableTop - usableBottom) / (trayCount + 1);
-          return <TrayShelf key={i} yPos={usableBottom + spacing * (i + 1)} />;
+          // Each shelf is 95mm (0.095m) tall - don't let them overlap!
+          const shelfHeight = 0.095;
+          const gap = 0.004; // 4mm gap between shelves
+          const bottomMargin = 0.05; // Gap above worktop
+          
+          // Top shelf sits directly against the crossbar (no gap at top)
+          const topShelfY = baseY + postHeight - crossbarHeight - shelfHeight;
+          const usableBottom = baseY + bottomMargin;
+          
+          // Calculate panel bounds (louvre or toolboard panels)
+          const hasPanels = panelPositions.length > 0;
+          const panelsTop = hasPanels ? panelPositions[0].yCenter + panelHeight/2 : topShelfY;
+          const panelsBottom = hasPanels ? panelPositions[panelPositions.length - 1].yCenter - panelHeight/2 : usableBottom;
+          const panelsMiddle = (panelsTop + panelsBottom) / 2;
+          
+          let shelfY: number;
+          
+          if (trayCount === 1) {
+            // Single shelf: at the top, tight against crossbar
+            shelfY = topShelfY;
+          } else if (trayCount === 2) {
+            // 2 shelves: top shelf tight, bottom shelf positioned to divide remaining space evenly
+            if (i === 0) {
+              shelfY = topShelfY; // Top shelf tight against crossbar
+            } else {
+              // Position second shelf to create even gap distribution
+              const remainingSpace = topShelfY - usableBottom - shelfHeight;
+              shelfY = usableBottom + remainingSpace / 2;
+            }
+          } else if (trayCount === 3 && hasPanels) {
+            // 3 shelves with panels (louvre or toolboard): top, middle of panels, bottom of panels
+            if (i === 0) {
+              shelfY = topShelfY; // Top shelf tight against crossbar
+            } else if (i === 1) {
+              shelfY = panelsMiddle - shelfHeight/2; // Middle shelf centered on panel area
+            } else {
+              shelfY = panelsBottom - shelfHeight; // Bottom shelf at bottom of panel area
+            }
+          } else {
+            // 3+ shelves (no louvres) or 4+ shelves: top shelf tight, then stack down with 4mm gaps
+            shelfY = topShelfY - (i * (shelfHeight + gap));
+          }
+          
+          return <TrayShelf key={i} yPos={shelfY} />;
         })}
       </group>
     );

@@ -824,6 +824,9 @@ export const CATALOG: ProductDefinition[] = [
         description: 'Adjustable shelving for parts and tools',
         options: [
           { id: 'tr-none', label: 'None', value: 'none', code: 'T0', priceDelta: 0 },
+          { id: 'tr-1', label: '1× Tray Shelf', value: 1, code: 'T1', priceDelta: 35 },
+          { id: 'tr-2', label: '2× Tray Shelves', value: 2, code: 'T2', priceDelta: 65 },
+          { id: 'tr-3', label: '3× Tray Shelves', value: 3, code: 'T3', priceDelta: 95 },
           { id: 'tr-4', label: '4× Tray Shelves', value: 4, code: 'T4', priceDelta: 120 },
           { id: 'tr-6', label: '6× Tray Shelves', value: 6, code: 'T6', priceDelta: 170 },
           { id: 'tr-8', label: '8× Tray Shelves', value: 8, code: 'T8', priceDelta: 220 }
