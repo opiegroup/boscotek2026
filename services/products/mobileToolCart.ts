@@ -23,3 +23,4 @@ export const generateMobileToolCartRef = (config: ConfigurationState, product: P
   }
   return `TCS.${width}.${bayPreset}.${worktop}${rearSegment}.${housing}.${facia}`;
 };
+
