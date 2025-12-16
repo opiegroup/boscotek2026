@@ -1229,14 +1229,13 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   // MAIN RENDER
   // ========================================
   
+  // Geometry is already positioned from y=0 upward, no centering needed
   return (
-    <Center bottom>
-      <group>
-        <CabinetShell />
-        <Doors />
-        <Shelves />
-      </group>
-    </Center>
+    <group>
+      <CabinetShell />
+      <Doors />
+      <Shelves />
+    </group>
   );
 };
 
