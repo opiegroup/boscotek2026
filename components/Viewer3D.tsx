@@ -1034,10 +1034,10 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     
     return (
       <group>
-        {/* Base/Plinth */}
+        {/* Base/Plinth - same color as carcass */}
         <mesh position={[0, baseHeight/2, 0]}>
           <boxGeometry args={[cupboardWidth, baseHeight, cupboardDepth]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
         </mesh>
         
         {topType === 'flat' ? (
