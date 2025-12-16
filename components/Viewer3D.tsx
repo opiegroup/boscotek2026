@@ -1130,8 +1130,8 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     // Door front face position (flush with cabinet front)
     const doorZ = cupboardDepth/2;
     
-    // When doors are open, rotate them 90 degrees OUTWARD around their hinge edge
-    const doorOpenAngle = doorsOpen ? Math.PI * 0.5 : 0; // 90 degrees
+    // When doors are open, rotate them 110 degrees OUTWARD around their hinge edge
+    const doorOpenAngle = doorsOpen ? Math.PI * 0.61 : 0; // 110 degrees
     
     return (
       <group>
