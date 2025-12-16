@@ -811,6 +811,217 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
 };
 
 // ==========================================
+// INDUSTRIAL STORAGE CUPBOARD COMPONENT
+// Fixed dimensions: 900mm W × 450mm D × 1800/2000mm H
+// ==========================================
+
+export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', doorColor = '#ccc' }: any) => {
+  // ========================================
+  // CONFIGURATION EXTRACTION
+  // ========================================
+  
+  const configGroup = product.groups.find((g: any) => g.id === 'cupboard_config');
+  const selectedConfigId = config.selections['cupboard_config'];
+  const configOption = configGroup?.options.find((o: any) => o.id === selectedConfigId);
+  
+  // Fixed dimensions per Boscotek spec
+  const cupboardWidth = 0.9;   // 900mm
+  const cupboardDepth = 0.45;  // 450mm
+  const cupboardHeight = configOption?.meta?.height || 1.8; // 1800mm or 2000mm
+  const topType = configOption?.meta?.topType || 'flat'; // 'flat' or 'slope'
+  const shelfCount = configOption?.meta?.shelfCount || 4;
+  const shelfType = configOption?.meta?.shelfType || 'adjustable';
+  const fixedShelves = configOption?.meta?.fixedShelves || 0;
+  const halfShelves = configOption?.meta?.halfShelves || 0;
+  
+  // ========================================
+  // GEOMETRY CONSTANTS
+  // ========================================
+  
+  const panelThickness = 0.015;  // 15mm steel panels
+  const doorGap = 0.003;         // 3mm gap between doors
+  const baseHeight = 0.1;        // 100mm base/plinth
+  const slopeHeight = 0.12;      // 120mm slope rise at back
+  const shelfThickness = 0.02;   // 20mm shelf thickness
+  const handleWidth = 0.03;
+  const handleHeight = 0.15;
+  const handleDepth = 0.02;
+  
+  // Usable interior space
+  const interiorWidth = cupboardWidth - (panelThickness * 2);
+  const interiorDepth = cupboardDepth - (panelThickness * 2);
+  const interiorTop = cupboardHeight - panelThickness - baseHeight;
+  const interiorBottom = baseHeight + panelThickness;
+  const usableHeight = interiorTop - interiorBottom;
+  
+  // ========================================
+  // SHELF POSITIONING
+  // ========================================
+  
+  const calculateShelfPositions = () => {
+    const positions: { y: number; width: number; isFixed: boolean }[] = [];
+    
+    if (shelfType === 'mixed' && fixedShelves > 0 && halfShelves > 0) {
+      // Implement layout: 1 fixed shelf at mid-height, 2 half shelves below
+      const fixedY = interiorBottom + usableHeight * 0.5;
+      positions.push({ y: fixedY, width: interiorWidth - 0.01, isFixed: true });
+      
+      // Half shelves on left and right
+      const halfShelfY1 = interiorBottom + usableHeight * 0.25;
+      const halfShelfY2 = interiorBottom + usableHeight * 0.75;
+      positions.push({ y: halfShelfY1, width: (interiorWidth / 2) - 0.01, isFixed: false });
+      positions.push({ y: halfShelfY2, width: (interiorWidth / 2) - 0.01, isFixed: false });
+    } else {
+      // Regular adjustable shelves - evenly distributed
+      const spacing = usableHeight / (shelfCount + 1);
+      for (let i = 1; i <= shelfCount; i++) {
+        const y = interiorBottom + (spacing * i);
+        positions.push({ y, width: interiorWidth - 0.01, isFixed: false });
+      }
+    }
+    
+    return positions;
+  };
+  
+  const shelfPositions = calculateShelfPositions();
+  
+  // ========================================
+  // SUB-COMPONENTS
+  // ========================================
+  
+  // Cabinet Shell (sides, back, top, bottom, base)
+  const CabinetShell = () => (
+    <group>
+      {/* Base/Plinth */}
+      <mesh position={[0, baseHeight/2, 0]}>
+        <boxGeometry args={[cupboardWidth, baseHeight, cupboardDepth]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+      </mesh>
+      
+      {/* Left Side Panel */}
+      <mesh position={[-cupboardWidth/2 + panelThickness/2, baseHeight + (cupboardHeight - baseHeight)/2, 0]}>
+        <boxGeometry args={[panelThickness, cupboardHeight - baseHeight, cupboardDepth]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+      </mesh>
+      
+      {/* Right Side Panel */}
+      <mesh position={[cupboardWidth/2 - panelThickness/2, baseHeight + (cupboardHeight - baseHeight)/2, 0]}>
+        <boxGeometry args={[panelThickness, cupboardHeight - baseHeight, cupboardDepth]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+      </mesh>
+      
+      {/* Back Panel */}
+      <mesh position={[0, baseHeight + (cupboardHeight - baseHeight)/2, -cupboardDepth/2 + panelThickness/2]}>
+        <boxGeometry args={[cupboardWidth - panelThickness*2, cupboardHeight - baseHeight, panelThickness]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+      </mesh>
+      
+      {/* Bottom Panel (floor of interior) */}
+      <mesh position={[0, baseHeight + panelThickness/2, 0]}>
+        <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, cupboardDepth - panelThickness*2]} />
+        <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
+      </mesh>
+      
+      {/* Top Panel - Flat or Sloped */}
+      {topType === 'flat' ? (
+        <mesh position={[0, cupboardHeight - panelThickness/2, 0]}>
+          <boxGeometry args={[cupboardWidth, panelThickness, cupboardDepth]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+        </mesh>
+      ) : (
+        // Sloped top - higher at back
+        <group>
+          {/* Main sloped panel - using a rotated box approximation */}
+          <mesh 
+            position={[0, cupboardHeight - panelThickness/2 + slopeHeight/2, 0]}
+            rotation={[Math.atan2(slopeHeight, cupboardDepth), 0, 0]}
+          >
+            <boxGeometry args={[cupboardWidth, panelThickness, Math.sqrt(cupboardDepth * cupboardDepth + slopeHeight * slopeHeight)]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+          </mesh>
+          {/* Front header panel to close the gap */}
+          <mesh position={[0, cupboardHeight - panelThickness/2, cupboardDepth/2 - panelThickness/2]}>
+            <boxGeometry args={[cupboardWidth, panelThickness, panelThickness]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+  
+  // Double Doors
+  const Doors = () => {
+    const doorWidth = (cupboardWidth - panelThickness*2 - doorGap) / 2;
+    const doorHeight = cupboardHeight - baseHeight - panelThickness;
+    const doorYCenter = baseHeight + doorHeight/2 + panelThickness/2;
+    
+    return (
+      <group>
+        {/* Left Door */}
+        <group position={[-doorWidth/2 - doorGap/2, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
+          <mesh>
+            <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
+            <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+          </mesh>
+          {/* Left Door Handle */}
+          <mesh position={[doorWidth/2 - 0.05, 0, panelThickness/2 + handleDepth/2]}>
+            <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
+            <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
+          </mesh>
+        </group>
+        
+        {/* Right Door */}
+        <group position={[doorWidth/2 + doorGap/2, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
+          <mesh>
+            <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
+            <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+          </mesh>
+          {/* Right Door Handle */}
+          <mesh position={[-doorWidth/2 + 0.05, 0, panelThickness/2 + handleDepth/2]}>
+            <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
+            <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
+          </mesh>
+        </group>
+      </group>
+    );
+  };
+  
+  // Shelves
+  const Shelves = () => (
+    <group>
+      {shelfPositions.map((shelf, idx) => {
+        const isHalfShelf = shelfType === 'mixed' && !shelf.isFixed && halfShelves > 0;
+        const xOffset = isHalfShelf ? (idx % 2 === 0 ? -interiorWidth/4 : interiorWidth/4) : 0;
+        
+        return (
+          <mesh 
+            key={idx} 
+            position={[xOffset, shelf.y, 0]}
+          >
+            <boxGeometry args={[shelf.width, shelfThickness, interiorDepth - 0.02]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+  
+  // ========================================
+  // MAIN RENDER
+  // ========================================
+  
+  return (
+    <Center bottom>
+      <group>
+        <CabinetShell />
+        <Doors />
+        <Shelves />
+      </group>
+    </Center>
+  );
+};
+
+// ==========================================
 // 3. WORKBENCH VISUALIZER COMPONENTS
 // ==========================================
 
@@ -1492,8 +1703,8 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const worktopId = config.selections['worktop'];
     
     // Determine which color group ID is used by this product
-    const frameColorGroupId = product.groups.find(g => g.id === 'color' || g.id === 'housing_color')?.id || 'color';
-    const faciaColorGroupId = product.groups.find(g => g.id === 'drawer_facia' || g.id === 'facia_color')?.id || 'drawer_facia';
+    const frameColorGroupId = product.groups.find(g => g.id === 'color' || g.id === 'housing_color' || g.id === 'body_color')?.id || 'color';
+    const faciaColorGroupId = product.groups.find(g => g.id === 'drawer_facia' || g.id === 'facia_color' || g.id === 'door_color')?.id || 'drawer_facia';
     
     const frameColorId = config.selections[frameColorGroupId];
     const frameColor = getMaterialColor(frameColorId, 'frame', product, frameColorGroupId);
@@ -1526,6 +1737,8 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
                  <HdCabinetGroup config={config} width={width} height={height} depth={depth} frameColor={frameColor} faciaColor={faciaColor} product={product} activeDrawerIndex={activeDrawerIndex} antiTiltDemoIndex={antiTiltDemoIndex} />
               ) : product.id === 'prod-mobile-tool-cart' ? (
                  <MobileToolCartGroup config={config} product={product} frameColor={frameColor} faciaColor={faciaColor} />
+              ) : product.id === 'prod-storage-cupboard' ? (
+                 <StorageCupboardGroup config={config} product={product} bodyColor={frameColor} doorColor={faciaColor} />
               ) : (
                  <Center bottom>
                     <group>

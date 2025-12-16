@@ -4,6 +4,7 @@ import { generateHdCabinetRef } from './products/hdCabinet';
 import { generateWorkbenchHeavyRef } from './products/workbenchHeavy';
 import { generateWorkbenchIndustrialRef } from './products/workbenchIndustrial';
 import { generateMobileToolCartRef } from './products/mobileToolCart';
+import { generateStorageCupboardRef } from './products/storageCupboard';
 
 export const generateReferenceCode = (config: ConfigurationState, product: ProductDefinition): string => {
   switch (product.id) {
@@ -15,6 +16,8 @@ export const generateReferenceCode = (config: ConfigurationState, product: Produ
       return generateWorkbenchIndustrialRef(config, product);
     case 'prod-mobile-tool-cart':
       return generateMobileToolCartRef(config, product);
+    case 'prod-storage-cupboard':
+      return generateStorageCupboardRef(config, product);
     default:
       return 'GEN-CONFIG';
   }

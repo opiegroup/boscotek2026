@@ -847,5 +847,141 @@ export const CATALOG: ProductDefinition[] = [
       { id: 'housing_color', label: 'Housing / Cart Colour', type: 'color', step: 5, defaultValue: 'col-mg', description: 'Select the cart body colour.', options: COLORS },
       { id: 'facia_color', label: 'Drawer Facia Colour', type: 'color', step: 5, defaultValue: 'col-sg', description: 'Select the drawer front colour.', options: COLORS }
     ]
+  },
+
+  // 5. INDUSTRIAL STORAGE CUPBOARD
+  {
+    id: 'prod-storage-cupboard',
+    name: 'Industrial Storage Cupboard',
+    description: 'Fully welded industrial cupboards for tool, parts, and equipment storage. Configurable internal shelving with adjustable 20mm increments. Double doors with triple-action locking.',
+    basePrice: 1450,
+    groups: [
+      // 1. Configuration Preset (determines height, top type, and shelf layout)
+      {
+        id: 'cupboard_config',
+        label: 'Cupboard Configuration',
+        type: 'select',
+        step: 1,
+        description: 'Fixed dimensions: 900mm W × 450mm D. Select configuration for height and shelf layout.',
+        options: [
+          // Flat Top - 1800mm Height
+          { 
+            id: 'BTFF-1800', 
+            label: 'Factory (Flat 1800mm) – 4× Adjustable Shelves', 
+            value: 'BTFF.1800.900', 
+            code: 'BTFF.1800.900', 
+            priceDelta: 0, 
+            meta: { 
+              height: 1.8, 
+              topType: 'flat', 
+              configType: 'F',
+              shelfCount: 4, 
+              shelfType: 'adjustable',
+              description: 'Factory configuration with 4 fully adjustable shelves'
+            } 
+          },
+          { 
+            id: 'BTFE-1800', 
+            label: 'Engineering (Flat 1800mm) – 5× Adjustable Shelves', 
+            value: 'BTFE.1800.900', 
+            code: 'BTFE.1800.900', 
+            priceDelta: 50, 
+            meta: { 
+              height: 1.8, 
+              topType: 'flat', 
+              configType: 'E',
+              shelfCount: 5, 
+              shelfType: 'adjustable',
+              description: 'Engineering configuration with 5 fully adjustable shelves'
+            } 
+          },
+          { 
+            id: 'BTFI-1800', 
+            label: 'Implement (Flat 1800mm) – 1× Fixed + 2× Half Adjustable', 
+            value: 'BTFI.1800.900', 
+            code: 'BTFI.1800.900', 
+            priceDelta: 75, 
+            meta: { 
+              height: 1.8, 
+              topType: 'flat', 
+              configType: 'I',
+              shelfCount: 3, 
+              shelfType: 'mixed',
+              fixedShelves: 1,
+              halfShelves: 2,
+              description: 'Implement configuration with 1 fixed shelf and 2 half-width adjustable shelves'
+            } 
+          },
+          // Slope Top - 2000mm Height
+          { 
+            id: 'BTSF-2000', 
+            label: 'Factory (Slope 2000mm) – 4× Adjustable Shelves', 
+            value: 'BTSF.2000.900', 
+            code: 'BTSF.2000.900', 
+            priceDelta: 100, 
+            meta: { 
+              height: 2.0, 
+              topType: 'slope', 
+              configType: 'F',
+              shelfCount: 4, 
+              shelfType: 'adjustable',
+              description: 'Factory configuration with sloped top and 4 fully adjustable shelves'
+            } 
+          },
+          { 
+            id: 'BTSE-2000', 
+            label: 'Engineering (Slope 2000mm) – 5× Adjustable Shelves', 
+            value: 'BTSE.2000.900', 
+            code: 'BTSE.2000.900', 
+            priceDelta: 150, 
+            meta: { 
+              height: 2.0, 
+              topType: 'slope', 
+              configType: 'E',
+              shelfCount: 5, 
+              shelfType: 'adjustable',
+              description: 'Engineering configuration with sloped top and 5 fully adjustable shelves'
+            } 
+          },
+          { 
+            id: 'BTSI-2000', 
+            label: 'Implement (Slope 2000mm) – 1× Fixed + 2× Half Adjustable', 
+            value: 'BTSI.2000.900', 
+            code: 'BTSI.2000.900', 
+            priceDelta: 175, 
+            meta: { 
+              height: 2.0, 
+              topType: 'slope', 
+              configType: 'I',
+              shelfCount: 3, 
+              shelfType: 'mixed',
+              fixedShelves: 1,
+              halfShelves: 2,
+              description: 'Implement configuration with sloped top, 1 fixed shelf and 2 half-width adjustable shelves'
+            } 
+          }
+        ]
+      },
+      // 2. Body/Carcass Colour
+      { 
+        id: 'body_color', 
+        label: 'Body / Carcass Colour', 
+        type: 'color', 
+        step: 2, 
+        defaultValue: 'col-mg', 
+        description: 'Select the cupboard shell colour. Default: Boscotek Monument.', 
+        options: COLORS 
+      },
+      // 3. Door Colour
+      { 
+        id: 'door_color', 
+        label: 'Door Colour', 
+        type: 'color', 
+        step: 2, 
+        defaultValue: 'col-sg', 
+        description: 'Select the door panel colour. Default: Boscotek Surfmist.', 
+        options: COLORS 
+      }
+    ]
   }
 ];

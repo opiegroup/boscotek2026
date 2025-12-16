@@ -214,6 +214,9 @@ DATA;`;
   if (product.id === 'prod-mobile-tool-cart') {
     // Mobile Tool Cart geometry (cart body + drawers + rear accessories)
     bodyRepresentation = createMobileToolCartGeometry(dimensions, createEntity, geometricContext, configuration, product);
+  } else if (product.id === 'prod-storage-cupboard') {
+    // Industrial Storage Cupboard geometry (shell + doors + shelves)
+    bodyRepresentation = createStorageCupboardGeometry(dimensions, createEntity, geometricContext, configuration, product);
   } else if (product.id.includes('workbench')) {
     // Workbench geometry (frame + worktop)
     const isIndustrial = product.id.includes('industrial');
@@ -485,6 +488,310 @@ function createCabinetGeometry(
 // (see createCabinetGeometry function) for a consolidated LOD 200-300 representation.
 // Drawer fronts are extruded as part of the cabinet's ProductDefinitionShape.
 // Drawer metadata (heights, counts, configuration) is included in Pset_BoscotekCabinet.
+
+/**
+ * Create Industrial Storage Cupboard geometry
+ * LOD 200-300: Shell, doors, and internal shelves
+ * 
+ * Fixed dimensions: 900mm W × 450mm D × 1800/2000mm H
+ * 
+ * Geometry Components:
+ * 1. Base/Plinth - Recessed black base
+ * 2. Cabinet Shell - Left/right side panels, back panel, top panel (flat or sloped)
+ * 3. Double Doors - Front doors with handles
+ * 4. Internal Shelves - Adjustable or fixed shelving
+ */
+function createStorageCupboardGeometry(
+  dimensions: any,
+  createEntity: Function,
+  contextId: number,
+  configuration?: any,
+  product?: any
+): number {
+  const E = (value: string) => ({ __ifcEnum: value });
+  
+  // Fixed cupboard dimensions (in meters)
+  const width = 0.9;   // 900mm
+  const depth = 0.45;  // 450mm
+  
+  // Get configuration to determine height and shelf layout
+  const configGroup = product?.groups?.find((g: any) => g.id === 'cupboard_config');
+  const selectedConfigId = configuration?.selections?.['cupboard_config'];
+  const configOption = configGroup?.options?.find((o: any) => o.id === selectedConfigId);
+  
+  const height = configOption?.meta?.height || 1.8;
+  const topType = configOption?.meta?.topType || 'flat';
+  const shelfCount = configOption?.meta?.shelfCount || 4;
+  const shelfType = configOption?.meta?.shelfType || 'adjustable';
+  const fixedShelves = configOption?.meta?.fixedShelves || 0;
+  const halfShelves = configOption?.meta?.halfShelves || 0;
+  
+  // Geometry constants
+  const panelThickness = 0.015;  // 15mm steel panels
+  const baseHeight = 0.1;        // 100mm plinth
+  const slopeHeight = 0.12;      // 120mm slope rise
+  const shelfThickness = 0.02;   // 20mm shelf
+  const doorGap = 0.003;         // 3mm gap between doors
+  const handleWidth = 0.03;
+  const handleHeight = 0.15;
+  const handleDepth = 0.02;
+  
+  // Calculate interior dimensions
+  const interiorWidth = width - (panelThickness * 2);
+  const interiorDepth = depth - (panelThickness * 2);
+  const interiorTop = height - panelThickness - baseHeight;
+  const interiorBottom = baseHeight + panelThickness;
+  const usableHeight = interiorTop - interiorBottom;
+  
+  const solids: number[] = [];
+  const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  
+  console.log('Creating Storage Cupboard geometry:', { width, height, depth, topType, shelfCount });
+  
+  // ==========================================================
+  // 1. BASE / PLINTH
+  // ==========================================================
+  const plinthOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., 0.]);
+  const plinthZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const plinthXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const plinthPosition = createEntity('IFCAXIS2PLACEMENT3D', plinthOrigin, plinthZDir, plinthXDir);
+  
+  const plinthProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const plinthProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const plinthProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', plinthProfileOrigin, plinthProfileXDir);
+  const plinthProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, plinthProfilePosition, width, depth);
+  
+  const plinthSolid = createEntity('IFCEXTRUDEDAREASOLID', plinthProfile, plinthPosition, extrusionDir, baseHeight);
+  solids.push(plinthSolid);
+  
+  // ==========================================================
+  // 2. LEFT SIDE PANEL
+  // ==========================================================
+  const leftCenterX = -width/2 + panelThickness/2;
+  const sidePanelHeight = height - baseHeight;
+  
+  const leftOrigin = createEntity('IFCCARTESIANPOINT', [leftCenterX, 0., baseHeight]);
+  const leftZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const leftXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const leftPosition = createEntity('IFCAXIS2PLACEMENT3D', leftOrigin, leftZDir, leftXDir);
+  
+  const leftProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const leftProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const leftProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', leftProfileOrigin, leftProfileXDir);
+  const leftProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftProfilePosition, panelThickness, depth);
+  
+  const leftSolid = createEntity('IFCEXTRUDEDAREASOLID', leftProfile, leftPosition, extrusionDir, sidePanelHeight);
+  solids.push(leftSolid);
+  
+  // ==========================================================
+  // 3. RIGHT SIDE PANEL
+  // ==========================================================
+  const rightCenterX = width/2 - panelThickness/2;
+  
+  const rightOrigin = createEntity('IFCCARTESIANPOINT', [rightCenterX, 0., baseHeight]);
+  const rightZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const rightXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const rightPosition = createEntity('IFCAXIS2PLACEMENT3D', rightOrigin, rightZDir, rightXDir);
+  
+  const rightProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const rightProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const rightProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', rightProfileOrigin, rightProfileXDir);
+  const rightProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightProfilePosition, panelThickness, depth);
+  
+  const rightSolid = createEntity('IFCEXTRUDEDAREASOLID', rightProfile, rightPosition, extrusionDir, sidePanelHeight);
+  solids.push(rightSolid);
+  
+  // ==========================================================
+  // 4. BACK PANEL
+  // ==========================================================
+  const backCenterY = -depth/2 + panelThickness/2;
+  
+  const backOrigin = createEntity('IFCCARTESIANPOINT', [0., backCenterY, baseHeight]);
+  const backZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const backXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const backPosition = createEntity('IFCAXIS2PLACEMENT3D', backOrigin, backZDir, backXDir);
+  
+  const backProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const backProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const backProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', backProfileOrigin, backProfileXDir);
+  const backProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, backProfilePosition, width - panelThickness*2, panelThickness);
+  
+  const backSolid = createEntity('IFCEXTRUDEDAREASOLID', backProfile, backPosition, extrusionDir, sidePanelHeight);
+  solids.push(backSolid);
+  
+  // ==========================================================
+  // 5. TOP PANEL (flat or sloped)
+  // ==========================================================
+  if (topType === 'flat') {
+    const topOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., height - panelThickness]);
+    const topZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+    const topXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+    const topPosition = createEntity('IFCAXIS2PLACEMENT3D', topOrigin, topZDir, topXDir);
+    
+    const topProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+    const topProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+    const topProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', topProfileOrigin, topProfileXDir);
+    const topProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, topProfilePosition, width, depth);
+    
+    const topSolid = createEntity('IFCEXTRUDEDAREASOLID', topProfile, topPosition, extrusionDir, panelThickness);
+    solids.push(topSolid);
+  } else {
+    // Sloped top - simplified as flat top at the slope's midpoint height
+    // (full slope geometry would require IfcArbitraryClosedProfileDef)
+    const slopeAvgHeight = height - panelThickness + slopeHeight/2;
+    const topOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., slopeAvgHeight]);
+    const topZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+    const topXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+    const topPosition = createEntity('IFCAXIS2PLACEMENT3D', topOrigin, topZDir, topXDir);
+    
+    const topProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+    const topProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+    const topProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', topProfileOrigin, topProfileXDir);
+    const topProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, topProfilePosition, width, depth);
+    
+    const topSolid = createEntity('IFCEXTRUDEDAREASOLID', topProfile, topPosition, extrusionDir, panelThickness);
+    solids.push(topSolid);
+  }
+  
+  // ==========================================================
+  // 6. BOTTOM PANEL (interior floor)
+  // ==========================================================
+  const bottomOrigin = createEntity('IFCCARTESIANPOINT', [0., 0., baseHeight]);
+  const bottomZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const bottomXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const bottomPosition = createEntity('IFCAXIS2PLACEMENT3D', bottomOrigin, bottomZDir, bottomXDir);
+  
+  const bottomProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const bottomProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const bottomProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', bottomProfileOrigin, bottomProfileXDir);
+  const bottomProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, bottomProfilePosition, interiorWidth, interiorDepth);
+  
+  const bottomSolid = createEntity('IFCEXTRUDEDAREASOLID', bottomProfile, bottomPosition, extrusionDir, panelThickness);
+  solids.push(bottomSolid);
+  
+  // ==========================================================
+  // 7. DOUBLE DOORS
+  // ==========================================================
+  const doorWidth = (width - panelThickness*2 - doorGap) / 2;
+  const doorHeight = height - baseHeight - panelThickness;
+  const doorCenterZ = baseHeight + doorHeight/2 + panelThickness/2;
+  const doorCenterY = depth/2 - panelThickness/2;
+  
+  // Left Door
+  const leftDoorOrigin = createEntity('IFCCARTESIANPOINT', [-doorWidth/2 - doorGap/2, doorCenterY, baseHeight + panelThickness]);
+  const leftDoorZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const leftDoorXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const leftDoorPosition = createEntity('IFCAXIS2PLACEMENT3D', leftDoorOrigin, leftDoorZDir, leftDoorXDir);
+  
+  const leftDoorProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const leftDoorProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const leftDoorProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', leftDoorProfileOrigin, leftDoorProfileXDir);
+  const leftDoorProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftDoorProfilePosition, doorWidth, panelThickness);
+  
+  const leftDoorSolid = createEntity('IFCEXTRUDEDAREASOLID', leftDoorProfile, leftDoorPosition, extrusionDir, doorHeight);
+  solids.push(leftDoorSolid);
+  
+  // Right Door
+  const rightDoorOrigin = createEntity('IFCCARTESIANPOINT', [doorWidth/2 + doorGap/2, doorCenterY, baseHeight + panelThickness]);
+  const rightDoorZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const rightDoorXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const rightDoorPosition = createEntity('IFCAXIS2PLACEMENT3D', rightDoorOrigin, rightDoorZDir, rightDoorXDir);
+  
+  const rightDoorProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const rightDoorProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const rightDoorProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', rightDoorProfileOrigin, rightDoorProfileXDir);
+  const rightDoorProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightDoorProfilePosition, doorWidth, panelThickness);
+  
+  const rightDoorSolid = createEntity('IFCEXTRUDEDAREASOLID', rightDoorProfile, rightDoorPosition, extrusionDir, doorHeight);
+  solids.push(rightDoorSolid);
+  
+  // Door Handles (simplified as boxes)
+  const leftHandleOrigin = createEntity('IFCCARTESIANPOINT', [doorWidth/2 - 0.08, doorCenterY + panelThickness/2 + handleDepth/2, doorCenterZ - handleHeight/2]);
+  const leftHandleZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const leftHandleXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const leftHandlePosition = createEntity('IFCAXIS2PLACEMENT3D', leftHandleOrigin, leftHandleZDir, leftHandleXDir);
+  
+  const leftHandleProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const leftHandleProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const leftHandleProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', leftHandleProfileOrigin, leftHandleProfileXDir);
+  const leftHandleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, leftHandleProfilePosition, handleWidth, handleDepth);
+  
+  const leftHandleSolid = createEntity('IFCEXTRUDEDAREASOLID', leftHandleProfile, leftHandlePosition, extrusionDir, handleHeight);
+  solids.push(leftHandleSolid);
+  
+  // Right handle on right door
+  const rightHandleOrigin = createEntity('IFCCARTESIANPOINT', [-doorWidth/2 + 0.08 + doorGap, doorCenterY + panelThickness/2 + handleDepth/2, doorCenterZ - handleHeight/2]);
+  const rightHandleZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  const rightHandleXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+  const rightHandlePosition = createEntity('IFCAXIS2PLACEMENT3D', rightHandleOrigin, rightHandleZDir, rightHandleXDir);
+  
+  const rightHandleProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+  const rightHandleProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+  const rightHandleProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', rightHandleProfileOrigin, rightHandleProfileXDir);
+  const rightHandleProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, rightHandleProfilePosition, handleWidth, handleDepth);
+  
+  const rightHandleSolid = createEntity('IFCEXTRUDEDAREASOLID', rightHandleProfile, rightHandlePosition, extrusionDir, handleHeight);
+  solids.push(rightHandleSolid);
+  
+  // ==========================================================
+  // 8. INTERNAL SHELVES
+  // ==========================================================
+  const shelfWidth = interiorWidth - 0.01; // Small gap from sides
+  const shelfDepth = interiorDepth - 0.02; // Small gap from back
+  
+  // Calculate shelf positions based on configuration
+  const shelfPositions: { z: number; width: number }[] = [];
+  
+  if (shelfType === 'mixed' && fixedShelves > 0 && halfShelves > 0) {
+    // Implement layout: 1 fixed at center, 2 half shelves
+    const fixedZ = interiorBottom + usableHeight * 0.5;
+    shelfPositions.push({ z: fixedZ, width: shelfWidth });
+    
+    const halfShelfZ1 = interiorBottom + usableHeight * 0.25;
+    const halfShelfZ2 = interiorBottom + usableHeight * 0.75;
+    shelfPositions.push({ z: halfShelfZ1, width: shelfWidth / 2 - 0.01 });
+    shelfPositions.push({ z: halfShelfZ2, width: shelfWidth / 2 - 0.01 });
+  } else {
+    // Regular adjustable shelves - evenly distributed
+    const spacing = usableHeight / (shelfCount + 1);
+    for (let i = 1; i <= shelfCount; i++) {
+      const z = interiorBottom + (spacing * i);
+      shelfPositions.push({ z, width: shelfWidth });
+    }
+  }
+  
+  // Create each shelf
+  shelfPositions.forEach((shelf, idx) => {
+    const isHalfShelf = shelfType === 'mixed' && shelf.width < shelfWidth;
+    const xOffset = isHalfShelf ? (idx % 2 === 0 ? -shelfWidth/4 : shelfWidth/4) : 0;
+    
+    const shelfOrigin = createEntity('IFCCARTESIANPOINT', [xOffset, 0., shelf.z]);
+    const shelfZDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+    const shelfXDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+    const shelfPosition = createEntity('IFCAXIS2PLACEMENT3D', shelfOrigin, shelfZDir, shelfXDir);
+    
+    const shelfProfileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+    const shelfProfileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+    const shelfProfilePosition = createEntity('IFCAXIS2PLACEMENT2D', shelfProfileOrigin, shelfProfileXDir);
+    const shelfProfile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, shelfProfilePosition, shelf.width, shelfDepth);
+    
+    const shelfSolid = createEntity('IFCEXTRUDEDAREASOLID', shelfProfile, shelfPosition, extrusionDir, shelfThickness);
+    solids.push(shelfSolid);
+  });
+  
+  console.log(`Storage Cupboard geometry created: ${solids.length} solid components`);
+  
+  // Create shape representation
+  const shapeRepresentation = createEntity(
+    'IFCSHAPEREPRESENTATION',
+    contextId,
+    'Body',
+    'SweptSolid',
+    solids
+  );
+  
+  return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);
+}
 
 /**
  * Create professional workbench geometry with distinct components
@@ -1403,6 +1710,7 @@ function addPropertySets(
   const properties: number[] = [];
   const isWorkbench = product.id.includes('workbench');
   const isMobileToolCart = product.id === 'prod-mobile-tool-cart';
+  const isStorageCupboard = product.id === 'prod-storage-cupboard';
   
   // ==========================================================
   // Core Identification (Common to all products)
@@ -1412,7 +1720,7 @@ function addPropertySets(
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Manufacturer', null, createEntity('IFCLABEL', 'Boscotek'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'OwnerOrganisation', null, createEntity('IFCLABEL', 'Opie Manufacturing Group'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AustralianMade', null, createEntity('IFCBOOLEAN', '.T.'), null));
-  const productType = isMobileToolCart ? 'Mobile Tool Cart' : (isWorkbench ? 'Workbench' : 'Cabinet');
+  const productType = isMobileToolCart ? 'Mobile Tool Cart' : (isStorageCupboard ? 'Storage Cupboard' : (isWorkbench ? 'Workbench' : 'Cabinet'));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductType', null, createEntity('IFCLABEL', productType), null));
   
   // ==========================================================
@@ -1427,6 +1735,16 @@ function addPropertySets(
     widthMm = 1130;  // Fixed width as per catalogue
     depthMm = 560;   // Fixed depth
     heightMm = 900;  // Fixed height to worktop as per catalogue dimension drawing
+    
+  } else if (isStorageCupboard) {
+    // Industrial Storage Cupboard fixed dimensions
+    widthMm = 900;   // Fixed width
+    depthMm = 450;   // Fixed depth
+    // Height determined by configuration (1800 or 2000mm)
+    const cupboardConfigGroup = product.groups?.find((g: any) => g.id === 'cupboard_config');
+    const selectedCupboardConfigId = configuration.selections?.cupboard_config;
+    const cupboardConfigOption = cupboardConfigGroup?.options?.find((o: any) => o.id === selectedCupboardConfigId);
+    heightMm = (cupboardConfigOption?.meta?.height || 1.8) * 1000;
     
   } else if (isWorkbench) {
     widthMm = 1800;
@@ -1680,6 +1998,89 @@ function addPropertySets(
       });
     }
     
+  } else if (isStorageCupboard) {
+    // --- INDUSTRIAL STORAGE CUPBOARD PROPERTIES ---
+    
+    // Product range identification
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductRange', null, createEntity('IFCLABEL', 'Industrial Storage Cupboard'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Brand', null, createEntity('IFCLABEL', 'Boscotek'), null));
+    
+    // Configuration details
+    const cupboardConfigGroup = product.groups?.find((g: any) => g.id === 'cupboard_config');
+    const selectedCupboardConfigId = configuration.selections?.cupboard_config;
+    const cupboardConfigOption = cupboardConfigGroup?.options?.find((o: any) => o.id === selectedCupboardConfigId);
+    
+    if (cupboardConfigOption) {
+      // Product code from configuration
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductCode', null, createEntity('IFCLABEL', cupboardConfigOption.code || 'BTFF.1800.900'), null));
+      
+      // Top type (flat or slope)
+      const topType = cupboardConfigOption.meta?.topType || 'flat';
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'TopType', null, createEntity('IFCLABEL', topType === 'slope' ? 'Sloped Top (2000mm)' : 'Flat Top (1800mm)'), null));
+      
+      // Configuration type (Factory, Engineering, Implement)
+      const configTypeMap: { [key: string]: string } = {
+        'F': 'Factory',
+        'E': 'Engineering',
+        'I': 'Implement'
+      };
+      const configType = configTypeMap[cupboardConfigOption.meta?.configType] || 'Factory';
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ConfigurationType', null, createEntity('IFCLABEL', configType), null));
+      
+      // Shelf configuration
+      const shelfCount = cupboardConfigOption.meta?.shelfCount || 4;
+      const shelfType = cupboardConfigOption.meta?.shelfType || 'adjustable';
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ShelfCount', null, createEntity('IFCINTEGER', shelfCount), null));
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ShelfType', null, createEntity('IFCLABEL', shelfType), null));
+      
+      // Configuration description
+      if (cupboardConfigOption.meta?.description) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ConfigurationDescription', null, createEntity('IFCTEXT', cupboardConfigOption.meta.description), null));
+      }
+    }
+    
+    // Fixed dimensions
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FixedWidth', null, createEntity('IFCLENGTHMEASURE', 900), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'FixedDepth', null, createEntity('IFCLENGTHMEASURE', 450), null));
+    
+    // Door specification
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DoorType', null, createEntity('IFCLABEL', 'Double full-height swing doors'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DoorOpeningAngle', null, createEntity('IFCLABEL', '110 degrees'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'HingesPerDoor', null, createEntity('IFCINTEGER', 2), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LockType', null, createEntity('IFCLABEL', 'Triple-action key lockable'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'HandleType', null, createEntity('IFCLABEL', 'Flush-mounted lockable handle'), null));
+    
+    // Construction
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Construction', null, createEntity('IFCLABEL', 'Fully welded steel'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ShelfAdjustmentIncrement', null, createEntity('IFCLENGTHMEASURE', 20), null));
+    
+    // Colors
+    const bodyColorId = configuration.selections?.body_color;
+    const doorColorId = configuration.selections?.door_color;
+    
+    if (bodyColorId) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BodyColor', null, createEntity('IFCLABEL', mapColorCodeToFinish(bodyColorId)), null));
+      const bodyColorGroup = product.groups?.find((g: any) => g.id === 'body_color');
+      const bodyColorOption = bodyColorGroup?.options?.find((o: any) => o.id === bodyColorId);
+      if (bodyColorOption?.code) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BodyColorCode', null, createEntity('IFCLABEL', bodyColorOption.code), null));
+      }
+    }
+    
+    if (doorColorId) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DoorColor', null, createEntity('IFCLABEL', mapColorCodeToFinish(doorColorId)), null));
+      const doorColorGroup = product.groups?.find((g: any) => g.id === 'door_color');
+      const doorColorOption = doorColorGroup?.options?.find((o: any) => o.id === doorColorId);
+      if (doorColorOption?.code) {
+        properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'DoorColorCode', null, createEntity('IFCLABEL', doorColorOption.code), null));
+      }
+    }
+    
+    // Configuration reference
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ConfigurationReferenceID', null, createEntity('IFCIDENTIFIER', referenceCode), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'GeneratedDate', null, createEntity('IFCTEXT', new Date().toISOString()), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'IFCVersion', null, createEntity('IFCLABEL', 'IFC4'), null));
+    
   } else {
     // --- CABINET PROPERTIES ---
     
@@ -1749,7 +2150,8 @@ function addPropertySets(
     'prod-hd-cabinet': 'https://www.boscotek.com.au/products/high-density-cabinets',
     'prod-workbench-heavy': 'https://www.boscotek.com.au/products/heavy-duty-workbenches',
     'prod-workbench-industrial': 'https://www.boscotek.com.au/products/industrial-workbenches',
-    'prod-mobile-tool-cart': 'https://www.boscotek.com.au/products/mobile-tool-cart-stations'
+    'prod-mobile-tool-cart': 'https://www.boscotek.com.au/products/mobile-tool-cart-stations',
+    'prod-storage-cupboard': 'https://www.boscotek.com.au/products/industrial-storage-cupboards'
   };
   const productUrl = productUrls[product.id] || 'https://www.boscotek.com.au';
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', productUrl), null));
@@ -1762,8 +2164,10 @@ function addPropertySets(
   // Create property set with appropriate name
   // ==========================================================
   const psetName = isMobileToolCart ? 'Pset_BoscotekMobileToolCart' : 
+                   isStorageCupboard ? 'Pset_BoscotekStorageCupboard' :
                    isWorkbench ? 'Pset_BoscotekWorkbench' : 'Pset_BoscotekCabinet';
   const psetDescription = isMobileToolCart ? 'Boscotek mobile tool cart configuration properties' :
+                          isStorageCupboard ? 'Boscotek industrial storage cupboard configuration properties' :
                           isWorkbench ? 'Boscotek workbench configuration properties' : 'Boscotek cabinet configuration properties';
   const pset = createEntity('IFCPROPERTYSET', psetName, ownerHistoryId, psetDescription, null, properties);
   
