@@ -1137,6 +1137,11 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     const stripWidth = 0.2;  // 20cm wide
     const stripThickness = 0.003; // 3mm thick
     
+    // Square lock mechanism dimensions
+    const lockSize = 0.045; // 45mm square escutcheon
+    const lockDepth = 0.008; // 8mm deep
+    const keyholeRadius = 0.008; // 8mm keyhole
+    
     return (
       <group>
         {/* Left Door - hinge on LEFT outer edge, swings outward to the left */}
@@ -1153,11 +1158,7 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
               <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.4} metalness={0.6} />
             </mesh>
-            {/* Left Door Handle - near the center edge of door */}
-            <mesh position={[doorWidth - 0.05, 0, handleDepth/2]}>
-              <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
-              <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
-            </mesh>
+            {/* No handle on left door - lock is on right door only */}
           </group>
         </group>
         
@@ -1175,11 +1176,19 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
               <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.4} metalness={0.6} />
             </mesh>
-            {/* Right Door Handle - near the center edge of door */}
-            <mesh position={[-doorWidth + 0.05, 0, handleDepth/2]}>
-              <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
-              <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
-            </mesh>
+            {/* Square twist-lock mechanism - only on right door, near center edge */}
+            <group position={[-doorWidth + 0.06, 0.05, lockDepth/2]}>
+              {/* Square escutcheon plate */}
+              <mesh>
+                <boxGeometry args={[lockSize, lockSize, lockDepth]} />
+                <meshStandardMaterial color="#1a1a1a" roughness={0.2} metalness={0.9} />
+              </mesh>
+              {/* Round keyhole/twist mechanism */}
+              <mesh position={[0, 0, lockDepth/2 + 0.001]}>
+                <cylinderGeometry args={[keyholeRadius, keyholeRadius, 0.003, 16]} />
+                <meshStandardMaterial color="#3a3a3a" roughness={0.3} metalness={0.8} />
+              </mesh>
+            </group>
           </group>
         </group>
       </group>
