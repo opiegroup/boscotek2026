@@ -1120,42 +1120,49 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   
   // Double Doors (with open/close state)
   // Doors fill the full front opening - from base to underside of top (or front edge of slope)
+  // Doors swing OUTWARD from hinges on the cabinet sides
   const Doors = () => {
     const doorWidth = (cupboardWidth - panelThickness*2 - doorGap) / 2;
     // Door height: from top of base to underside of front top edge
-    // Uses frontTopHeight to ensure doors meet the slope with NO GAP
     const doorHeight = frontTopHeight - baseHeight - panelThickness;
     const doorYCenter = baseHeight + doorHeight/2 + panelThickness/2;
     
-    // When doors are open, rotate them 90 degrees around their hinge edge
+    // Door front face position (flush with cabinet front)
+    const doorZ = cupboardDepth/2;
+    
+    // When doors are open, rotate them 90 degrees OUTWARD around their hinge edge
     const doorOpenAngle = doorsOpen ? Math.PI * 0.5 : 0; // 90 degrees
     
     return (
       <group>
-        {/* Left Door - hinges on left edge */}
-        <group position={[-cupboardWidth/2 + panelThickness + 0.001, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
-          <group rotation={[0, doorOpenAngle, 0]} position={[0, 0, 0]}>
-            <mesh position={[doorWidth/2, 0, 0]}>
+        {/* Left Door - hinge on LEFT outer edge, swings outward to the left */}
+        {/* Pivot point is at left side of cabinet, front face */}
+        <group position={[-cupboardWidth/2 + panelThickness, doorYCenter, doorZ]}>
+          <group rotation={[0, -doorOpenAngle, 0]}>
+            {/* Door offset so hinge edge is at pivot point */}
+            <mesh position={[doorWidth/2, 0, -panelThickness/2]}>
               <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
             </mesh>
-            {/* Left Door Handle */}
-            <mesh position={[doorWidth - 0.05, 0, panelThickness/2 + handleDepth/2]}>
+            {/* Left Door Handle - near the center edge of door */}
+            <mesh position={[doorWidth - 0.05, 0, handleDepth/2]}>
               <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
               <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
             </mesh>
           </group>
         </group>
         
-        {/* Right Door - hinges on right edge */}
-        <group position={[cupboardWidth/2 - panelThickness - 0.001, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
-          <group rotation={[0, -doorOpenAngle, 0]} position={[0, 0, 0]}>
-            <mesh position={[-doorWidth/2, 0, 0]}>
+        {/* Right Door - hinge on RIGHT outer edge, swings outward to the right */}
+        {/* Pivot point is at right side of cabinet, front face */}
+        <group position={[cupboardWidth/2 - panelThickness, doorYCenter, doorZ]}>
+          <group rotation={[0, doorOpenAngle, 0]}>
+            {/* Door offset so hinge edge is at pivot point */}
+            <mesh position={[-doorWidth/2, 0, -panelThickness/2]}>
               <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
             </mesh>
-            {/* Right Door Handle */}
-            <mesh position={[-doorWidth + 0.05, 0, panelThickness/2 + handleDepth/2]}>
+            {/* Right Door Handle - near the center edge of door */}
+            <mesh position={[-doorWidth + 0.05, 0, handleDepth/2]}>
               <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
               <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
             </mesh>
