@@ -813,93 +813,98 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
 // ==========================================
 // INDUSTRIAL STORAGE CUPBOARD COMPONENT
 // Fixed dimensions: 900mm W × 450mm D × 1800/2000mm H
+// Slope top: Front height = cupboardHeight, Back height = cupboardHeight + slopeRise
 // ==========================================
 
-// Triangular side panel for sloped top cupboards
-const SlopeTriangleSidePanel = ({ 
+// Trapezoidal side panel for sloped top cupboards
+// Creates a panel that is taller at the back than the front
+const TrapezoidalSidePanel = ({ 
   xPosition, 
-  baseY, 
-  frontZ, 
-  backZ, 
-  slopeHeight, 
+  baseY,
+  frontHeight,
+  backHeight,
+  depth,
   thickness, 
-  color, 
-  mirrorX = false 
+  color
 }: { 
   xPosition: number;
   baseY: number;
-  frontZ: number;
-  backZ: number;
-  slopeHeight: number;
+  frontHeight: number;
+  backHeight: number;
+  depth: number;
   thickness: number;
   color: string;
-  mirrorX?: boolean;
 }) => {
   const geometry = useMemo(() => {
     const geo = new THREE.BufferGeometry();
-    const depth = frontZ - backZ;
     const halfThickness = thickness / 2;
+    const halfDepth = depth / 2;
     
-    // Triangle vertices: front-bottom, back-bottom, back-top
-    // Create a triangular prism
+    // Create a trapezoidal prism (4 corners, extruded along X)
+    // Front-bottom (0), Front-top (frontHeight), Back-bottom (0), Back-top (backHeight)
     const vertices = new Float32Array([
-      // Front face (triangle)
-      -halfThickness, 0, depth,      // front-bottom-left
-      halfThickness, 0, depth,       // front-bottom-right
-      halfThickness, 0, 0,           // back-bottom-right
+      // Left face (trapezoid)
+      -halfThickness, 0, halfDepth,           // front-bottom
+      -halfThickness, frontHeight, halfDepth, // front-top
+      -halfThickness, backHeight, -halfDepth, // back-top
       
-      -halfThickness, 0, depth,      // front-bottom-left
-      halfThickness, 0, 0,           // back-bottom-right
-      -halfThickness, 0, 0,          // back-bottom-left
+      -halfThickness, 0, halfDepth,           // front-bottom
+      -halfThickness, backHeight, -halfDepth, // back-top
+      -halfThickness, 0, -halfDepth,          // back-bottom
       
-      // Top face (triangle going up at back)
-      -halfThickness, 0, depth,      // front-bottom-left
-      -halfThickness, 0, 0,          // back-bottom-left
-      -halfThickness, slopeHeight, 0, // back-top-left
+      // Right face (trapezoid)
+      halfThickness, 0, halfDepth,            // front-bottom
+      halfThickness, backHeight, -halfDepth,  // back-top
+      halfThickness, frontHeight, halfDepth,  // front-top
       
-      halfThickness, 0, depth,       // front-bottom-right
-      halfThickness, slopeHeight, 0, // back-top-right
-      halfThickness, 0, 0,           // back-bottom-right
+      halfThickness, 0, halfDepth,            // front-bottom
+      halfThickness, 0, -halfDepth,           // back-bottom
+      halfThickness, backHeight, -halfDepth,  // back-top
       
-      // Back face (vertical at back with height)
-      -halfThickness, 0, 0,          // back-bottom-left
-      halfThickness, 0, 0,           // back-bottom-right
-      halfThickness, slopeHeight, 0, // back-top-right
+      // Front face (rectangle)
+      -halfThickness, 0, halfDepth,
+      halfThickness, 0, halfDepth,
+      halfThickness, frontHeight, halfDepth,
       
-      -halfThickness, 0, 0,          // back-bottom-left
-      halfThickness, slopeHeight, 0, // back-top-right
-      -halfThickness, slopeHeight, 0, // back-top-left
+      -halfThickness, 0, halfDepth,
+      halfThickness, frontHeight, halfDepth,
+      -halfThickness, frontHeight, halfDepth,
       
-      // Sloped top face
-      -halfThickness, 0, depth,      // front-bottom-left
-      -halfThickness, slopeHeight, 0, // back-top-left
-      halfThickness, slopeHeight, 0, // back-top-right
+      // Back face (rectangle - taller)
+      -halfThickness, 0, -halfDepth,
+      halfThickness, backHeight, -halfDepth,
+      halfThickness, 0, -halfDepth,
       
-      -halfThickness, 0, depth,      // front-bottom-left
-      halfThickness, slopeHeight, 0, // back-top-right
-      halfThickness, 0, depth,       // front-bottom-right
+      -halfThickness, 0, -halfDepth,
+      -halfThickness, backHeight, -halfDepth,
+      halfThickness, backHeight, -halfDepth,
       
-      // Left side
-      -halfThickness, 0, depth,
-      -halfThickness, slopeHeight, 0,
-      -halfThickness, 0, 0,
+      // Top face (sloped rectangle)
+      -halfThickness, frontHeight, halfDepth,
+      halfThickness, frontHeight, halfDepth,
+      halfThickness, backHeight, -halfDepth,
       
-      // Right side
-      halfThickness, 0, depth,
-      halfThickness, 0, 0,
-      halfThickness, slopeHeight, 0,
+      -halfThickness, frontHeight, halfDepth,
+      halfThickness, backHeight, -halfDepth,
+      -halfThickness, backHeight, -halfDepth,
+      
+      // Bottom face
+      -halfThickness, 0, halfDepth,
+      halfThickness, 0, -halfDepth,
+      halfThickness, 0, halfDepth,
+      
+      -halfThickness, 0, halfDepth,
+      -halfThickness, 0, -halfDepth,
+      halfThickness, 0, -halfDepth,
     ]);
     
     geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
     geo.computeVertexNormals();
     return geo;
-  }, [slopeHeight, thickness, frontZ, backZ]);
+  }, [frontHeight, backHeight, depth, thickness]);
   
   return (
-    <mesh 
-      geometry={geometry} 
-      position={[xPosition, baseY, backZ]}
-    >
+    <mesh geometry={geometry} position={[xPosition, baseY, 0]}>
       <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} side={THREE.DoubleSide} />
     </mesh>
   );
@@ -917,7 +922,7 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   // Fixed dimensions per Boscotek spec
   const cupboardWidth = 0.9;   // 900mm
   const cupboardDepth = 0.45;  // 450mm
-  const cupboardHeight = configOption?.meta?.height || 1.8; // 1800mm or 2000mm
+  const cupboardHeight = configOption?.meta?.height || 1.8; // 1800mm or 2000mm (this is the BACK height for slope)
   const topType = configOption?.meta?.topType || 'flat'; // 'flat' or 'slope'
   const shelfCount = configOption?.meta?.shelfCount || 4;
   const shelfType = configOption?.meta?.shelfType || 'adjustable';
@@ -931,16 +936,24 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   const panelThickness = 0.015;  // 15mm steel panels
   const doorGap = 0.003;         // 3mm gap between doors
   const baseHeight = 0.1;        // 100mm base/plinth
-  const slopeHeight = 0.12;      // 120mm slope rise at back
+  const slopeRise = 0.12;        // 120mm slope rise (back is higher than front)
   const shelfThickness = 0.02;   // 20mm shelf thickness
   const handleWidth = 0.03;
   const handleHeight = 0.15;
   const handleDepth = 0.02;
   
-  // Usable interior space
+  // For sloped top: front is lower, back is at full cupboardHeight
+  // The slope rise is the difference between back and front
+  const frontTopHeight = topType === 'slope' ? cupboardHeight - slopeRise : cupboardHeight;
+  const backTopHeight = cupboardHeight;
+  
+  // Door height: from base to front top (underside of slope at front)
+  const doorTopY = frontTopHeight; // Doors go right up to the front edge of the top
+  
+  // Usable interior space (based on front height for consistency)
   const interiorWidth = cupboardWidth - (panelThickness * 2);
   const interiorDepth = cupboardDepth - (panelThickness * 2);
-  const interiorTop = cupboardHeight - panelThickness - baseHeight;
+  const interiorTop = frontTopHeight - panelThickness - baseHeight;
   const interiorBottom = baseHeight + panelThickness;
   const usableHeight = interiorTop - interiorBottom;
   
@@ -981,9 +994,9 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   
   // Cabinet Shell (sides, back, top, bottom, base)
   const CabinetShell = () => {
-    // For sloped top, side panels are taller at back
-    const sidePanelHeight = cupboardHeight - baseHeight;
-    const slopedSidePanelHeight = topType === 'slope' ? sidePanelHeight : sidePanelHeight;
+    // Side panel heights
+    const sideFrontHeight = frontTopHeight - baseHeight;
+    const sideBackHeight = backTopHeight - baseHeight;
     
     return (
       <group>
@@ -993,83 +1006,91 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
           <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
         </mesh>
         
-        {/* Left Side Panel - main rectangular part */}
-        <mesh position={[-cupboardWidth/2 + panelThickness/2, baseHeight + sidePanelHeight/2, 0]}>
-          <boxGeometry args={[panelThickness, sidePanelHeight, cupboardDepth]} />
-          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-        </mesh>
-        
-        {/* Right Side Panel - main rectangular part */}
-        <mesh position={[cupboardWidth/2 - panelThickness/2, baseHeight + sidePanelHeight/2, 0]}>
-          <boxGeometry args={[panelThickness, sidePanelHeight, cupboardDepth]} />
-          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-        </mesh>
-        
-        {/* For sloped top - add triangular extensions at top of side panels */}
-        {topType === 'slope' && (
+        {topType === 'flat' ? (
           <>
-            {/* Left side triangle extension */}
-            <SlopeTriangleSidePanel
+            {/* FLAT TOP: Standard rectangular side panels */}
+            {/* Left Side Panel */}
+            <mesh position={[-cupboardWidth/2 + panelThickness/2, baseHeight + sideFrontHeight/2, 0]}>
+              <boxGeometry args={[panelThickness, sideFrontHeight, cupboardDepth]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+            
+            {/* Right Side Panel */}
+            <mesh position={[cupboardWidth/2 - panelThickness/2, baseHeight + sideFrontHeight/2, 0]}>
+              <boxGeometry args={[panelThickness, sideFrontHeight, cupboardDepth]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+            
+            {/* Back Panel */}
+            <mesh position={[0, baseHeight + sideFrontHeight/2, -cupboardDepth/2 + panelThickness/2]}>
+              <boxGeometry args={[cupboardWidth - panelThickness*2, sideFrontHeight, panelThickness]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+            
+            {/* Top Panel - flat */}
+            <mesh position={[0, frontTopHeight - panelThickness/2, 0]}>
+              <boxGeometry args={[cupboardWidth, panelThickness, cupboardDepth]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+          </>
+        ) : (
+          <>
+            {/* SLOPED TOP: Trapezoidal side panels (taller at back) */}
+            {/* Left Side Panel - trapezoidal */}
+            <TrapezoidalSidePanel
               xPosition={-cupboardWidth/2 + panelThickness/2}
-              baseY={cupboardHeight}
-              frontZ={cupboardDepth/2}
-              backZ={-cupboardDepth/2}
-              slopeHeight={slopeHeight}
+              baseY={baseHeight}
+              frontHeight={sideFrontHeight}
+              backHeight={sideBackHeight}
+              depth={cupboardDepth}
               thickness={panelThickness}
               color={bodyColor}
             />
-            {/* Right side triangle extension */}
-            <SlopeTriangleSidePanel
+            
+            {/* Right Side Panel - trapezoidal */}
+            <TrapezoidalSidePanel
               xPosition={cupboardWidth/2 - panelThickness/2}
-              baseY={cupboardHeight}
-              frontZ={cupboardDepth/2}
-              backZ={-cupboardDepth/2}
-              slopeHeight={slopeHeight}
+              baseY={baseHeight}
+              frontHeight={sideFrontHeight}
+              backHeight={sideBackHeight}
+              depth={cupboardDepth}
               thickness={panelThickness}
               color={bodyColor}
             />
+            
+            {/* Back Panel - full height to backTopHeight */}
+            <mesh position={[0, baseHeight + sideBackHeight/2, -cupboardDepth/2 + panelThickness/2]}>
+              <boxGeometry args={[cupboardWidth - panelThickness*2, sideBackHeight, panelThickness]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+            
+            {/* Sloped Top Panel - sits directly on top of side panels, NO GAP */}
+            <mesh 
+              position={[0, (frontTopHeight + backTopHeight) / 2 - panelThickness/2, 0]}
+              rotation={[Math.atan2(slopeRise, cupboardDepth), 0, 0]}
+            >
+              <boxGeometry args={[cupboardWidth, panelThickness, Math.sqrt(cupboardDepth * cupboardDepth + slopeRise * slopeRise)]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
           </>
         )}
-        
-        {/* Back Panel - extends to slope height for sloped tops */}
-        <mesh position={[0, baseHeight + (topType === 'slope' ? (sidePanelHeight + slopeHeight)/2 : sidePanelHeight/2), -cupboardDepth/2 + panelThickness/2]}>
-          <boxGeometry args={[cupboardWidth - panelThickness*2, topType === 'slope' ? sidePanelHeight + slopeHeight : sidePanelHeight, panelThickness]} />
-          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-        </mesh>
         
         {/* Bottom Panel (floor of interior) */}
         <mesh position={[0, baseHeight + panelThickness/2, 0]}>
           <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, cupboardDepth - panelThickness*2]} />
           <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
         </mesh>
-        
-        {/* Top Panel - Flat or Sloped */}
-        {topType === 'flat' ? (
-          <mesh position={[0, cupboardHeight - panelThickness/2, 0]}>
-            <boxGeometry args={[cupboardWidth, panelThickness, cupboardDepth]} />
-            <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-          </mesh>
-        ) : (
-          // Sloped top - angled panel from front to back
-          <group>
-            {/* Main sloped panel */}
-            <mesh 
-              position={[0, cupboardHeight + slopeHeight/2, 0]}
-              rotation={[Math.atan2(slopeHeight, cupboardDepth), 0, 0]}
-            >
-              <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, Math.sqrt(cupboardDepth * cupboardDepth + slopeHeight * slopeHeight)]} />
-              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-            </mesh>
-          </group>
-        )}
       </group>
     );
   };
   
   // Double Doors (with open/close state)
+  // Doors fill the full front opening - from base to underside of top (or front edge of slope)
   const Doors = () => {
     const doorWidth = (cupboardWidth - panelThickness*2 - doorGap) / 2;
-    const doorHeight = cupboardHeight - baseHeight - panelThickness;
+    // Door height: from top of base to underside of front top edge
+    // Uses frontTopHeight to ensure doors meet the slope with NO GAP
+    const doorHeight = frontTopHeight - baseHeight - panelThickness;
     const doorYCenter = baseHeight + doorHeight/2 + panelThickness/2;
     
     // When doors are open, rotate them 110 degrees around their hinge edge
