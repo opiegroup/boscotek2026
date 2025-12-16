@@ -974,8 +974,8 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   
   const isImplementLayout = shelfType === 'mixed' && fixedShelves > 0 && halfShelves > 0;
   
-  // For Implement: Top cavity takes top 25%, lower section is 75%
-  const topCavityHeight = isImplementLayout ? usableHeight * 0.25 : 0;
+  // For Implement: Top cavity takes top 20%, lower section is 80%
+  const topCavityHeight = isImplementLayout ? usableHeight * 0.20 : 0;
   const lowerSectionTop = interiorTop - topCavityHeight;
   const lowerSectionHeight = lowerSectionTop - interiorBottom;
   
