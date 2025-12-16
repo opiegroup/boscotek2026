@@ -1093,8 +1093,8 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     const doorHeight = frontTopHeight - baseHeight - panelThickness;
     const doorYCenter = baseHeight + doorHeight/2 + panelThickness/2;
     
-    // When doors are open, rotate them 110 degrees around their hinge edge
-    const doorOpenAngle = doorsOpen ? Math.PI * 0.6 : 0; // ~110 degrees
+    // When doors are open, rotate them 90 degrees around their hinge edge
+    const doorOpenAngle = doorsOpen ? Math.PI * 0.5 : 0; // 90 degrees
     
     return (
       <group>
