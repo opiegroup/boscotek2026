@@ -730,42 +730,48 @@ export const CATALOG: ProductDefinition[] = [
     description: 'Heavy-duty mobile workstation with dual drawer bays, worktop, and optional rear accessories. Anti-tilt castor system included.',
     basePrice: 1800,
     groups: [
-      // 1. Cart Width
-      {
-        id: 'width',
-        label: 'Cart Width',
-        type: 'radio',
-        step: 1,
-        description: 'Overall cart width including castors',
-        options: [
-          { id: 'tcs-700', label: '700mm Wide', value: 700, code: '700', priceDelta: 0, meta: { width: 0.7, bayWidth: 0.28 } },
-          { id: 'tcs-850', label: '850mm Wide', value: 850, code: '850', priceDelta: 200, meta: { width: 0.85, bayWidth: 0.35 } }
-        ]
-      },
-      // 2. Bay Configuration Preset (defines left + right drawer stacks)
-      // TCS product codes follow Boscotek naming: B2x = specific configurations
+      // 1. Bay Configuration Preset (defines left + right layout)
+      // TCS product codes follow Boscotek catalogue naming exactly
+      // Fixed width: 1130mm as per specification
       {
         id: 'bay_preset',
         label: 'Bay Configuration',
         type: 'select',
-        step: 2,
-        description: 'Select cabinet bay layout. All include floating worktop with recessed gap.',
+        step: 1,
+        description: 'Select cabinet bay layout. Fixed 1130mm width. 5-drawer stack: 150/100/75/75/75mm bottom-to-top.',
         options: [
-          // Dual Drawer Configurations
-          { id: 'B25', label: 'B25: Dual 5-Drawer Units (10 drawers total)', value: 'B25', code: 'B25', priceDelta: 0, 
-            meta: { leftDrawers: [75, 75, 75, 100, 150], rightDrawers: [75, 75, 75, 100, 150], totalDrawers: 10 } },
-          { id: 'B26', label: 'B26: Dual 6-Drawer Units (12 drawers total)', value: 'B26', code: 'B26', priceDelta: 150,
-            meta: { leftDrawers: [75, 75, 75, 75, 100, 100], rightDrawers: [75, 75, 75, 75, 100, 100], totalDrawers: 12 } },
-          { id: 'B28', label: 'B28: Dual 7-Drawer Units (14 drawers total)', value: 'B28', code: 'B28', priceDelta: 250,
-            meta: { leftDrawers: [75, 75, 75, 75, 75, 100, 100], rightDrawers: [75, 75, 75, 75, 75, 100, 100], totalDrawers: 14 } },
-          // Cupboard + Drawer Configurations (TCS.B27 style)
-          { id: 'B27', label: 'B27: Cupboard + 5-Drawer Unit', value: 'B27', code: 'B27', priceDelta: -50,
-            meta: { leftDrawers: [], leftCupboard: true, rightDrawers: [75, 75, 75, 100, 150], totalDrawers: 5 } },
-          { id: 'B27R', label: 'B27R: 5-Drawer Unit + Cupboard', value: 'B27R', code: 'B27R', priceDelta: -50,
-            meta: { leftDrawers: [75, 75, 75, 100, 150], rightDrawers: [], rightCupboard: true, totalDrawers: 5 } },
-          // Dual Cupboard
-          { id: 'BCC', label: 'BCC: Dual Cupboard Units', value: 'BCC', code: 'BCC', priceDelta: -200,
-            meta: { leftDrawers: [], leftCupboard: true, rightDrawers: [], rightCupboard: true, totalDrawers: 0 } }
+          // B24: Cupboard (left) + 5-Drawer (right) - as per catalogue
+          { id: 'B24', label: 'TCS.B24: Cupboard + 5-Drawer Unit', value: 'B24', code: 'B24', priceDelta: 0, 
+            meta: { 
+              width: 1.13, 
+              leftDrawers: [], leftCupboard: true, 
+              rightDrawers: [150, 100, 75, 75, 75], 
+              totalDrawers: 5 
+            } },
+          // B25: 5-Drawer (left) + Cupboard (right) - as per catalogue
+          { id: 'B25', label: 'TCS.B25: 5-Drawer Unit + Cupboard', value: 'B25', code: 'B25', priceDelta: 0,
+            meta: { 
+              width: 1.13, 
+              leftDrawers: [150, 100, 75, 75, 75], 
+              rightDrawers: [], rightCupboard: true, 
+              totalDrawers: 5 
+            } },
+          // B26: 5-Drawer (left) + 5-Drawer (right) - as per catalogue
+          { id: 'B26', label: 'TCS.B26: Dual 5-Drawer Units (10 drawers)', value: 'B26', code: 'B26', priceDelta: 150,
+            meta: { 
+              width: 1.13, 
+              leftDrawers: [150, 100, 75, 75, 75], 
+              rightDrawers: [150, 100, 75, 75, 75], 
+              totalDrawers: 10 
+            } },
+          // B27: Cupboard (left) + Cupboard (right) - as per catalogue
+          { id: 'B27', label: 'TCS.B27: Dual Cupboard Units', value: 'B27', code: 'B27', priceDelta: -100,
+            meta: { 
+              width: 1.13, 
+              leftDrawers: [], leftCupboard: true, 
+              rightDrawers: [], rightCupboard: true, 
+              totalDrawers: 0 
+            } }
         ]
       },
       // 3. Worktop Material

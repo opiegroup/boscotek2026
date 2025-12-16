@@ -418,16 +418,17 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
   // CONFIGURATION EXTRACTION
   // ========================================
   
-  const widthGroup = product.groups.find((g: any) => g.id === 'width');
-  const selectedWidthId = config.selections['width'];
-  const widthOption = widthGroup?.options.find((o: any) => o.id === selectedWidthId);
-  const cabinetWidth = (widthOption?.meta?.width || 0.85);
-  
+  // Bay preset defines the configuration - width is FIXED at 1130mm per Boscotek catalogue
   const bayPresetGroup = product.groups.find((g: any) => g.id === 'bay_preset');
   const selectedBayPresetId = config.selections['bay_preset'];
   const bayPreset = bayPresetGroup?.options.find((o: any) => o.id === selectedBayPresetId);
+  
+  // Fixed width of 1130mm as per Boscotek TCS catalogue specification
+  const cabinetWidth = bayPreset?.meta?.width || 1.13;
+  
+  // Drawer configurations: 150/100/75/75/75mm bottom-to-top as per dimension drawing
   const leftDrawers = bayPreset?.meta?.leftDrawers || [];
-  const rightDrawers = bayPreset?.meta?.rightDrawers || [75, 75, 75, 100, 150];
+  const rightDrawers = bayPreset?.meta?.rightDrawers || [150, 100, 75, 75, 75];
   const leftCupboard = bayPreset?.meta?.leftCupboard || false;
   const rightCupboard = bayPreset?.meta?.rightCupboard || false;
   

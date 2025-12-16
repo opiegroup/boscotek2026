@@ -1015,16 +1015,17 @@ function createMobileToolCartGeometry(
   // ========================================
   // CONFIGURATION EXTRACTION
   // ========================================
-  const widthGroup = product?.groups?.find((g: any) => g.id === 'width');
-  const selectedWidthId = configuration?.selections?.['width'];
-  const widthOption = widthGroup?.options?.find((o: any) => o.id === selectedWidthId);
-  const cabinetWidth = (widthOption?.meta?.width || 0.85);
-  
+  // Bay preset defines the configuration - width is FIXED at 1130mm per Boscotek catalogue
   const bayPresetGroup = product?.groups?.find((g: any) => g.id === 'bay_preset');
   const selectedBayPresetId = configuration?.selections?.['bay_preset'];
   const bayPreset = bayPresetGroup?.options?.find((o: any) => o.id === selectedBayPresetId);
+  
+  // Fixed width of 1130mm as per Boscotek TCS catalogue specification
+  const cabinetWidth = bayPreset?.meta?.width || 1.13;
+  
+  // Drawer configurations: 150/100/75/75/75mm bottom-to-top as per dimension drawing
   const leftDrawers = bayPreset?.meta?.leftDrawers || [];
-  const rightDrawers = bayPreset?.meta?.rightDrawers || [75, 75, 75, 100, 150];
+  const rightDrawers = bayPreset?.meta?.rightDrawers || [150, 100, 75, 75, 75];
   const leftCupboard = bayPreset?.meta?.leftCupboard || false;
   const rightCupboard = bayPreset?.meta?.rightCupboard || false;
   
@@ -1419,20 +1420,10 @@ function addPropertySets(
   let heightMm: number;
   
   if (isMobileToolCart) {
-    // Mobile Tool Cart fixed dimensions (from Viewer3D.tsx)
-    depthMm = 560;  // Fixed depth
-    
-    // Width from configuration
-    const widthGroup = product.groups?.find((g: any) => g.id === 'width');
-    const selectedWidthId = configuration.selections?.['width'];
-    const widthOption = widthGroup?.options?.find((o: any) => o.id === selectedWidthId);
-    widthMm = widthOption?.meta?.width ? widthOption.meta.width * 1000 : 850;
-    
-    // Height calculated from fixed dimensions
-    const castorHeight = 100;           // 100mm castors
-    const cabinetBodyHeight = 631;      // 475 + 120 + 18*2 mm
-    const worktopThickness = 35;        // 35mm worktop
-    heightMm = castorHeight + cabinetBodyHeight + worktopThickness;  // ~766mm to worktop
+    // Mobile Tool Cart fixed dimensions as per Boscotek TCS catalogue specification
+    widthMm = 1130;  // Fixed width as per catalogue
+    depthMm = 560;   // Fixed depth
+    heightMm = 900;  // Fixed height to worktop as per catalogue dimension drawing
     
   } else if (isWorkbench) {
     widthMm = 1800;
@@ -1492,9 +1483,11 @@ function addPropertySets(
     const leftCupboard = bayPresetOption?.meta?.leftCupboard || false;
     const rightCupboard = bayPresetOption?.meta?.rightCupboard || false;
     
-    // Product code (e.g., TCS.B27)
-    const bayCode = bayPresetOption?.code || 'B25';
-    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductCode', null, createEntity('IFCLABEL', `TCS.${bayCode}`), null));
+    // Product code (e.g., TCS.B26 or TCS.B26.T8 with accessories)
+    const bayCode = bayPresetOption?.code || 'B26';
+    const hasRearSystem = configuration.selections?.rear_system === true;
+    const productCode = hasRearSystem ? `TCS.${bayCode}.T8` : `TCS.${bayCode}`;
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductCode', null, createEntity('IFCLABEL', productCode), null));
     
     // Bay configuration summary
     if (bayPresetOption) {

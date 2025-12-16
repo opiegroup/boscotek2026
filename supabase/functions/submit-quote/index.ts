@@ -23,10 +23,71 @@ type Totals = {
   total: number;
 };
 
+type CustomerDetails = {
+  name: string;
+  email: string;
+  company?: string;
+  phone?: string;
+};
+
+type QuoteItem = {
+  productName: string;
+  referenceCode: string;
+  quantity: number;
+  unitPrice: number;
+  totalPrice: number;
+  configuration?: any;
+};
+
+type EmailSettings = {
+  testMode?: boolean;
+  testEmail?: string;
+  sendToCustomer?: boolean;
+  sendToMarketing?: boolean;
+  sendToOpieGroupSales?: boolean;
+  sendToBoscotekSales?: boolean;
+};
+
 type QuotePayload = {
-  customer: unknown;
-  items: unknown;
+  customer: CustomerDetails;
+  items: QuoteItem[];
   totals: Totals;
+  emailSettings?: EmailSettings;
+};
+
+// Send confirmation and notification emails via the email function
+const sendQuoteEmails = async (
+  quoteReference: string,
+  customer: CustomerDetails,
+  items: QuoteItem[],
+  totals: Totals,
+  emailSettings?: EmailSettings
+): Promise<void> => {
+  try {
+    // Call the send-quote-emails edge function
+    const emailPayload = {
+      quoteReference,
+      customer,
+      items,
+      totals,
+      emailSettings: emailSettings || {}
+    };
+
+    // Use Supabase functions invoke for internal call
+    const { error } = await supabase.functions.invoke('send-quote-emails', {
+      body: emailPayload
+    });
+
+    if (error) {
+      console.error("Email function error:", error);
+      // Don't throw - emails are non-critical, quote was already saved
+    } else {
+      console.log("Quote emails triggered successfully for", quoteReference);
+    }
+  } catch (emailErr) {
+    console.error("Failed to trigger quote emails:", emailErr);
+    // Non-critical failure - quote was still saved successfully
+  }
 };
 
 export const handler = async (req: Request): Promise<Response> => {
@@ -54,8 +115,10 @@ export const handler = async (req: Request): Promise<Response> => {
       });
     }
 
+    const quoteReference = refData as string;
+
     const newQuote = {
-      reference: refData as string,
+      reference: quoteReference,
       status: "new",
       customer_data: body.customer,
       items_data: body.items,
@@ -70,6 +133,10 @@ export const handler = async (req: Request): Promise<Response> => {
         headers: corsHeaders,
       });
     }
+
+    // Trigger confirmation and notification emails (async, non-blocking)
+    // Don't await - let it run in background so we can respond quickly
+    sendQuoteEmails(quoteReference, body.customer, body.items, body.totals, body.emailSettings);
 
     return new Response(JSON.stringify(data), {
       status: 200,

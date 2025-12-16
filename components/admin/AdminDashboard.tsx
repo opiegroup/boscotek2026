@@ -23,9 +23,37 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [interiors, setInteriors] = useState<DrawerInteriorOption[]>([]);
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
-  // View State: 0: Dashboard, 1: Pricing/Options, 6: Quotes, 7: BIM Leads
+  // View State: 0: Dashboard, 1: Pricing/Options, 6: Quotes, 7: BIM Leads, 8: Email Settings
   const [activeStep, setActiveStep] = useState<number>(0); 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  
+  // Email Settings State
+  const [emailSettings, setEmailSettings] = useState({
+    testMode: false,
+    testEmail: '',
+    sendToCustomer: true,
+    sendToMarketing: true,
+    sendToOpieGroupSales: true,
+    sendToBoscotekSales: true
+  });
+  
+  // Load email settings from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('boscotek_email_settings');
+    if (saved) {
+      try {
+        setEmailSettings(JSON.parse(saved));
+      } catch (e) {
+        console.error('Failed to load email settings', e);
+      }
+    }
+  }, []);
+  
+  // Save email settings
+  const saveEmailSettings = (newSettings: typeof emailSettings) => {
+    setEmailSettings(newSettings);
+    localStorage.setItem('boscotek_email_settings', JSON.stringify(newSettings));
+  };
   
   // --- LOAD DATA ---
   useEffect(() => {
@@ -162,6 +190,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
           <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads</button>
           <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Pricing & Options</button>
+          <button onClick={() => setActiveStep(8)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 8 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>📧 Email Settings</button>
         </nav>
         <div className="p-4 border-t border-zinc-800 space-y-2">
            <button onClick={handleLogout} className="w-full text-xs text-zinc-500 hover:text-white text-left p-2">Sign Out</button>
@@ -513,6 +542,147 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         {/* BIM LEADS */}
         {activeStep === 7 && (
           <BIMLeadsManager />
+        )}
+
+        {/* EMAIL SETTINGS */}
+        {activeStep === 8 && (
+          <div className="max-w-2xl">
+            <h1 className="text-3xl font-bold mb-2">Email Settings</h1>
+            <p className="text-zinc-400 mb-8">Configure quote notification emails for testing and production.</p>
+            
+            {/* Test Mode Toggle */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-bold text-lg text-white">🧪 Test Mode</h3>
+                  <p className="text-sm text-zinc-400">When enabled, all emails go to a single test address</p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={emailSettings.testMode}
+                    onChange={(e) => saveEmailSettings({ ...emailSettings, testMode: e.target.checked })}
+                    className="sr-only peer"
+                  />
+                  <div className="w-14 h-7 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+              
+              {emailSettings.testMode && (
+                <div className="mt-4 pt-4 border-t border-zinc-700">
+                  <label className="block text-xs font-mono text-zinc-500 mb-2">TEST EMAIL ADDRESS</label>
+                  <input 
+                    type="email"
+                    value={emailSettings.testEmail}
+                    onChange={(e) => saveEmailSettings({ ...emailSettings, testEmail: e.target.value })}
+                    placeholder="your-test-email@example.com"
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                  />
+                  <p className="text-xs text-amber-500 mt-2">⚠️ All emails will be sent to this address only</p>
+                </div>
+              )}
+            </div>
+            
+            {/* Recipient Toggles */}
+            <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+              <div className="bg-zinc-800 px-6 py-4 border-b border-zinc-700">
+                <h3 className="font-bold text-white">Email Recipients</h3>
+                <p className="text-xs text-zinc-400 mt-1">Toggle which recipients receive quote notifications</p>
+              </div>
+              
+              <div className="divide-y divide-zinc-800">
+                {/* Customer Email */}
+                <div className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-white">Customer Confirmation</div>
+                    <div className="text-sm text-zinc-500">Send confirmation email to the customer</div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={emailSettings.sendToCustomer}
+                      onChange={(e) => saveEmailSettings({ ...emailSettings, sendToCustomer: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+                
+                {/* Marketing */}
+                <div className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-white">marketing@opiegroup.com.au</div>
+                    <div className="text-sm text-zinc-500">Opie Group Marketing Team</div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={emailSettings.sendToMarketing}
+                      onChange={(e) => saveEmailSettings({ ...emailSettings, sendToMarketing: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+                
+                {/* Opie Group Sales */}
+                <div className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-white">sales@opiegroup.com.au</div>
+                    <div className="text-sm text-zinc-500">Opie Group Sales Team</div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={emailSettings.sendToOpieGroupSales}
+                      onChange={(e) => saveEmailSettings({ ...emailSettings, sendToOpieGroupSales: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+                
+                {/* Boscotek Sales */}
+                <div className="px-6 py-4 flex items-center justify-between">
+                  <div>
+                    <div className="font-medium text-white">sales@boscotek.com.au</div>
+                    <div className="text-sm text-zinc-500">Boscotek Sales Team</div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={emailSettings.sendToBoscotekSales}
+                      onChange={(e) => saveEmailSettings({ ...emailSettings, sendToBoscotekSales: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-500"></div>
+                  </label>
+                </div>
+              </div>
+            </div>
+            
+            {/* Status Summary */}
+            <div className="mt-6 p-4 bg-zinc-950 border border-zinc-800 rounded-lg">
+              <div className="text-xs font-mono text-zinc-500 uppercase mb-2">Current Status</div>
+              <div className="flex flex-wrap gap-2">
+                {emailSettings.testMode ? (
+                  <span className="px-3 py-1 bg-amber-500/20 text-amber-400 rounded-full text-sm font-medium">
+                    🧪 Test Mode: {emailSettings.testEmail || 'No test email set'}
+                  </span>
+                ) : (
+                  <>
+                    {emailSettings.sendToCustomer && <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Customer ✓</span>}
+                    {emailSettings.sendToMarketing && <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Marketing ✓</span>}
+                    {emailSettings.sendToOpieGroupSales && <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Opie Sales ✓</span>}
+                    {emailSettings.sendToBoscotekSales && <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-sm">Boscotek Sales ✓</span>}
+                    {!emailSettings.sendToCustomer && !emailSettings.sendToMarketing && !emailSettings.sendToOpieGroupSales && !emailSettings.sendToBoscotekSales && (
+                      <span className="px-3 py-1 bg-red-500/20 text-red-400 rounded-full text-sm">⚠️ All emails disabled</span>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>
