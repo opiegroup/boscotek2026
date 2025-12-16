@@ -2,6 +2,7 @@
 import React from 'react';
 import { ConfigurationState, PricingResult, ProductDefinition } from '../types';
 import ExportButtons from './ExportButtons';
+import { ErrorBoundary } from './ErrorBoundary';
 
 interface SummaryPanelProps {
   product: ProductDefinition;
@@ -211,12 +212,20 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
 
       {/* Export Options */}
       <div className="p-4 bg-zinc-900 border-t border-zinc-800">
-        <ExportButtons
-          configuration={config}
-          product={product}
-          pricing={pricing}
-          referenceCode={referenceCode}
-        />
+        <ErrorBoundary 
+          fallback={
+            <div className="text-center py-4 text-zinc-500 text-sm">
+              Export unavailable on this device.
+            </div>
+          }
+        >
+          <ExportButtons
+            configuration={config}
+            product={product}
+            pricing={pricing}
+            referenceCode={referenceCode}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );

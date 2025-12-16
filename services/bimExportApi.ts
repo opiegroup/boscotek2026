@@ -1,4 +1,5 @@
 import { supabase } from './supabaseClient';
+import { uuid } from './uuid';
 import { 
   BIMLeadData, 
   BIMLead, 
@@ -49,7 +50,7 @@ export const captureLead = async (leadData: BIMLeadData, configId?: string): Pro
       project_location: leadData.projectLocation || null,
       config_id: configId || null,
       consent: leadData.consent,
-      session_id: sessionStorage.getItem('session_id') || crypto.randomUUID(),
+      session_id: sessionStorage.getItem('session_id') || uuid(),
       user_agent: navigator.userAgent
     }])
     .select()
@@ -185,7 +186,7 @@ export const trackExportEvent = async (
       lead_id: leadId || null,
       config_id: configId || null,
       product_type: metadata,
-      session_id: sessionStorage.getItem('session_id') || crypto.randomUUID(),
+      session_id: sessionStorage.getItem('session_id') || uuid(),
       user_agent: navigator.userAgent,
       metadata: typeof metadata === 'object' ? metadata : { value: metadata }
     }]);
@@ -386,7 +387,7 @@ export const getCachedLead = (): BIMLeadData | null => {
 export const initializeSession = (): string => {
   let sessionId = sessionStorage.getItem('session_id');
   if (!sessionId) {
-    sessionId = crypto.randomUUID();
+    sessionId = uuid();
     sessionStorage.setItem('session_id', sessionId);
   }
   return sessionId;
