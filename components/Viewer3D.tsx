@@ -1151,7 +1151,7 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
             {/* Vertical reinforcement strip on inside of door (center) */}
             <mesh position={[doorWidth/2, 0, -panelThickness - stripThickness/2]}>
               <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
-              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+              <meshStandardMaterial color={doorColor} roughness={0.4} metalness={0.6} />
             </mesh>
             {/* Left Door Handle - near the center edge of door */}
             <mesh position={[doorWidth - 0.05, 0, handleDepth/2]}>
@@ -1173,7 +1173,7 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
             {/* Vertical reinforcement strip on inside of door (center) */}
             <mesh position={[-doorWidth/2, 0, -panelThickness - stripThickness/2]}>
               <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
-              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+              <meshStandardMaterial color={doorColor} roughness={0.4} metalness={0.6} />
             </mesh>
             {/* Right Door Handle - near the center edge of door */}
             <mesh position={[-doorWidth + 0.05, 0, handleDepth/2]}>
