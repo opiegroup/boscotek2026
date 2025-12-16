@@ -1328,13 +1328,16 @@ function createMobileToolCartGeometry(
         const origin = createEntity('IFCCARTESIANPOINT', [xPos, centerY - trayDepth/2, baseZ]);
         
         // Extrusion direction and placement
-        // Profile is in YZ plane, so we rotate it to extrude along X
-        const zDir = createEntity('IFCDIRECTION', [1., 0., 0.]);  // Extrude along X
-        const xDir = createEntity('IFCDIRECTION', [0., 1., 0.]);  // Profile Y becomes world Y
-        const position = createEntity('IFCAXIS2PLACEMENT3D', origin, zDir, xDir);
+        // Profile is defined in 2D, positioned at origin, then extruded along X-axis
+        // The IFCAXIS2PLACEMENT3D orients the profile plane:
+        // - Axis (Z-dir): normal to profile plane, points along extrusion
+        // - RefDirection (X-dir): defines profile X-axis orientation
+        const axisDir = createEntity('IFCDIRECTION', [1., 0., 0.]);   // Profile normal = extrusion direction (along X)
+        const refDir = createEntity('IFCDIRECTION', [0., 1., 0.]);    // Profile X-axis aligns with world Y
+        const position = createEntity('IFCAXIS2PLACEMENT3D', origin, axisDir, refDir);
         
-        // Extrude the profile
-        const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+        // Extrude the profile along X-axis (matches the axis direction)
+        const extrusionDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
         return createEntity('IFCEXTRUDEDAREASOLID', wedgeProfile, position, extrusionDir, wedgeThickness);
       };
       
