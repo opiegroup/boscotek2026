@@ -1133,16 +1133,25 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     // When doors are open, rotate them 110 degrees OUTWARD around their hinge edge
     const doorOpenAngle = doorsOpen ? Math.PI * 0.61 : 0; // 110 degrees
     
+    // Vertical reinforcement strip on inside of door
+    const stripWidth = 0.2;  // 20cm wide
+    const stripThickness = 0.003; // 3mm thick
+    
     return (
       <group>
         {/* Left Door - hinge on LEFT outer edge, swings outward to the left */}
         {/* Pivot point is at left side of cabinet, front face */}
         <group position={[-cupboardWidth/2 + panelThickness, doorYCenter, doorZ]}>
           <group rotation={[0, -doorOpenAngle, 0]}>
-            {/* Door offset so hinge edge is at pivot point */}
+            {/* Door panel */}
             <mesh position={[doorWidth/2, 0, -panelThickness/2]}>
               <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Vertical reinforcement strip on inside of door (center) */}
+            <mesh position={[doorWidth/2, 0, -panelThickness - stripThickness/2]}>
+              <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
             </mesh>
             {/* Left Door Handle - near the center edge of door */}
             <mesh position={[doorWidth - 0.05, 0, handleDepth/2]}>
@@ -1156,10 +1165,15 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
         {/* Pivot point is at right side of cabinet, front face */}
         <group position={[cupboardWidth/2 - panelThickness, doorYCenter, doorZ]}>
           <group rotation={[0, doorOpenAngle, 0]}>
-            {/* Door offset so hinge edge is at pivot point */}
+            {/* Door panel */}
             <mesh position={[-doorWidth/2, 0, -panelThickness/2]}>
               <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
               <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Vertical reinforcement strip on inside of door (center) */}
+            <mesh position={[-doorWidth/2, 0, -panelThickness - stripThickness/2]}>
+              <boxGeometry args={[stripWidth, doorHeight, stripThickness]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
             </mesh>
             {/* Right Door Handle - near the center edge of door */}
             <mesh position={[-doorWidth + 0.05, 0, handleDepth/2]}>
