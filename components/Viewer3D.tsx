@@ -961,25 +961,59 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   // SHELF POSITIONING
   // ========================================
   
+  // Implement configuration layout:
+  // ┌───────────────────────────┐
+  // │        TOP CAVITY         │  ← Full width, undivided (top 25% of interior)
+  // ├───────────────┬───────────┤
+  // │               │  Right 1  │  ← Right side has 3 compartments
+  // │   LEFT        ├───────────┤
+  // │   LOWER       │  Right 2  │
+  // │   CAVITY      ├───────────┤
+  // │               │  Right 3  │
+  // └───────────────┴───────────┘
+  
+  const isImplementLayout = shelfType === 'mixed' && fixedShelves > 0 && halfShelves > 0;
+  
+  // For Implement: Top cavity takes top 25%, lower section is 75%
+  const topCavityHeight = isImplementLayout ? usableHeight * 0.25 : 0;
+  const lowerSectionTop = interiorTop - topCavityHeight;
+  const lowerSectionHeight = lowerSectionTop - interiorBottom;
+  
+  // Vertical divider position (center of cabinet)
+  const dividerX = 0;
+  const halfWidth = (interiorWidth / 2) - 0.01;
+  
   const calculateShelfPositions = () => {
-    const positions: { y: number; width: number; isFixed: boolean }[] = [];
+    const positions: { y: number; width: number; xOffset: number; isFixed: boolean }[] = [];
     
-    if (shelfType === 'mixed' && fixedShelves > 0 && halfShelves > 0) {
-      // Implement layout: 1 fixed shelf at mid-height, 2 half shelves below
-      const fixedY = interiorBottom + usableHeight * 0.5;
-      positions.push({ y: fixedY, width: interiorWidth - 0.01, isFixed: true });
+    if (isImplementLayout) {
+      // IMPLEMENT LAYOUT:
+      // 1. Fixed shelf at bottom of top cavity (creates the full-width top cavity)
+      const topCavityShelfY = lowerSectionTop;
+      positions.push({ y: topCavityShelfY, width: interiorWidth - 0.01, xOffset: 0, isFixed: true });
       
-      // Half shelves on left and right
-      const halfShelfY1 = interiorBottom + usableHeight * 0.25;
-      const halfShelfY2 = interiorBottom + usableHeight * 0.75;
-      positions.push({ y: halfShelfY1, width: (interiorWidth / 2) - 0.01, isFixed: false });
-      positions.push({ y: halfShelfY2, width: (interiorWidth / 2) - 0.01, isFixed: false });
+      // 2. Two half-shelves on the RIGHT side only, dividing into 3 compartments
+      const rightShelfSpacing = lowerSectionHeight / 3;
+      // First right shelf (1/3 up from bottom)
+      positions.push({ 
+        y: interiorBottom + rightShelfSpacing, 
+        width: halfWidth - 0.005, 
+        xOffset: interiorWidth / 4 + 0.005, // Right side
+        isFixed: false 
+      });
+      // Second right shelf (2/3 up from bottom)
+      positions.push({ 
+        y: interiorBottom + (rightShelfSpacing * 2), 
+        width: halfWidth - 0.005, 
+        xOffset: interiorWidth / 4 + 0.005, // Right side
+        isFixed: false 
+      });
     } else {
-      // Regular adjustable shelves - evenly distributed
+      // Regular adjustable shelves - evenly distributed full-width
       const spacing = usableHeight / (shelfCount + 1);
       for (let i = 1; i <= shelfCount; i++) {
         const y = interiorBottom + (spacing * i);
-        positions.push({ y, width: interiorWidth - 0.01, isFixed: false });
+        positions.push({ y, width: interiorWidth - 0.01, xOffset: 0, isFixed: false });
       }
     }
     
@@ -1131,25 +1165,35 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
     );
   };
   
-  // Shelves
-  const Shelves = () => (
-    <group>
-      {shelfPositions.map((shelf, idx) => {
-        const isHalfShelf = shelfType === 'mixed' && !shelf.isFixed && halfShelves > 0;
-        const xOffset = isHalfShelf ? (idx % 2 === 0 ? -interiorWidth/4 : interiorWidth/4) : 0;
+  // Shelves and Internal Dividers
+  const Shelves = () => {
+    // For Implement layout, the vertical divider runs from bottom to top cavity shelf
+    const dividerHeight = isImplementLayout ? lowerSectionHeight : 0;
+    const dividerY = isImplementLayout ? interiorBottom + dividerHeight / 2 : 0;
+    
+    return (
+      <group>
+        {/* Vertical divider for Implement layout */}
+        {isImplementLayout && (
+          <mesh position={[0, dividerY, 0]}>
+            <boxGeometry args={[panelThickness, dividerHeight, interiorDepth - 0.02]} />
+            <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
+          </mesh>
+        )}
         
-        return (
+        {/* Shelves */}
+        {shelfPositions.map((shelf, idx) => (
           <mesh 
             key={idx} 
-            position={[xOffset, shelf.y, 0]}
+            position={[shelf.xOffset, shelf.y, 0]}
           >
             <boxGeometry args={[shelf.width, shelfThickness, interiorDepth - 0.02]} />
             <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
           </mesh>
-        );
-      })}
-    </group>
-  );
+        ))}
+      </group>
+    );
+  };
   
   // ========================================
   // MAIN RENDER
