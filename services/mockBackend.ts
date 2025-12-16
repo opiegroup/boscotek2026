@@ -102,13 +102,9 @@ const refreshCache = async () => {
     CACHE.interiors = intData.map((row: any) => row.data as DrawerInteriorOption);
   }
 
-  // Fetch Accessories (if table exists, otherwise use seed)
-  const { data: accData } = await supabase.from('drawer_accessories').select('*');
-  if (accData && accData.length > 0) {
-    CACHE.accessories = accData.map((row: any) => row.data as DrawerAccessory);
-  } else {
-    CACHE.accessories = SEED_ACCESSORIES;
-  }
+  // Use seed accessories - drawer_accessories table doesn't exist in Supabase
+  // If you need DB-managed accessories in future, create the table first
+  CACHE.accessories = SEED_ACCESSORIES;
   
   CACHE.isLoaded = true;
 };
