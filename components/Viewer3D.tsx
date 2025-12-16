@@ -815,7 +815,97 @@ export const MobileToolCartGroup = ({ config, product, frameColor = '#333', faci
 // Fixed dimensions: 900mm W × 450mm D × 1800/2000mm H
 // ==========================================
 
-export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', doorColor = '#ccc' }: any) => {
+// Triangular side panel for sloped top cupboards
+const SlopeTriangleSidePanel = ({ 
+  xPosition, 
+  baseY, 
+  frontZ, 
+  backZ, 
+  slopeHeight, 
+  thickness, 
+  color, 
+  mirrorX = false 
+}: { 
+  xPosition: number;
+  baseY: number;
+  frontZ: number;
+  backZ: number;
+  slopeHeight: number;
+  thickness: number;
+  color: string;
+  mirrorX?: boolean;
+}) => {
+  const geometry = useMemo(() => {
+    const geo = new THREE.BufferGeometry();
+    const depth = frontZ - backZ;
+    const halfThickness = thickness / 2;
+    
+    // Triangle vertices: front-bottom, back-bottom, back-top
+    // Create a triangular prism
+    const vertices = new Float32Array([
+      // Front face (triangle)
+      -halfThickness, 0, depth,      // front-bottom-left
+      halfThickness, 0, depth,       // front-bottom-right
+      halfThickness, 0, 0,           // back-bottom-right
+      
+      -halfThickness, 0, depth,      // front-bottom-left
+      halfThickness, 0, 0,           // back-bottom-right
+      -halfThickness, 0, 0,          // back-bottom-left
+      
+      // Top face (triangle going up at back)
+      -halfThickness, 0, depth,      // front-bottom-left
+      -halfThickness, 0, 0,          // back-bottom-left
+      -halfThickness, slopeHeight, 0, // back-top-left
+      
+      halfThickness, 0, depth,       // front-bottom-right
+      halfThickness, slopeHeight, 0, // back-top-right
+      halfThickness, 0, 0,           // back-bottom-right
+      
+      // Back face (vertical at back with height)
+      -halfThickness, 0, 0,          // back-bottom-left
+      halfThickness, 0, 0,           // back-bottom-right
+      halfThickness, slopeHeight, 0, // back-top-right
+      
+      -halfThickness, 0, 0,          // back-bottom-left
+      halfThickness, slopeHeight, 0, // back-top-right
+      -halfThickness, slopeHeight, 0, // back-top-left
+      
+      // Sloped top face
+      -halfThickness, 0, depth,      // front-bottom-left
+      -halfThickness, slopeHeight, 0, // back-top-left
+      halfThickness, slopeHeight, 0, // back-top-right
+      
+      -halfThickness, 0, depth,      // front-bottom-left
+      halfThickness, slopeHeight, 0, // back-top-right
+      halfThickness, 0, depth,       // front-bottom-right
+      
+      // Left side
+      -halfThickness, 0, depth,
+      -halfThickness, slopeHeight, 0,
+      -halfThickness, 0, 0,
+      
+      // Right side
+      halfThickness, 0, depth,
+      halfThickness, 0, 0,
+      halfThickness, slopeHeight, 0,
+    ]);
+    
+    geo.setAttribute('position', new THREE.BufferAttribute(vertices, 3));
+    geo.computeVertexNormals();
+    return geo;
+  }, [slopeHeight, thickness, frontZ, backZ]);
+  
+  return (
+    <mesh 
+      geometry={geometry} 
+      position={[xPosition, baseY, backZ]}
+    >
+      <meshStandardMaterial color={color} roughness={0.4} metalness={0.6} side={THREE.DoubleSide} />
+    </mesh>
+  );
+};
+
+export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', doorColor = '#ccc', doorsOpen = false }: any) => {
   // ========================================
   // CONFIGURATION EXTRACTION
   // ========================================
@@ -890,97 +980,131 @@ export const StorageCupboardGroup = ({ config, product, bodyColor = '#333', door
   // ========================================
   
   // Cabinet Shell (sides, back, top, bottom, base)
-  const CabinetShell = () => (
-    <group>
-      {/* Base/Plinth */}
-      <mesh position={[0, baseHeight/2, 0]}>
-        <boxGeometry args={[cupboardWidth, baseHeight, cupboardDepth]} />
-        <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
-      </mesh>
-      
-      {/* Left Side Panel */}
-      <mesh position={[-cupboardWidth/2 + panelThickness/2, baseHeight + (cupboardHeight - baseHeight)/2, 0]}>
-        <boxGeometry args={[panelThickness, cupboardHeight - baseHeight, cupboardDepth]} />
-        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-      </mesh>
-      
-      {/* Right Side Panel */}
-      <mesh position={[cupboardWidth/2 - panelThickness/2, baseHeight + (cupboardHeight - baseHeight)/2, 0]}>
-        <boxGeometry args={[panelThickness, cupboardHeight - baseHeight, cupboardDepth]} />
-        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-      </mesh>
-      
-      {/* Back Panel */}
-      <mesh position={[0, baseHeight + (cupboardHeight - baseHeight)/2, -cupboardDepth/2 + panelThickness/2]}>
-        <boxGeometry args={[cupboardWidth - panelThickness*2, cupboardHeight - baseHeight, panelThickness]} />
-        <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-      </mesh>
-      
-      {/* Bottom Panel (floor of interior) */}
-      <mesh position={[0, baseHeight + panelThickness/2, 0]}>
-        <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, cupboardDepth - panelThickness*2]} />
-        <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
-      </mesh>
-      
-      {/* Top Panel - Flat or Sloped */}
-      {topType === 'flat' ? (
-        <mesh position={[0, cupboardHeight - panelThickness/2, 0]}>
-          <boxGeometry args={[cupboardWidth, panelThickness, cupboardDepth]} />
+  const CabinetShell = () => {
+    // For sloped top, side panels are taller at back
+    const sidePanelHeight = cupboardHeight - baseHeight;
+    const slopedSidePanelHeight = topType === 'slope' ? sidePanelHeight : sidePanelHeight;
+    
+    return (
+      <group>
+        {/* Base/Plinth */}
+        <mesh position={[0, baseHeight/2, 0]}>
+          <boxGeometry args={[cupboardWidth, baseHeight, cupboardDepth]} />
+          <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+        </mesh>
+        
+        {/* Left Side Panel - main rectangular part */}
+        <mesh position={[-cupboardWidth/2 + panelThickness/2, baseHeight + sidePanelHeight/2, 0]}>
+          <boxGeometry args={[panelThickness, sidePanelHeight, cupboardDepth]} />
           <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
         </mesh>
-      ) : (
-        // Sloped top - higher at back
-        <group>
-          {/* Main sloped panel - using a rotated box approximation */}
-          <mesh 
-            position={[0, cupboardHeight - panelThickness/2 + slopeHeight/2, 0]}
-            rotation={[Math.atan2(slopeHeight, cupboardDepth), 0, 0]}
-          >
-            <boxGeometry args={[cupboardWidth, panelThickness, Math.sqrt(cupboardDepth * cupboardDepth + slopeHeight * slopeHeight)]} />
+        
+        {/* Right Side Panel - main rectangular part */}
+        <mesh position={[cupboardWidth/2 - panelThickness/2, baseHeight + sidePanelHeight/2, 0]}>
+          <boxGeometry args={[panelThickness, sidePanelHeight, cupboardDepth]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+        </mesh>
+        
+        {/* For sloped top - add triangular extensions at top of side panels */}
+        {topType === 'slope' && (
+          <>
+            {/* Left side triangle extension */}
+            <SlopeTriangleSidePanel
+              xPosition={-cupboardWidth/2 + panelThickness/2}
+              baseY={cupboardHeight}
+              frontZ={cupboardDepth/2}
+              backZ={-cupboardDepth/2}
+              slopeHeight={slopeHeight}
+              thickness={panelThickness}
+              color={bodyColor}
+            />
+            {/* Right side triangle extension */}
+            <SlopeTriangleSidePanel
+              xPosition={cupboardWidth/2 - panelThickness/2}
+              baseY={cupboardHeight}
+              frontZ={cupboardDepth/2}
+              backZ={-cupboardDepth/2}
+              slopeHeight={slopeHeight}
+              thickness={panelThickness}
+              color={bodyColor}
+            />
+          </>
+        )}
+        
+        {/* Back Panel - extends to slope height for sloped tops */}
+        <mesh position={[0, baseHeight + (topType === 'slope' ? (sidePanelHeight + slopeHeight)/2 : sidePanelHeight/2), -cupboardDepth/2 + panelThickness/2]}>
+          <boxGeometry args={[cupboardWidth - panelThickness*2, topType === 'slope' ? sidePanelHeight + slopeHeight : sidePanelHeight, panelThickness]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+        </mesh>
+        
+        {/* Bottom Panel (floor of interior) */}
+        <mesh position={[0, baseHeight + panelThickness/2, 0]}>
+          <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, cupboardDepth - panelThickness*2]} />
+          <meshStandardMaterial color={bodyColor} roughness={0.5} metalness={0.5} />
+        </mesh>
+        
+        {/* Top Panel - Flat or Sloped */}
+        {topType === 'flat' ? (
+          <mesh position={[0, cupboardHeight - panelThickness/2, 0]}>
+            <boxGeometry args={[cupboardWidth, panelThickness, cupboardDepth]} />
             <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
           </mesh>
-          {/* Front header panel to close the gap */}
-          <mesh position={[0, cupboardHeight - panelThickness/2, cupboardDepth/2 - panelThickness/2]}>
-            <boxGeometry args={[cupboardWidth, panelThickness, panelThickness]} />
-            <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
-          </mesh>
-        </group>
-      )}
-    </group>
-  );
+        ) : (
+          // Sloped top - angled panel from front to back
+          <group>
+            {/* Main sloped panel */}
+            <mesh 
+              position={[0, cupboardHeight + slopeHeight/2, 0]}
+              rotation={[Math.atan2(slopeHeight, cupboardDepth), 0, 0]}
+            >
+              <boxGeometry args={[cupboardWidth - panelThickness*2, panelThickness, Math.sqrt(cupboardDepth * cupboardDepth + slopeHeight * slopeHeight)]} />
+              <meshStandardMaterial color={bodyColor} roughness={0.4} metalness={0.6} />
+            </mesh>
+          </group>
+        )}
+      </group>
+    );
+  };
   
-  // Double Doors
+  // Double Doors (with open/close state)
   const Doors = () => {
     const doorWidth = (cupboardWidth - panelThickness*2 - doorGap) / 2;
     const doorHeight = cupboardHeight - baseHeight - panelThickness;
     const doorYCenter = baseHeight + doorHeight/2 + panelThickness/2;
     
+    // When doors are open, rotate them 110 degrees around their hinge edge
+    const doorOpenAngle = doorsOpen ? Math.PI * 0.6 : 0; // ~110 degrees
+    
     return (
       <group>
-        {/* Left Door */}
-        <group position={[-doorWidth/2 - doorGap/2, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
-          <mesh>
-            <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
-            <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
-          </mesh>
-          {/* Left Door Handle */}
-          <mesh position={[doorWidth/2 - 0.05, 0, panelThickness/2 + handleDepth/2]}>
-            <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
-            <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
-          </mesh>
+        {/* Left Door - hinges on left edge */}
+        <group position={[-cupboardWidth/2 + panelThickness + 0.001, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
+          <group rotation={[0, doorOpenAngle, 0]} position={[0, 0, 0]}>
+            <mesh position={[doorWidth/2, 0, 0]}>
+              <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
+              <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Left Door Handle */}
+            <mesh position={[doorWidth - 0.05, 0, panelThickness/2 + handleDepth/2]}>
+              <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
+              <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
+            </mesh>
+          </group>
         </group>
         
-        {/* Right Door */}
-        <group position={[doorWidth/2 + doorGap/2, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
-          <mesh>
-            <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
-            <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
-          </mesh>
-          {/* Right Door Handle */}
-          <mesh position={[-doorWidth/2 + 0.05, 0, panelThickness/2 + handleDepth/2]}>
-            <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
-            <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
-          </mesh>
+        {/* Right Door - hinges on right edge */}
+        <group position={[cupboardWidth/2 - panelThickness - 0.001, doorYCenter, cupboardDepth/2 - panelThickness/2]}>
+          <group rotation={[0, -doorOpenAngle, 0]} position={[0, 0, 0]}>
+            <mesh position={[-doorWidth/2, 0, 0]}>
+              <boxGeometry args={[doorWidth, doorHeight, panelThickness]} />
+              <meshStandardMaterial color={doorColor} roughness={0.3} metalness={0.5} />
+            </mesh>
+            {/* Right Door Handle */}
+            <mesh position={[-doorWidth + 0.05, 0, panelThickness/2 + handleDepth/2]}>
+              <boxGeometry args={[handleWidth, handleHeight, handleDepth]} />
+              <meshStandardMaterial color="#52525b" roughness={0.3} metalness={0.8} />
+            </mesh>
+          </group>
         </group>
       </group>
     );
@@ -1622,6 +1746,7 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const [bgMode, setBgMode] = useState<BackgroundMode>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [antiTiltDemoIndex, setAntiTiltDemoIndex] = useState<number | null>(null); // Cycles through drawers one at a time
+    const [cupboardDoorsOpen, setCupboardDoorsOpen] = useState(false); // Toggle for cupboard doors
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const captureRef = useRef<(() => string | null) | null>(null);
@@ -1738,7 +1863,7 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
               ) : product.id === 'prod-mobile-tool-cart' ? (
                  <MobileToolCartGroup config={config} product={product} frameColor={frameColor} faciaColor={faciaColor} />
               ) : product.id === 'prod-storage-cupboard' ? (
-                 <StorageCupboardGroup config={config} product={product} bodyColor={frameColor} doorColor={faciaColor} />
+                 <StorageCupboardGroup config={config} product={product} bodyColor={frameColor} doorColor={faciaColor} doorsOpen={cupboardDoorsOpen} />
               ) : (
                  <Center bottom>
                     <group>
@@ -1780,6 +1905,18 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
                   {antiTiltDemoIndex !== null 
                     ? `🔒 Drawer ${antiTiltDemoIndex + 1}/${config.customDrawers.length}` 
                     : '🔐 Anti-Tilt Demo'}
+                </button>
+              </>
+            )}
+            {product.id === 'prod-storage-cupboard' && (
+              <>
+                <div className="w-px bg-zinc-600 mx-1"></div>
+                <button 
+                  onClick={() => setCupboardDoorsOpen(!cupboardDoorsOpen)} 
+                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${cupboardDoorsOpen ? 'bg-blue-500 text-white' : 'text-zinc-300 hover:text-white hover:bg-zinc-700'}`} 
+                  title="Toggle doors open/closed to view shelf configuration"
+                >
+                  {cupboardDoorsOpen ? '🚪 Close Doors' : '🚪 Open Doors'}
                 </button>
               </>
             )}
