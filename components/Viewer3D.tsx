@@ -2391,8 +2391,8 @@ const HiLoAccessories = ({
             <HiLoLouvre w={panelWidth} h={panelHeight} />
           </group>
           
-          {/* Top sloped tray shelf */}
-          {hasShelf && <TrayShelf yPos={postHeight - 0.12} sloped={true} />}
+          {/* Top sloped tray shelf - just above panels */}
+          {hasShelf && <TrayShelf yPos={postHeight - 0.095} sloped={true} />}
         </>
       )}
       
