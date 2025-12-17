@@ -1,5 +1,7 @@
 # Boscotek Configurator - AI Coding Rules
 
+> **See also**: `.cursor/rules.md` for CPQ architecture, RBAC, pricing, and backend guidelines.
+
 ## IFC Export Guidelines (Full Specification - LOD 200-300)
 
 When working with IFC (Industry Foundation Classes) export code, follow the complete specification:
