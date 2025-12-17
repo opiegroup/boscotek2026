@@ -1335,19 +1335,92 @@ const LouvrePanel = ({ width, height, color }: { width: number, height: number, 
   );
 };
 
-const ShelfTray = ({ width }: { width: number }) => (
-  <group>
-    <mesh position={[0, 0, 0]}>
-      <boxGeometry args={[width, 0.01, 0.25]} />
-      <meshStandardMaterial color="#e4e4e7" roughness={0.4} metalness={0.3} />
-    </mesh>
-    {/* Lip */}
-    <mesh position={[0, 0.015, 0.125]}>
-      <boxGeometry args={[width, 0.03, 0.002]} />
-      <meshStandardMaterial color="#e4e4e7" roughness={0.4} metalness={0.3} />
-    </mesh>
-  </group>
-);
+// Professional tray shelf matching Mobile Tool Trolley design
+// Features: 3mm base, 95mm rear lip, 12mm front lip, wedge brackets
+const ShelfTray = ({ width, color = '#e4e4e7' }: { width: number; color?: string }) => {
+  const trayDepth = 0.22;         // 220mm depth
+  const rearHeight = 0.095;       // 95mm rear lip
+  const frontLipHeight = 0.012;   // 12mm front lip
+  const baseThickness = 0.003;    // 3mm base plate
+  const bracketThickness = 0.003; // 3mm sheet metal
+  
+  const materialProps = { color, roughness: 0.4, metalness: 0.25 };
+  
+  // Wedge bracket geometry (matching Mobile Tool Trolley)
+  const WedgeBracket = ({ side }: { side: 'left' | 'right' }) => {
+    const tipCutoff = 0.012; // Chamfer at front tip
+    const mirrorX = side === 'right' ? -1 : 1;
+    const xPos = side === 'left' ? -width/2 : width/2;
+    
+    const geometry = useMemo(() => {
+      const geo = new THREE.BufferGeometry();
+      const t = bracketThickness;
+      
+      // Wedge profile vertices (YZ plane, extruded in X)
+      const v0 = [0, rearHeight, 0];              // Top rear
+      const v1 = [0, 0, 0];                        // Bottom rear
+      const v2 = [0, 0, trayDepth - tipCutoff];   // Bottom front (before chamfer)
+      const v3 = [0, tipCutoff, trayDepth];       // Chamfer tip
+      
+      // Outer face vertices
+      const v4 = [t * mirrorX, rearHeight, 0];
+      const v5 = [t * mirrorX, 0, 0];
+      const v6 = [t * mirrorX, 0, trayDepth - tipCutoff];
+      const v7 = [t * mirrorX, tipCutoff, trayDepth];
+      
+      const positions = new Float32Array([
+        // Inner face
+        ...v0, ...v1, ...v2,  ...v0, ...v2, ...v3,
+        // Outer face (reversed)
+        ...v4, ...v6, ...v5,  ...v4, ...v7, ...v6,
+        // Bottom edge
+        ...v1, ...v5, ...v6,  ...v1, ...v6, ...v2,
+        // Rear edge
+        ...v0, ...v4, ...v5,  ...v0, ...v5, ...v1,
+        // Hypotenuse (sloped top)
+        ...v0, ...v3, ...v7,  ...v0, ...v7, ...v4,
+        // Chamfer edge
+        ...v2, ...v6, ...v7,  ...v2, ...v7, ...v3,
+      ]);
+      
+      geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+      geo.computeVertexNormals();
+      return geo;
+    }, [mirrorX]);
+    
+    return (
+      <mesh geometry={geometry} position={[xPos, 0, -trayDepth/2]}>
+        <meshStandardMaterial {...materialProps} side={THREE.DoubleSide} />
+      </mesh>
+    );
+  };
+  
+  return (
+    <group>
+      {/* Base plate (3mm) */}
+      <mesh>
+        <boxGeometry args={[width, baseThickness, trayDepth]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      
+      {/* Rear lip (95mm) */}
+      <mesh position={[0, rearHeight/2, -trayDepth/2 + 0.003]}>
+        <boxGeometry args={[width, rearHeight, 0.006]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      
+      {/* Front lip (12mm) */}
+      <mesh position={[0, frontLipHeight/2, trayDepth/2 - 0.003]}>
+        <boxGeometry args={[width, frontLipHeight, 0.006]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      
+      {/* Wedge brackets */}
+      <WedgeBracket side="left" />
+      <WedgeBracket side="right" />
+    </group>
+  );
+};
 
 const MonitorStand = ({ height }: { height: number }) => {
   return (
@@ -1792,6 +1865,625 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
         {accSelection && accSelection['acc-monitor'] > 0 && <MonitorStand height={height} />}
         {kitSelection && <AccessoryKitOverlay kitType={kitSelection.includes('red') ? 'red' : kitSelection.includes('green') ? 'green' : 'none'} height={height} depth={depth} />}
     </group>
+    );
+  };
+
+// ==========================================
+// HILO WORKBENCH VISUALIZER COMPONENTS
+// ==========================================
+
+// HiLo Lift Column Pair - Motorized height-adjustable columns
+// DL6: Thinner columns, faster speed, lighter capacity
+// DL2: Thick white box legs with black feet, heavier capacity
+const LiftColumnPair = ({ 
+  width, 
+  currentHeightM, 
+  colorHex,
+  liftModel = 'DL6'
+}: { 
+  width: number; 
+  currentHeightM: number; 
+  colorHex: string;
+  liftModel?: 'DL6' | 'DL2';
+}) => {
+  const columnX = width / 2 - 0.18; // Inset columns from edges
+  
+  // DL2: Thick white box legs with black feet (as per photo/spec)
+  // DL6: Thinner colored columns
+  const isDL2 = liftModel === 'DL2';
+  
+  // Column dimensions differ by model
+  const footPlateHeight = 0.025;
+  const footPlateWidth = isDL2 ? 0.16 : 0.12;
+  const footPlateDepth = isDL2 ? 0.55 : 0.45;
+  const outerColumnWidth = isDL2 ? 0.12 : 0.08;
+  const outerColumnDepth = isDL2 ? 0.12 : 0.08;
+  const outerColumnHeight = isDL2 ? 0.45 : 0.40;
+  const innerColumnScale = isDL2 ? 0.75 : 0.65;
+  
+  // Materials - DL2 has white columns with black feet
+  const footMaterial = isDL2 
+    ? { color: '#1a1a1a', roughness: 0.7, metalness: 0.1 }  // Black feet for DL2
+    : { color: colorHex, roughness: 0.35, metalness: 0.2 };
+  
+  const outerColumnMaterial = isDL2
+    ? { color: '#e8e8e8', roughness: 0.4, metalness: 0.15 }  // White/light grey for DL2
+    : { color: colorHex, roughness: 0.35, metalness: 0.2 };
+  
+  const innerColumnMaterial = isDL2
+    ? { color: '#d4d4d4', roughness: 0.3, metalness: 0.4 }   // Light chrome for DL2
+    : { color: '#a1a1aa', roughness: 0.25, metalness: 0.6 };
+  
+  const topMountMaterial = isDL2
+    ? { color: '#e8e8e8', roughness: 0.4, metalness: 0.15 }  // White for DL2
+    : { color: colorHex, roughness: 0.35, metalness: 0.2 };
+  
+  // FIXED positions
+  const outerColumnTopY = footPlateHeight + outerColumnHeight;
+  
+  // MOVING: Inner column extends from top of outer column to top mount
+  const topMountY = currentHeightM - 0.02;
+  const innerColumnLength = Math.max(0.05, topMountY - outerColumnTopY);
+  const innerColumnCenterY = outerColumnTopY + innerColumnLength / 2;
+  
+  // DL2 Column - thick box style with dual actuator appearance
+  const DL2Column = ({ xPos }: { xPos: number }) => (
+    <group position={[xPos, 0, 0]}>
+      {/* Black Foot Plate */}
+      <mesh position={[0, footPlateHeight / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[footPlateWidth, footPlateHeight, footPlateDepth]} />
+        <meshStandardMaterial {...footMaterial} />
+      </mesh>
+      
+      {/* White Outer Column Box - FIXED */}
+      <mesh position={[0, footPlateHeight + outerColumnHeight / 2, 0]} castShadow>
+        <boxGeometry args={[outerColumnWidth, outerColumnHeight, outerColumnDepth]} />
+        <meshStandardMaterial {...outerColumnMaterial} />
+      </mesh>
+      
+      {/* Black accent band at bottom of outer column */}
+      <mesh position={[0, footPlateHeight + 0.015, 0]} castShadow>
+        <boxGeometry args={[outerColumnWidth + 0.004, 0.02, outerColumnDepth + 0.004]} />
+        <meshStandardMaterial color="#1a1a1a" roughness={0.6} />
+      </mesh>
+      
+      {/* Inner Column - telescopes out - MOVING */}
+      <mesh position={[0, innerColumnCenterY, 0]} castShadow>
+        <boxGeometry args={[outerColumnWidth * innerColumnScale, innerColumnLength, outerColumnDepth * innerColumnScale]} />
+        <meshStandardMaterial {...innerColumnMaterial} />
+      </mesh>
+      
+      {/* Top Mount Bracket - MOVING */}
+      <mesh position={[0, topMountY, 0]} castShadow>
+        <boxGeometry args={[0.14, 0.04, 0.14]} />
+        <meshStandardMaterial {...topMountMaterial} />
+      </mesh>
+    </group>
+  );
+  
+  // DL6 Column - thinner profile
+  const DL6Column = ({ xPos }: { xPos: number }) => (
+    <group position={[xPos, 0, 0]}>
+      {/* Foot Plate */}
+      <mesh position={[0, footPlateHeight / 2, 0]} castShadow receiveShadow>
+        <boxGeometry args={[footPlateWidth, footPlateHeight, footPlateDepth]} />
+        <meshStandardMaterial {...footMaterial} />
+      </mesh>
+      
+      {/* Outer Column - FIXED */}
+      <mesh position={[0, footPlateHeight + outerColumnHeight / 2, 0]} castShadow>
+        <boxGeometry args={[outerColumnWidth, outerColumnHeight, outerColumnDepth]} />
+        <meshStandardMaterial {...outerColumnMaterial} />
+      </mesh>
+      
+      {/* Inner Column - MOVING */}
+      <mesh position={[0, innerColumnCenterY, 0]} castShadow>
+        <boxGeometry args={[outerColumnWidth * innerColumnScale, innerColumnLength, outerColumnDepth * innerColumnScale]} />
+        <meshStandardMaterial {...innerColumnMaterial} />
+      </mesh>
+      
+      {/* Top Mount Bracket - MOVING */}
+      <mesh position={[0, topMountY, 0]} castShadow>
+        <boxGeometry args={[0.10, 0.04, 0.12]} />
+        <meshStandardMaterial {...topMountMaterial} />
+      </mesh>
+    </group>
+  );
+  
+  const ColumnComponent = isDL2 ? DL2Column : DL6Column;
+  
+  return (
+    <group>
+      {/* Left and Right Columns */}
+      <ColumnComponent xPos={-columnX} />
+      <ColumnComponent xPos={columnX} />
+      
+      {/* Control Box - positioned on right column outer section */}
+      <mesh position={[columnX + (isDL2 ? 0.08 : 0.06), 0.22, 0]} castShadow>
+        <boxGeometry args={[0.04, 0.10, 0.03]} />
+        <meshStandardMaterial color="#27272a" roughness={0.5} />
+      </mesh>
+      {/* Up button */}
+      <mesh position={[columnX + (isDL2 ? 0.102 : 0.082), 0.25, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.004, 12]} />
+        <meshStandardMaterial color="#22c55e" emissive="#22c55e" emissiveIntensity={0.5} />
+      </mesh>
+      {/* Down button */}
+      <mesh position={[columnX + (isDL2 ? 0.102 : 0.082), 0.19, 0]} rotation={[0, 0, Math.PI / 2]}>
+        <cylinderGeometry args={[0.008, 0.008, 0.004, 12]} />
+        <meshStandardMaterial color="#ef4444" emissive="#ef4444" emissiveIntensity={0.5} />
+      </mesh>
+    </group>
+  );
+};
+
+// HiLo Under-Top Frame - connects columns to worktop
+// DL2: Welded steel frame (white/grey)
+// DL6: Kick & Click frame (colored to match)
+const HiLoUnderTopFrame = ({ 
+  width, 
+  depth,
+  currentHeightM, 
+  colorHex,
+  liftModel = 'DL6'
+}: { 
+  width: number; 
+  depth: number;
+  currentHeightM: number; 
+  colorHex: string;
+  liftModel?: 'DL6' | 'DL2';
+}) => {
+  const isDL2 = liftModel === 'DL2';
+  const frameThickness = isDL2 ? 0.06 : 0.05;
+  const frameHeight = isDL2 ? 0.05 : 0.04;
+  const columnX = width / 2 - 0.18;
+  const frameY = currentHeightM - frameHeight / 2;
+  
+  // DL2 has white/light grey welded steel frame
+  const materialProps = isDL2
+    ? { color: '#e0e0e0', roughness: 0.4, metalness: 0.2 }
+    : { color: colorHex, roughness: 0.4, metalness: 0.15 };
+  
+  return (
+    <group position={[0, frameY, 0]}>
+      {/* Front rail */}
+      <mesh position={[0, 0, depth / 2 - frameThickness / 2]} castShadow>
+        <boxGeometry args={[width - 0.06, frameHeight, frameThickness]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      {/* Rear rail */}
+      <mesh position={[0, 0, -depth / 2 + frameThickness / 2]} castShadow>
+        <boxGeometry args={[width - 0.06, frameHeight, frameThickness]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      {/* Left side rail (connects to column) */}
+      <mesh position={[-columnX, 0, 0]} castShadow>
+        <boxGeometry args={[frameThickness, frameHeight, depth - frameThickness * 2]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      {/* Right side rail (connects to column) */}
+      <mesh position={[columnX, 0, 0]} castShadow>
+        <boxGeometry args={[frameThickness, frameHeight, depth - frameThickness * 2]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      
+      {/* DL2: Additional cross braces for welded frame look */}
+      {isDL2 && (
+        <>
+          {/* Center cross brace */}
+          <mesh position={[0, 0, 0]} castShadow>
+            <boxGeometry args={[width - 0.36, frameHeight * 0.8, frameThickness * 0.7]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+          {/* Additional longitudinal stringers */}
+          <mesh position={[0, 0, depth * 0.25]} castShadow>
+            <boxGeometry args={[width - 0.36, frameHeight * 0.6, frameThickness * 0.5]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+          <mesh position={[0, 0, -depth * 0.25]} castShadow>
+            <boxGeometry args={[width - 0.36, frameHeight * 0.6, frameThickness * 0.5]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+        </>
+      )}
+      
+      {/* DL6: Single center cross brace */}
+      {!isDL2 && (
+        <mesh position={[0, 0, 0]} castShadow>
+          <boxGeometry args={[width - 0.36, frameHeight * 0.6, frameThickness * 0.8]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
+// HiLo Worktop - positioned at current height (sits on top of frame)
+const HiLoWorktop = ({ 
+  width, 
+  depth, 
+  currentHeightM, 
+  materialId 
+}: { 
+  width: number; 
+  depth: number; 
+  currentHeightM: number; 
+  materialId: string; 
+}) => {
+  const thickness = 0.035; // 35mm standard HiLo top
+  let topColor = '#78716c'; // Default laminated timber
+  let metalness = 0.05;
+  let roughness = 0.7;
+  
+  if (materialId === 'hilo-top-ss' || materialId?.includes('ss')) {
+    topColor = '#e4e4e7';
+    metalness = 0.7;
+    roughness = 0.2;
+  } else if (materialId === 'hilo-top-mild' || materialId?.includes('mild')) {
+    topColor = '#27272a';
+    metalness = 0.4;
+    roughness = 0.5;
+  }
+  
+  // Worktop sits directly on top of frame (frame is at currentHeightM - 0.02)
+  const worktopY = currentHeightM + thickness / 2;
+  
+  return (
+    <group>
+      {/* Main worktop surface */}
+      <mesh position={[0, worktopY, 0]} castShadow receiveShadow>
+        <boxGeometry args={[width, thickness, depth]} />
+        <meshStandardMaterial color={topColor} roughness={roughness} metalness={metalness} />
+      </mesh>
+      {/* Black edge banding (for laminate) */}
+      {(!materialId || materialId === 'hilo-top-lam' || materialId?.includes('lam')) && (
+        <>
+          <mesh position={[0, worktopY, depth / 2 + 0.002]}>
+            <boxGeometry args={[width, thickness, 0.004]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+          </mesh>
+          <mesh position={[0, worktopY, -depth / 2 - 0.002]}>
+            <boxGeometry args={[width, thickness, 0.004]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+          </mesh>
+          <mesh position={[width / 2 + 0.002, worktopY, 0]}>
+            <boxGeometry args={[0.004, thickness, depth]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+          </mesh>
+          <mesh position={[-width / 2 - 0.002, worktopY, 0]}>
+            <boxGeometry args={[0.004, thickness, depth]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+          </mesh>
+        </>
+      )}
+    </group>
+  );
+};
+
+// HiLo Above Bench Accessories (moves with top)
+// Full overhead system: uprights, pegboards, louvre panels, shelf, power outlets
+const HiLoAccessories = ({ 
+  width, 
+  depth, 
+  currentHeightM, 
+  aboveBenchId, 
+  colorHex 
+}: { 
+  width: number; 
+  depth: number; 
+  currentHeightM: number; 
+  aboveBenchId: string; 
+  colorHex: string; 
+}) => {
+  const accessoryY = currentHeightM + 0.035; // Just above worktop
+  const postHeight = 0.70; // Tall uprights like in the photo
+  const postWidth = 0.05;
+  const panelHeight = 0.45;
+  const panelWidth = (width - 0.15) / 2; // Two panels side by side
+  const materialProps = { color: colorHex, roughness: 0.35, metalness: 0.2 };
+  
+  if (!aboveBenchId || aboveBenchId === 'hilo-ab-none' || aboveBenchId === 'none' || aboveBenchId === 'ab-none') {
+    return null;
+  }
+  
+  const hasShelf = aboveBenchId.includes('shelf');
+  const hasPower = aboveBenchId.includes('power');
+  const hasMonitor = aboveBenchId.includes('monitor');
+  const hasFullSystem = hasShelf || hasPower; // Full overhead structure
+  
+  // Pegboard Panel with holes
+  const HiLoPegboard = ({ w, h }: { w: number; h: number }) => {
+    const holeSpacing = 0.025;
+    const holeSize = 0.006;
+    const cols = Math.floor((w - 0.04) / holeSpacing);
+    const rows = Math.floor((h - 0.04) / holeSpacing);
+    
+    return (
+      <group>
+        <mesh castShadow>
+          <boxGeometry args={[w, h, 0.015]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+        {/* Hole grid */}
+        {Array.from({ length: rows }).map((_, row) =>
+          Array.from({ length: cols }).map((_, col) => (
+            <mesh key={`${row}-${col}`} position={[
+              -w/2 + 0.025 + col * holeSpacing,
+              -h/2 + 0.025 + row * holeSpacing,
+              0.008
+            ]}>
+              <cylinderGeometry args={[holeSize/2, holeSize/2, 0.004, 8]} />
+              <meshStandardMaterial color="#1a1a1a" />
+            </mesh>
+          ))
+        )}
+      </group>
+    );
+  };
+  
+  // Louvre Panel with horizontal slots
+  const HiLoLouvre = ({ w, h }: { w: number; h: number }) => {
+    const slotCount = Math.floor(h / 0.045);
+    return (
+      <group>
+        <mesh castShadow>
+          <boxGeometry args={[w, h, 0.015]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+        {/* Horizontal slots */}
+        {Array.from({ length: slotCount }).map((_, i) => (
+          <mesh key={i} position={[0, -h/2 + 0.03 + i * 0.045, 0.008]}>
+            <boxGeometry args={[w - 0.03, 0.025, 0.012]} />
+            <meshStandardMaterial color={colorHex} roughness={0.3} metalness={0.3} />
+          </mesh>
+        ))}
+      </group>
+    );
+  };
+  
+  // Full-width power board with outlets
+  const PowerBoard = () => (
+    <group position={[0, 0.08, -depth / 2 + 0.06]}>
+      {/* Main rail */}
+      <mesh castShadow>
+        <boxGeometry args={[width - 0.1, 0.06, 0.03]} />
+        <meshStandardMaterial {...materialProps} />
+      </mesh>
+      {/* 4 White power outlets */}
+      {[-0.3, -0.1, 0.1, 0.3].map((x, i) => (
+        <group key={i} position={[x, 0, 0.02]}>
+          <mesh>
+            <boxGeometry args={[0.085, 0.045, 0.015]} />
+            <meshStandardMaterial color="#f5f5f5" roughness={0.6} />
+          </mesh>
+          {/* Outlet holes */}
+          <mesh position={[-0.015, 0, 0.008]}>
+            <boxGeometry args={[0.008, 0.018, 0.004]} />
+            <meshStandardMaterial color="#27272a" />
+          </mesh>
+          <mesh position={[0.015, 0, 0.008]}>
+            <boxGeometry args={[0.008, 0.018, 0.004]} />
+            <meshStandardMaterial color="#27272a" />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+  
+  // Tray shelf matching Mobile Tool Trolley design
+  // 3mm base, 95mm rear lip, 12mm front lip, wedge brackets with chamfered tip
+  const TrayShelf = ({ yPos, sloped = false }: { yPos: number; sloped?: boolean }) => {
+    const trayWidth = width - 0.12;  // Width between posts
+    const trayDepth = 0.22;          // 220mm depth  
+    const rearHeight = 0.095;        // 95mm rear lip
+    const frontLipHeight = 0.012;    // 12mm front lip
+    const baseThickness = 0.003;     // 3mm base plate
+    const bracketThickness = 0.003;  // 3mm sheet metal
+    const shelfZ = -depth / 2 + trayDepth / 2 + 0.05;
+    
+    // Wedge bracket (matching Mobile Tool Trolley exactly)
+    const WedgeBracket = ({ side }: { side: 'left' | 'right' }) => {
+      const tipCutoff = 0.012; // Chamfer at front tip (12mm)
+      const mirrorX = side === 'right' ? -1 : 1;
+      const xPos = side === 'left' ? -trayWidth/2 : trayWidth/2;
+      
+      const geometry = useMemo(() => {
+        const geo = new THREE.BufferGeometry();
+        const t = bracketThickness;
+        
+        // Wedge profile: back is tall (95mm), slopes to chamfered tip at front
+        const v0 = [0, rearHeight, 0];              // Top rear
+        const v1 = [0, 0, 0];                        // Bottom rear
+        const v2 = [0, 0, trayDepth - tipCutoff];   // Bottom front (before chamfer)
+        const v3 = [0, tipCutoff, trayDepth];       // Chamfer tip
+        
+        // Outer face vertices
+        const v4 = [t * mirrorX, rearHeight, 0];
+        const v5 = [t * mirrorX, 0, 0];
+        const v6 = [t * mirrorX, 0, trayDepth - tipCutoff];
+        const v7 = [t * mirrorX, tipCutoff, trayDepth];
+        
+        const positions = new Float32Array([
+          // Inner face
+          ...v0, ...v1, ...v2,  ...v0, ...v2, ...v3,
+          // Outer face (reversed)
+          ...v4, ...v6, ...v5,  ...v4, ...v7, ...v6,
+          // Bottom edge
+          ...v1, ...v5, ...v6,  ...v1, ...v6, ...v2,
+          // Rear edge
+          ...v0, ...v4, ...v5,  ...v0, ...v5, ...v1,
+          // Hypotenuse (sloped top)
+          ...v0, ...v3, ...v7,  ...v0, ...v7, ...v4,
+          // Chamfer edge
+          ...v2, ...v6, ...v7,  ...v2, ...v7, ...v3,
+        ]);
+        
+        geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geo.computeVertexNormals();
+        return geo;
+      }, [mirrorX]);
+      
+      return (
+        <mesh geometry={geometry} position={[xPos, 0, -trayDepth/2]} castShadow>
+          <meshStandardMaterial {...materialProps} side={THREE.DoubleSide} />
+        </mesh>
+      );
+    };
+    
+    return (
+      <group position={[0, yPos, shelfZ]} rotation={sloped ? [-0.05, 0, 0] : [0, 0, 0]}>
+        {/* Base plate (3mm) */}
+        <mesh castShadow>
+          <boxGeometry args={[trayWidth, baseThickness, trayDepth]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+        
+        {/* Rear lip (95mm) */}
+        <mesh position={[0, rearHeight/2, -trayDepth/2 + 0.003]} castShadow>
+          <boxGeometry args={[trayWidth, rearHeight, 0.006]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+        
+        {/* Front lip (12mm) */}
+        <mesh position={[0, frontLipHeight/2, trayDepth/2 - 0.003]} castShadow>
+          <boxGeometry args={[trayWidth, frontLipHeight, 0.006]} />
+          <meshStandardMaterial {...materialProps} />
+        </mesh>
+        
+        {/* Wedge brackets */}
+        <WedgeBracket side="left" />
+        <WedgeBracket side="right" />
+      </group>
+    );
+  };
+  
+  return (
+    <group position={[0, accessoryY, 0]}>
+      {/* Full overhead system */}
+      {hasFullSystem && (
+        <>
+          {/* Left upright post */}
+          <mesh position={[-width / 2 + 0.04, postHeight / 2, -depth / 2 + 0.04]} castShadow>
+            <boxGeometry args={[postWidth, postHeight, postWidth]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+          {/* Right upright post */}
+          <mesh position={[width / 2 - 0.04, postHeight / 2, -depth / 2 + 0.04]} castShadow>
+            <boxGeometry args={[postWidth, postHeight, postWidth]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+          {/* Top crossbar */}
+          <mesh position={[0, postHeight - 0.03, -depth / 2 + 0.04]} castShadow>
+            <boxGeometry args={[width - 0.06, 0.05, postWidth]} />
+            <meshStandardMaterial {...materialProps} />
+          </mesh>
+          
+          {/* Power board at bottom */}
+          {hasPower && <PowerBoard />}
+          
+          {/* Left panel: Pegboard */}
+          <group position={[-panelWidth/2 - 0.02, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
+            <HiLoPegboard w={panelWidth} h={panelHeight} />
+          </group>
+          
+          {/* Right panel: Louvre */}
+          <group position={[panelWidth/2 + 0.02, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
+            <HiLoLouvre w={panelWidth} h={panelHeight} />
+          </group>
+          
+          {/* Top sloped tray shelf */}
+          {hasShelf && <TrayShelf yPos={postHeight - 0.12} sloped={true} />}
+        </>
+      )}
+      
+      {/* Monitor arm mount (standalone option) */}
+      {hasMonitor && !hasFullSystem && (
+        <group position={[0, 0.02, -depth / 2 + 0.15]}>
+          <mesh castShadow>
+            <boxGeometry args={[0.08, 0.04, 0.08]} />
+            <meshStandardMaterial color="#27272a" roughness={0.5} />
+          </mesh>
+          <mesh position={[0, 0.2, 0]} castShadow>
+            <cylinderGeometry args={[0.015, 0.015, 0.35, 12]} />
+            <meshStandardMaterial color="#404040" metalness={0.6} roughness={0.3} />
+          </mesh>
+          <mesh position={[0, 0.38, 0.08]} castShadow>
+            <boxGeometry args={[0.03, 0.03, 0.2]} />
+            <meshStandardMaterial color="#404040" metalness={0.5} roughness={0.4} />
+          </mesh>
+        </group>
+      )}
+    </group>
+  );
+};
+
+// Main HiLo Workbench Group Component
+export const HiLoWorkbenchGroup = ({ 
+  config, 
+  product, 
+  frameColor,
+  hiloHeightM 
+}: { 
+  config: ConfigurationState; 
+  product: ProductDefinition;
+  frameColor: string;
+  hiloHeightM: number;
+}) => {
+  // Get dimensions from config
+  const sizeOption = product.groups.find(g => g.id === 'size')?.options.find(o => o.id === config.selections['size']);
+  const width = (sizeOption?.meta?.width || 1.5) as number;
+  const depth = (sizeOption?.meta?.depth || 0.75) as number;
+  
+  // Get lift model specs
+  const liftModelId = config.selections?.lift_model;
+  const liftGroup = product.groups.find(g => g.id === 'lift_model');
+  const liftOption = liftGroup?.options.find(o => o.id === liftModelId);
+  const minHeightM = ((liftOption?.meta?.minHeightMm || 610) as number) / 1000;
+  const maxHeightM = ((liftOption?.meta?.maxHeightMm || 1260) as number) / 1000;
+  
+  // Clamp height to valid range
+  const currentHeightM = Math.max(minHeightM, Math.min(maxHeightM, hiloHeightM));
+  
+  const worktopId = config.selections['worktop'];
+  const aboveBenchId = config.selections['above_bench'];
+  const liftModel = liftModelId?.includes('dl2') ? 'DL2' : 'DL6';
+  
+  return (
+    <group>
+      {/* Columns - foot plates on floor (Y=0), extending to top */}
+      <LiftColumnPair 
+        width={width} 
+        currentHeightM={currentHeightM}
+        colorHex={frameColor}
+        liftModel={liftModel}
+      />
+      
+      {/* Frame sits just under worktop */}
+      <HiLoUnderTopFrame 
+        width={width} 
+        depth={depth}
+        currentHeightM={currentHeightM} 
+        colorHex={frameColor}
+        liftModel={liftModel}
+      />
+      
+      {/* Worktop sits on frame */}
+      <HiLoWorktop 
+        width={width} 
+        depth={depth} 
+        currentHeightM={currentHeightM} 
+        materialId={worktopId} 
+      />
+      
+      {/* Accessories above worktop */}
+      <HiLoAccessories 
+        width={width} 
+        depth={depth} 
+        currentHeightM={currentHeightM} 
+        aboveBenchId={aboveBenchId} 
+        colorHex={frameColor} 
+      />
+    </group>
   );
 };
 
@@ -1841,6 +2533,7 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [antiTiltDemoIndex, setAntiTiltDemoIndex] = useState<number | null>(null); // Cycles through drawers one at a time
     const [cupboardDoorsOpen, setCupboardDoorsOpen] = useState(false); // Toggle for cupboard doors
+    const [hiloHeightM, setHiloHeightM] = useState(0.9); // HiLo workbench current height in meters
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const captureRef = useRef<(() => string | null) | null>(null);
@@ -1937,8 +2630,22 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const kitSelection = config.selections['hanging_kits'];
     const accSelection = config.selections['individual_accessories'];
 
-    const targetY = height / 2;
+    const isHiLo = product.id === 'prod-hilo-workbench';
+    const targetY = isHiLo ? hiloHeightM / 2 : height / 2;
     const isIndustrial = product.id === 'prod-workbench-industrial';
+    
+    // Reset HiLo height when lift model changes
+    useEffect(() => {
+      if (isHiLo) {
+        const liftId = config.selections?.lift_model;
+        const liftGroup = product.groups.find(g => g.id === 'lift_model');
+        const opt = liftGroup?.options.find(o => o.id === liftId);
+        const minH = ((opt?.meta?.minHeightMm || 730) as number) / 1000;
+        const maxH = ((opt?.meta?.maxHeightMm || 1230) as number) / 1000;
+        // Set to comfortable standing desk height (middle of range)
+        setHiloHeightM(minH + (maxH - minH) * 0.4);
+      }
+    }, [config.selections?.lift_model, isHiLo, product.groups]);
 
     return (
        <div ref={canvasContainerRef} className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
@@ -1958,6 +2665,8 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
                  <MobileToolCartGroup config={config} product={product} frameColor={frameColor} faciaColor={faciaColor} />
               ) : product.id === 'prod-storage-cupboard' ? (
                  <StorageCupboardGroup config={config} product={product} bodyColor={frameColor} doorColor={faciaColor} doorsOpen={cupboardDoorsOpen} />
+              ) : product.id === 'prod-hilo-workbench' ? (
+                 <HiLoWorkbenchGroup config={config} product={product} frameColor={frameColor} hiloHeightM={hiloHeightM} />
               ) : (
                  <Center bottom>
                     <group>
@@ -2012,6 +2721,35 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
                 >
                   {cupboardDoorsOpen ? '🚪 Close Doors' : '🚪 Open Doors'}
                 </button>
+              </>
+            )}
+            {product.id === 'prod-hilo-workbench' && (
+              <>
+                <div className="w-px bg-zinc-600 mx-1"></div>
+                <div className="flex items-center gap-2 px-2">
+                  <span className="text-[10px] text-zinc-400 whitespace-nowrap">Height:</span>
+                  <input
+                    type="range"
+                    min={(() => {
+                      const liftId = config.selections?.lift_model;
+                      const liftGroup = product.groups.find(g => g.id === 'lift_model');
+                      const opt = liftGroup?.options.find(o => o.id === liftId);
+                      return ((opt?.meta?.minHeightMm || 610) as number) / 1000;
+                    })()}
+                    max={(() => {
+                      const liftId = config.selections?.lift_model;
+                      const liftGroup = product.groups.find(g => g.id === 'lift_model');
+                      const opt = liftGroup?.options.find(o => o.id === liftId);
+                      return ((opt?.meta?.maxHeightMm || 1260) as number) / 1000;
+                    })()}
+                    step={0.01}
+                    value={hiloHeightM}
+                    onChange={(e) => setHiloHeightM(parseFloat(e.target.value))}
+                    className="w-24 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                    title="Adjust workbench height"
+                  />
+                  <span className="text-[10px] text-amber-400 font-mono w-12">{Math.round(hiloHeightM * 1000)}mm</span>
+                </div>
               </>
             )}
          </div>

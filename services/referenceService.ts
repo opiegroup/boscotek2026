@@ -5,6 +5,7 @@ import { generateWorkbenchHeavyRef } from './products/workbenchHeavy';
 import { generateWorkbenchIndustrialRef } from './products/workbenchIndustrial';
 import { generateMobileToolCartRef } from './products/mobileToolCart';
 import { generateStorageCupboardRef } from './products/storageCupboard';
+import { generateHiLoWorkbenchRef } from './products/hiloWorkbench';
 
 export const generateReferenceCode = (config: ConfigurationState, product: ProductDefinition): string => {
   switch (product.id) {
@@ -18,6 +19,8 @@ export const generateReferenceCode = (config: ConfigurationState, product: Produ
       return generateMobileToolCartRef(config, product);
     case 'prod-storage-cupboard':
       return generateStorageCupboardRef(config, product);
+    case 'prod-hilo-workbench':
+      return generateHiLoWorkbenchRef(config, product);
     default:
       return 'GEN-CONFIG';
   }

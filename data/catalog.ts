@@ -983,5 +983,86 @@ export const CATALOG: ProductDefinition[] = [
         options: COLORS 
       }
     ]
+  },
+  
+  // 6. HILO HEIGHT-ADJUSTABLE WORKBENCH
+  {
+    id: 'prod-hilo-workbench',
+    name: 'HiLo Workbench',
+    description: 'Motorised adjustable height workbench. Ergonomic design with heavy-duty capacity. Electric lift columns for effortless height adjustment.',
+    basePrice: 1800,
+    groups: [
+      {
+        id: 'lift_model',
+        label: 'Lift System Model',
+        type: 'radio',
+        step: 1,
+        description: 'Choose lift column system based on capacity and speed requirements',
+        options: [
+          { id: 'dl6', label: 'DL6 Model (240kg capacity)', value: 'DL6', code: 'DL6', priceDelta: 0, meta: { speed: 23, minHeightMm: 610, maxHeightMm: 1260, description: 'Faster lift speed (23mm/s), ideal for lighter loads' } },
+          { id: 'dl2', label: 'DL2 Model (300kg capacity)', value: 'DL2', code: 'DL2', priceDelta: 250, meta: { speed: 15, minHeightMm: 730, maxHeightMm: 1230, description: 'Higher load capacity (300kg), white column design' } },
+        ]
+      },
+      {
+        id: 'size',
+        label: 'Workbench Size',
+        type: 'radio',
+        step: 1,
+        description: 'All HiLo workbenches have 750mm depth',
+        options: [
+          { id: 'w-1500', label: '1500mm × 750mm', value: 1500, code: '1500', priceDelta: 0, meta: { width: 1.5, depth: 0.75 } },
+          { id: 'w-1800', label: '1800mm × 750mm', value: 1800, code: '1800', priceDelta: 150, meta: { width: 1.8, depth: 0.75 } },
+          { id: 'w-2100', label: '2100mm × 750mm', value: 2100, code: '2100', priceDelta: 300, meta: { width: 2.1, depth: 0.75 } },
+        ]
+      },
+      {
+        id: 'worktop',
+        label: 'Bench Top Material',
+        type: 'radio',
+        step: 2,
+        description: 'Select worktop material and finish',
+        options: [
+          { id: 'hilo-top-lam', label: 'Laminated Timber (35mm)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 35, description: '35mm grey laminated compressed timber with black edge banding. Durable and strong, resists acid, alkali and oil.' } },
+          { id: 'hilo-top-ss', label: 'Stainless Steel (1.2mm over 35mm timber)', value: 'ss', code: 'SS', priceDelta: 450, meta: { color: '#d4d4d8', thickness: 36.2, description: '1.2mm 2B/304 stainless steel top over 35mm compressed timber top.' } },
+          { id: 'hilo-top-mild', label: 'Mild Steel (2mm over 35mm timber)', value: 'mild', code: 'M2', priceDelta: 250, meta: { color: '#27272a', thickness: 37, description: '2mm mild steel top powder coated matt black over 35mm laminated compressed timber.' } },
+        ]
+      },
+      {
+        id: 'above_bench',
+        label: 'Above Bench Options',
+        type: 'select',
+        step: 3,
+        description: 'Add overhead storage and accessory systems',
+        options: [
+          { id: 'ab-none', label: 'None', value: 'none', code: '00', priceDelta: 0 },
+          { id: 'ab-shelf-peg-louvre', label: 'Full System: Shelf + Pegboard + Louvre', value: 'shelf-peg-louvre', code: 'SPL', priceDelta: 750, description: 'Includes uprights, 1x shelf, 1x pegboard, 1x louvre panel.' },
+          { id: 'ab-power-peg-louvre', label: 'Full System: Power Board + Pegboard + Louvre', value: 'power-peg-louvre', code: 'PPL', priceDelta: 850, description: 'Includes uprights, 1x power board, 1x pegboard, 1x louvre panel.' },
+          { id: 'ab-complete', label: 'Complete System (Shelf + Power + Panels)', value: 'complete', code: 'CMP', priceDelta: 1100, description: 'Includes uprights, 1x shelf, 1x power board, 1x pegboard, 1x louvre panel.' },
+          { id: 'ab-monitor-arm', label: 'Monitor Arm (Clamp Mount)', value: 'monitor-arm', code: 'MON', priceDelta: 180, description: 'Single monitor arm, clamps to worktop.' },
+        ]
+      },
+      {
+        id: 'additional_accessories',
+        label: 'Additional Accessories',
+        type: 'qty_list',
+        step: 4,
+        description: 'Add extra accessories',
+        options: [
+          { id: 'acc-monitor-clamp', label: 'Monitor Clamp Mount', value: 0, code: 'A-MCM', priceDelta: 50 },
+          { id: 'acc-keyboard-tray', label: 'Keyboard Tray (Under-mount)', value: 0, code: 'A-KBT', priceDelta: 75 },
+          { id: 'acc-cpu-holder', label: 'CPU Holder (Under-mount)', value: 0, code: 'A-CPU', priceDelta: 90 },
+          { id: 'acc-cable-kit', label: 'Cable Management Kit', value: 0, code: 'A-CMK', priceDelta: 40 },
+        ]
+      },
+      {
+        id: 'color',
+        label: 'Frame Colour',
+        type: 'color',
+        step: 5,
+        defaultValue: 'col-mg',
+        description: 'Select frame and accessory colour',
+        options: COLORS
+      }
+    ]
   }
 ];
