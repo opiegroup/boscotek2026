@@ -217,6 +217,9 @@ DATA;`;
   } else if (product.id === 'prod-storage-cupboard') {
     // Industrial Storage Cupboard geometry (shell + doors + shelves)
     bodyRepresentation = createStorageCupboardGeometry(dimensions, createEntity, geometricContext, configuration, product);
+  } else if (product.id === 'prod-hilo-workbench') {
+    // HiLo Height-Adjustable Workbench geometry - exported at MAXIMUM HEIGHT
+    bodyRepresentation = createHiLoWorkbenchGeometry(dimensions, createEntity, geometricContext, configuration, product);
   } else if (product.id.includes('workbench')) {
     // Workbench geometry (frame + worktop)
     const isIndustrial = product.id.includes('industrial');
@@ -1291,6 +1294,211 @@ function createWorkbenchGeometry(
 }
 
 /**
+ * Create HiLo Height-Adjustable Workbench geometry
+ * BIM model exported at MAXIMUM EXTENDED HEIGHT for clearance checking
+ * 
+ * GEOMETRY REQUIREMENTS:
+ * - Export at maximum height (DL6: 1260mm, DL2: 1230mm)
+ * - Lift columns with foot plates
+ * - Under-top frame
+ * - Worktop surface
+ * - Optional above-bench accessories (uprights, panels, shelf)
+ * 
+ * Components:
+ * 1. Foot plates (static on floor)
+ * 2. Outer lift columns
+ * 3. Inner telescoping columns (extended)
+ * 4. Under-top frame rails
+ * 5. Worktop surface
+ * 6. Above-bench system (if configured)
+ */
+function createHiLoWorkbenchGeometry(
+  dimensions: any,
+  createEntity: Function,
+  contextId: number,
+  configuration?: any,
+  product?: any
+): number {
+  const E = (value: string) => ({ __ifcEnum: value });
+  
+  // ========================================
+  // CONFIGURATION EXTRACTION
+  // ========================================
+  const liftModelGroup = product?.groups?.find((g: any) => g.id === 'lift_model');
+  const selectedLiftId = configuration?.selections?.['lift_model'];
+  const liftOption = liftModelGroup?.options?.find((o: any) => o.id === selectedLiftId);
+  
+  const sizeGroup = product?.groups?.find((g: any) => g.id === 'size');
+  const selectedSizeId = configuration?.selections?.['size'];
+  const sizeOption = sizeGroup?.options?.find((o: any) => o.id === selectedSizeId);
+  
+  const aboveBenchId = configuration?.selections?.['above_bench'];
+  
+  // Determine lift model type (DL2 vs DL6)
+  const isDL2 = selectedLiftId?.includes('dl2');
+  
+  // Get max height for BIM export (fully extended position)
+  const maxHeightMm = liftOption?.meta?.maxHeightMm || (isDL2 ? 1230 : 1260);
+  const currentHeightM = maxHeightMm / 1000; // Export at MAX height
+  
+  // Dimensions from configuration
+  const width = sizeOption?.meta?.width || 1.5;
+  const depth = sizeOption?.meta?.depth || 0.75;
+  
+  console.log('Creating HiLo Workbench geometry (BIM-ready at MAX height):', {
+    liftModel: isDL2 ? 'DL2' : 'DL6',
+    width: `${(width * 1000).toFixed(0)}mm`,
+    depth: `${(depth * 1000).toFixed(0)}mm`,
+    height: `${maxHeightMm}mm (MAX)`,
+    aboveBench: aboveBenchId
+  });
+  
+  // ========================================
+  // FIXED DIMENSIONS (matching Viewer3D.tsx)
+  // ========================================
+  const footPlateHeight = 0.025;
+  const footPlateWidth = isDL2 ? 0.16 : 0.12;
+  const footPlateDepth = isDL2 ? 0.55 : 0.45;
+  const outerColumnWidth = isDL2 ? 0.12 : 0.08;
+  const outerColumnDepth = isDL2 ? 0.12 : 0.08;
+  const outerColumnHeight = isDL2 ? 0.45 : 0.40;
+  const innerColumnScale = isDL2 ? 0.75 : 0.65;
+  const columnX = width / 2 - 0.18;
+  const worktopThickness = 0.035;
+  const frameHeight = isDL2 ? 0.05 : 0.04;
+  const frameThickness = isDL2 ? 0.06 : 0.05;
+  
+  const solids: number[] = [];
+  const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  
+  // Helper function to create a vertical extrusion (box) at specified position
+  const createBox = (centerX: number, centerY: number, baseZ: number, boxWidth: number, boxDepth: number, boxHeight: number): number => {
+    const origin = createEntity('IFCCARTESIANPOINT', [centerX, centerY, baseZ]);
+    const zDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+    const xDir = createEntity('IFCDIRECTION', [1., 0., 0.]);
+    const position = createEntity('IFCAXIS2PLACEMENT3D', origin, zDir, xDir);
+    
+    const profileOrigin = createEntity('IFCCARTESIANPOINT', [0., 0.]);
+    const profileXDir = createEntity('IFCDIRECTION', [1., 0.]);
+    const profilePosition = createEntity('IFCAXIS2PLACEMENT2D', profileOrigin, profileXDir);
+    const profile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profilePosition, boxWidth, boxDepth);
+    
+    return createEntity('IFCEXTRUDEDAREASOLID', profile, position, extrusionDir, boxHeight);
+  };
+  
+  // ========================================
+  // 1. FOOT PLATES (on floor, Y=0)
+  // ========================================
+  [-columnX, columnX].forEach(x => {
+    solids.push(createBox(x, 0, 0, footPlateWidth, footPlateDepth, footPlateHeight));
+  });
+  
+  // ========================================
+  // 2. OUTER COLUMNS (fixed, above foot plates)
+  // ========================================
+  [-columnX, columnX].forEach(x => {
+    solids.push(createBox(x, 0, footPlateHeight, outerColumnWidth, outerColumnDepth, outerColumnHeight));
+  });
+  
+  // ========================================
+  // 3. INNER COLUMNS (telescoping, fully extended)
+  // ========================================
+  const outerColumnTopZ = footPlateHeight + outerColumnHeight;
+  const topMountZ = currentHeightM - 0.02;
+  const innerColumnLength = Math.max(0.05, topMountZ - outerColumnTopZ);
+  const innerColumnWidth = outerColumnWidth * innerColumnScale;
+  const innerColumnDepth = outerColumnDepth * innerColumnScale;
+  
+  [-columnX, columnX].forEach(x => {
+    solids.push(createBox(x, 0, outerColumnTopZ, innerColumnWidth, innerColumnDepth, innerColumnLength));
+  });
+  
+  // ========================================
+  // 4. TOP MOUNT BRACKETS
+  // ========================================
+  const topMountWidth = isDL2 ? 0.14 : 0.10;
+  const topMountDepth = isDL2 ? 0.14 : 0.12;
+  [-columnX, columnX].forEach(x => {
+    solids.push(createBox(x, 0, topMountZ, topMountWidth, topMountDepth, 0.04));
+  });
+  
+  // ========================================
+  // 5. UNDER-TOP FRAME
+  // ========================================
+  const frameZ = currentHeightM - frameHeight;
+  
+  // Front and rear rails
+  solids.push(createBox(0, depth/2 - frameThickness/2, frameZ, width - 0.06, frameThickness, frameHeight));
+  solids.push(createBox(0, -depth/2 + frameThickness/2, frameZ, width - 0.06, frameThickness, frameHeight));
+  
+  // Side rails at column positions
+  solids.push(createBox(-columnX, 0, frameZ, frameThickness, depth - frameThickness * 2, frameHeight));
+  solids.push(createBox(columnX, 0, frameZ, frameThickness, depth - frameThickness * 2, frameHeight));
+  
+  // Center cross brace
+  solids.push(createBox(0, 0, frameZ, width - 0.36, frameHeight * 0.8, frameThickness * 0.7));
+  
+  // ========================================
+  // 6. WORKTOP
+  // ========================================
+  const worktopZ = currentHeightM;
+  solids.push(createBox(0, 0, worktopZ, width, depth, worktopThickness));
+  
+  // ========================================
+  // 7. ABOVE-BENCH ACCESSORIES (if configured)
+  // ========================================
+  const hasAboveBench = aboveBenchId && aboveBenchId !== 'ab-none' && aboveBenchId !== 'none';
+  const hasFullSystem = hasAboveBench && (aboveBenchId.includes('shelf') || aboveBenchId.includes('power'));
+  
+  if (hasFullSystem) {
+    const accessoryBaseZ = currentHeightM + worktopThickness;
+    const postHeight = 0.70;
+    const postWidth = 0.05;
+    const panelHeight = 0.45;
+    const panelWidth = (width - 0.15) / 2;
+    
+    // Left upright post
+    solids.push(createBox(-width/2 + 0.04, -depth/2 + 0.04, accessoryBaseZ, postWidth, postWidth, postHeight));
+    // Right upright post
+    solids.push(createBox(width/2 - 0.04, -depth/2 + 0.04, accessoryBaseZ, postWidth, postWidth, postHeight));
+    // Top crossbar
+    solids.push(createBox(0, -depth/2 + 0.04, accessoryBaseZ + postHeight - 0.03, width - 0.06, postWidth, 0.05));
+    
+    // Pegboard panel (left)
+    solids.push(createBox(-panelWidth/2 - 0.001, -depth/2 + 0.06, accessoryBaseZ + 0.15 + panelHeight/2, panelWidth, 0.015, panelHeight));
+    // Louvre panel (right)
+    solids.push(createBox(panelWidth/2 + 0.001, -depth/2 + 0.06, accessoryBaseZ + 0.15 + panelHeight/2, panelWidth, 0.015, panelHeight));
+    
+    // Top shelf (if included)
+    if (aboveBenchId.includes('shelf') || aboveBenchId.includes('complete')) {
+      const shelfZ = accessoryBaseZ + postHeight - 0.095;
+      const shelfWidth = width - 0.12;
+      const shelfDepth = 0.22;
+      // Shelf base
+      solids.push(createBox(0, -depth/2 + shelfDepth/2 + 0.05, shelfZ, shelfWidth, shelfDepth, 0.003));
+      // Shelf rear lip
+      solids.push(createBox(0, -depth/2 + 0.05 + 0.003, shelfZ + 0.095/2, shelfWidth, 0.006, 0.095));
+    }
+    
+    // Power board (if included)
+    if (aboveBenchId.includes('power') || aboveBenchId.includes('complete')) {
+      solids.push(createBox(0, -depth/2 + 0.06, accessoryBaseZ + 0.08, width - 0.1, 0.03, 0.06));
+    }
+  }
+  
+  // ========================================
+  // 8. CONTROL BOX (on right column)
+  // ========================================
+  solids.push(createBox(columnX + (isDL2 ? 0.08 : 0.06), 0, 0.17, 0.04, 0.03, 0.10));
+  
+  // Create composite shape from all solids
+  const shapeRepItems: number[] = solids;
+  
+  const shapeRep = createEntity('IFCSHAPEREPRESENTATION', contextId, 'Body', 'SweptSolid', shapeRepItems);
+  return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRep]);
+}
+
+/**
  * Create Mobile Tool Cart geometry with all components
  * BIM-ready IFC export matching Viewer3D.tsx MobileToolCartGroup exactly
  * 
@@ -1708,6 +1916,7 @@ function addPropertySets(
   ownerHistoryId: number
 ): void {
   const properties: number[] = [];
+  const isHiLoWorkbench = product.id === 'prod-hilo-workbench';
   const isWorkbench = product.id.includes('workbench');
   const isMobileToolCart = product.id === 'prod-mobile-tool-cart';
   const isStorageCupboard = product.id === 'prod-storage-cupboard';
@@ -1720,7 +1929,7 @@ function addPropertySets(
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Manufacturer', null, createEntity('IFCLABEL', 'Boscotek'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'OwnerOrganisation', null, createEntity('IFCLABEL', 'Opie Manufacturing Group'), null));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AustralianMade', null, createEntity('IFCBOOLEAN', '.T.'), null));
-  const productType = isMobileToolCart ? 'Mobile Tool Cart' : (isStorageCupboard ? 'Storage Cupboard' : (isWorkbench ? 'Workbench' : 'Cabinet'));
+  const productType = isHiLoWorkbench ? 'HiLo Height-Adjustable Workbench' : (isMobileToolCart ? 'Mobile Tool Cart' : (isStorageCupboard ? 'Storage Cupboard' : (isWorkbench ? 'Workbench' : 'Cabinet')));
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductType', null, createEntity('IFCLABEL', productType), null));
   
   // ==========================================================
@@ -1730,7 +1939,23 @@ function addPropertySets(
   let depthMm: number;
   let heightMm: number;
   
-  if (isMobileToolCart) {
+  if (isHiLoWorkbench) {
+    // HiLo Workbench - dimensions from configuration, height at MAX EXTENDED
+    const sizeGroup = product.groups?.find((g: any) => g.id === 'size');
+    const selectedSizeId = configuration.selections?.size;
+    const sizeOption = sizeGroup?.options?.find((o: any) => o.id === selectedSizeId);
+    
+    const liftModelGroup = product.groups?.find((g: any) => g.id === 'lift_model');
+    const selectedLiftId = configuration.selections?.lift_model;
+    const liftOption = liftModelGroup?.options?.find((o: any) => o.id === selectedLiftId);
+    const isDL2 = selectedLiftId?.includes('dl2');
+    
+    widthMm = (sizeOption?.meta?.width || 1.5) * 1000;
+    depthMm = 750;  // Fixed depth for HiLo
+    // Export at MAX HEIGHT for BIM clearance checking
+    heightMm = liftOption?.meta?.maxHeightMm || (isDL2 ? 1230 : 1260);
+    
+  } else if (isMobileToolCart) {
     // Mobile Tool Cart fixed dimensions as per Boscotek TCS catalogue specification
     widthMm = 1130;  // Fixed width as per catalogue
     depthMm = 560;   // Fixed depth
@@ -1788,7 +2013,48 @@ function addPropertySets(
   // ==========================================================
   // Product-specific properties
   // ==========================================================
-  if (isMobileToolCart) {
+  if (isHiLoWorkbench) {
+    // --- HILO WORKBENCH PROPERTIES (Height-Adjustable BIM Metadata) ---
+    
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'ProductRange', null, createEntity('IFCLABEL', 'HiLo Height-Adjustable Workbench'), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'Brand', null, createEntity('IFCLABEL', 'Boscotek'), null));
+    
+    // Lift model details
+    const liftModelGroup = product.groups?.find((g: any) => g.id === 'lift_model');
+    const selectedLiftId = configuration.selections?.lift_model;
+    const liftOption = liftModelGroup?.options?.find((o: any) => o.id === selectedLiftId);
+    const isDL2 = selectedLiftId?.includes('dl2');
+    
+    const liftModel = isDL2 ? 'DL2' : 'DL6';
+    const liftCapacity = isDL2 ? 300 : 240;
+    const liftSpeed = isDL2 ? 15 : 23;
+    const minHeightMm = liftOption?.meta?.minHeightMm || (isDL2 ? 730 : 610);
+    const maxHeightMm = liftOption?.meta?.maxHeightMm || (isDL2 ? 1230 : 1260);
+    
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LiftModel', null, createEntity('IFCLABEL', liftModel), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LiftCapacityKg', null, createEntity('IFCMASSMEASURE', liftCapacity), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'LiftSpeedMmPerSec', null, createEntity('IFCREAL', liftSpeed), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MinHeightMm', null, createEntity('IFCLENGTHMEASURE', minHeightMm), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'MaxHeightMm', null, createEntity('IFCLENGTHMEASURE', maxHeightMm), null));
+    properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'BIMExportHeight', null, createEntity('IFCLABEL', 'Maximum Extended'), null));
+    
+    // Worktop material
+    const worktopId = configuration.selections?.worktop;
+    const worktopGroup = product.groups?.find((g: any) => g.id === 'worktop');
+    const worktopOption = worktopGroup?.options?.find((o: any) => o.id === worktopId);
+    if (worktopOption) {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'WorktopMaterial', null, createEntity('IFCLABEL', worktopOption.label || 'Laminated Timber'), null));
+    }
+    
+    // Above bench accessories
+    const aboveBenchId = configuration.selections?.above_bench;
+    const aboveBenchGroup = product.groups?.find((g: any) => g.id === 'above_bench');
+    const aboveBenchOption = aboveBenchGroup?.options?.find((o: any) => o.id === aboveBenchId);
+    if (aboveBenchOption && aboveBenchId !== 'ab-none' && aboveBenchId !== 'none') {
+      properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'AboveBenchSystem', null, createEntity('IFCLABEL', aboveBenchOption.label), null));
+    }
+    
+  } else if (isMobileToolCart) {
     // --- MOBILE TOOL CART PROPERTIES (Comprehensive BIM Metadata) ---
     
     // Product range identification
@@ -2151,7 +2417,8 @@ function addPropertySets(
     'prod-workbench-heavy': 'https://www.boscotek.com.au/products/heavy-duty-workbenches',
     'prod-workbench-industrial': 'https://www.boscotek.com.au/products/industrial-workbenches',
     'prod-mobile-tool-cart': 'https://www.boscotek.com.au/products/mobile-tool-cart-stations',
-    'prod-storage-cupboard': 'https://www.boscotek.com.au/products/industrial-storage-cupboards'
+    'prod-storage-cupboard': 'https://www.boscotek.com.au/products/industrial-storage-cupboards',
+    'prod-hilo-workbench': 'https://www.boscotek.com.au/products/hilo-workbenches'
   };
   const productUrl = productUrls[product.id] || 'https://www.boscotek.com.au';
   properties.push(createEntity('IFCPROPERTYSINGLEVALUE', 'URLProductPage', null, createEntity('IFCTEXT', productUrl), null));
@@ -2163,10 +2430,12 @@ function addPropertySets(
   // ==========================================================
   // Create property set with appropriate name
   // ==========================================================
-  const psetName = isMobileToolCart ? 'Pset_BoscotekMobileToolCart' : 
+  const psetName = isHiLoWorkbench ? 'Pset_BoscotekHiLoWorkbench' :
+                   isMobileToolCart ? 'Pset_BoscotekMobileToolCart' : 
                    isStorageCupboard ? 'Pset_BoscotekStorageCupboard' :
                    isWorkbench ? 'Pset_BoscotekWorkbench' : 'Pset_BoscotekCabinet';
-  const psetDescription = isMobileToolCart ? 'Boscotek mobile tool cart configuration properties' :
+  const psetDescription = isHiLoWorkbench ? 'Boscotek HiLo height-adjustable workbench configuration properties' :
+                          isMobileToolCart ? 'Boscotek mobile tool cart configuration properties' :
                           isStorageCupboard ? 'Boscotek industrial storage cupboard configuration properties' :
                           isWorkbench ? 'Boscotek workbench configuration properties' : 'Boscotek cabinet configuration properties';
   const pset = createEntity('IFCPROPERTYSET', psetName, ownerHistoryId, psetDescription, null, properties);

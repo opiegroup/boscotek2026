@@ -2381,13 +2381,13 @@ const HiLoAccessories = ({
           {/* Power board at bottom */}
           {hasPower && <PowerBoard />}
           
-          {/* Left panel: Pegboard */}
-          <group position={[-panelWidth/2 - 0.02, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
+          {/* Left panel: Pegboard - 1mm from center (2mm gap total) */}
+          <group position={[-panelWidth/2 - 0.001, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
             <HiLoPegboard w={panelWidth} h={panelHeight} />
           </group>
           
-          {/* Right panel: Louvre */}
-          <group position={[panelWidth/2 + 0.02, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
+          {/* Right panel: Louvre - 1mm from center (2mm gap total) */}
+          <group position={[panelWidth/2 + 0.001, panelHeight/2 + 0.15, -depth / 2 + 0.06]}>
             <HiLoLouvre w={panelWidth} h={panelHeight} />
           </group>
           
