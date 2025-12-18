@@ -1,10 +1,14 @@
-
 import React, { useState, useEffect } from 'react';
 import { useCatalog } from '../../contexts/CatalogContext';
+import { useAuth } from '../../contexts/AuthContext';
 import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
 import { ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
 import BoscotekLogo from '../BoscotekLogo';
 import BIMLeadsManager from './BIMLeadsManager';
+import UserManagement from './UserManagement';
+import DistributorManagement from './DistributorManagement';
+import PricingTierManagement from './PricingTierManagement';
+import CurrencyManagement from './CurrencyManagement';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -24,7 +28,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [quotes, setQuotes] = useState<Quote[]>([]);
 
   // View State: 0: Dashboard, 1: Pricing/Options, 6: Quotes, 7: BIM Leads, 8: Email Settings
-  const [activeStep, setActiveStep] = useState<number>(0); 
+  // New: 9: Users, 10: Distributors, 11: Pricing Tiers
+  const [activeStep, setActiveStep] = useState<number>(0);
+  
+  // Get auth context for role checks
+  const { isAdmin, canManagePricing } = useAuth(); 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   
   // Email Settings State
@@ -185,12 +193,35 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           <BoscotekLogo className="h-6" showText={true} />
           <div className="text-xs font-mono text-zinc-500 bg-zinc-950 px-2 py-1 rounded">ADMIN ACCESS</div>
         </div>
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <button onClick={() => setActiveStep(0)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 0 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Dashboard</button>
+          
+          {/* Sales Section */}
+          <div className="pt-4 pb-2">
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider px-3">Sales</div>
+          </div>
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
           <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads</button>
-          <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Pricing & Options</button>
-          <button onClick={() => setActiveStep(8)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 8 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>📧 Email Settings</button>
+          <button onClick={() => setActiveStep(10)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 10 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>👥 Distributors</button>
+          
+          {/* Catalogue Section */}
+          <div className="pt-4 pb-2">
+            <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider px-3">Catalogue</div>
+          </div>
+          <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Products & Options</button>
+          <button onClick={() => setActiveStep(11)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 11 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>💰 Pricing Tiers</button>
+          <button onClick={() => setActiveStep(12)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 12 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>💱 Currencies</button>
+          
+          {/* Admin Section - Only show for admins */}
+          {isAdmin && (
+            <>
+              <div className="pt-4 pb-2">
+                <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider px-3">Admin</div>
+              </div>
+              <button onClick={() => setActiveStep(9)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 9 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>🔐 Users & Roles</button>
+              <button onClick={() => setActiveStep(8)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 8 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>📧 Email Settings</button>
+            </>
+          )}
         </nav>
         <div className="p-4 border-t border-zinc-800 space-y-2">
            <button onClick={handleLogout} className="w-full text-xs text-zinc-500 hover:text-white text-left p-2">Sign Out</button>
@@ -542,6 +573,26 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         {/* BIM LEADS */}
         {activeStep === 7 && (
           <BIMLeadsManager />
+        )}
+
+        {/* USER MANAGEMENT */}
+        {activeStep === 9 && isAdmin && (
+          <UserManagement />
+        )}
+
+        {/* DISTRIBUTOR MANAGEMENT */}
+        {activeStep === 10 && (
+          <DistributorManagement />
+        )}
+
+        {/* PRICING TIERS */}
+        {activeStep === 11 && (
+          <PricingTierManagement />
+        )}
+
+        {/* CURRENCIES */}
+        {activeStep === 12 && (
+          <CurrencyManagement />
         )}
 
         {/* EMAIL SETTINGS */}

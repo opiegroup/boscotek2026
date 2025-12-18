@@ -49,6 +49,7 @@ interface PricingRequest {
   selections: Record<string, unknown>;
   customDrawers: DrawerConfiguration[];
   embeddedCabinets?: EmbeddedCabinet[];
+  currency?: string; // ISO code: AUD, USD, EUR, etc.
 }
 
 interface LineItem {
@@ -62,21 +63,35 @@ interface PricingResponse {
   basePrice: number;
   gst: number;
   currency: string;
+  currencySymbol: string;
+  exchangeRate: number;
   breakdown: LineItem[];
-  // Staff-only fields
-  retailPrice?: number;
-  cost?: number;
-  margin?: number;
-  discountApplied?: number;
+  // Original AUD values (for reference)
+  totalPriceAUD?: number;
+  // Tier info (for logged-in users)
   tierName?: string;
+  tierCode?: string;
+  markupPercent?: number;
+  // Staff-only fields
+  retailPrice?: number;  // Public price (Cash Sale)
+  cost?: number;         // Wholesale price (base)
+  margin?: number;       // Markup amount
+}
+
+interface CurrencyInfo {
+  code: string;
+  symbol: string;
+  exchange_rate: number;
+  decimal_places: number;
 }
 
 interface UserContext {
   userId: string | null;
   role: UserRole;
-  isDistributor: boolean;
-  discountPercentage: number;
+  hasCustomTier: boolean;  // True if user has a specific pricing tier assigned
+  markupPercentage: number; // The markup % to apply (0 = wholesale, 25 = public/cash)
   tierName: string | null;
+  tierCode: string | null;
 }
 
 // Helper to resolve partition code with drawer height
@@ -96,13 +111,17 @@ const resolveAccessoryCode = (codeBase: string, drawerHeight: number): string =>
 };
 
 // Get user context from auth token
-async function getUserContext(authHeader: string | null): Promise<UserContext> {
+async function getUserContext(authHeader: string | null, supabaseClient: any): Promise<UserContext> {
+  // Default context for public users = Cash Sale markup (25%)
+  const PUBLIC_MARKUP = 25;
+  
   const defaultContext: UserContext = {
     userId: null,
     role: null,
-    isDistributor: false,
-    discountPercentage: 0,
-    tierName: null,
+    hasCustomTier: false,
+    markupPercentage: PUBLIC_MARKUP, // Public sees Cash Sale price
+    tierName: 'Cash Sale',
+    tierCode: 'CASH',
   };
 
   if (!authHeader) {
@@ -111,14 +130,14 @@ async function getUserContext(authHeader: string | null): Promise<UserContext> {
 
   try {
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error } = await supabase.auth.getUser(token);
+    const { data: { user }, error } = await supabaseClient.auth.getUser(token);
 
     if (error || !user) {
       return defaultContext;
     }
 
     // Get user role
-    const { data: roleData } = await supabase
+    const { data: roleData } = await supabaseClient
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
@@ -127,40 +146,42 @@ async function getUserContext(authHeader: string | null): Promise<UserContext> {
 
     const role = roleData?.[0]?.role as UserRole || null;
 
-    // Check if distributor and get their pricing tier
-    if (role === 'distributor') {
-      const { data: distData } = await supabase
-        .from('distributors')
-        .select(`
-          pricing_tier_id,
-          pricing_tiers (
-            discount_percentage,
-            name
-          )
-        `)
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .eq('is_approved', true)
-        .single();
+    // Check if user has a distributor account with a pricing tier
+    const { data: distData } = await supabaseClient
+      .from('distributors')
+      .select(`
+        pricing_tier_id,
+        pricing_tiers (
+          markup_percentage,
+          name,
+          code
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .eq('is_approved', true)
+      .single();
 
-      if (distData?.pricing_tiers) {
-        const tier = distData.pricing_tiers as { discount_percentage: number; name: string };
-        return {
-          userId: user.id,
-          role,
-          isDistributor: true,
-          discountPercentage: tier.discount_percentage || 0,
-          tierName: tier.name,
-        };
-      }
+    if (distData?.pricing_tiers) {
+      const tier = distData.pricing_tiers as { markup_percentage: number; name: string; code: string };
+      return {
+        userId: user.id,
+        role,
+        hasCustomTier: true,
+        markupPercentage: tier.markup_percentage || 0,
+        tierName: tier.name,
+        tierCode: tier.code,
+      };
     }
 
+    // User is logged in but no custom tier - still sees public price
     return {
       userId: user.id,
       role,
-      isDistributor: false,
-      discountPercentage: 0,
-      tierName: null,
+      hasCustomTier: false,
+      markupPercentage: PUBLIC_MARKUP,
+      tierName: 'Cash Sale',
+      tierCode: 'CASH',
     };
   } catch (err) {
     console.error('Error getting user context:', err);
@@ -474,7 +495,7 @@ export const handler = async (req: Request): Promise<Response> => {
   try {
     // Get user context
     const authHeader = req.headers.get('Authorization');
-    const userContext = await getUserContext(authHeader);
+    const userContext = await getUserContext(authHeader, supabase);
 
     // Parse request
     const body: PricingRequest = await req.json();
@@ -486,63 +507,98 @@ export const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Fetch catalog data
-    const [productsRes, interiorsRes] = await Promise.all([
+    // Fetch catalog data and currency info
+    const [productsRes, interiorsRes, currencyRes] = await Promise.all([
       supabase.from('products').select('*'),
       supabase.from('drawer_interiors').select('*'),
+      supabase.from('currencies').select('*').eq('is_active', true),
     ]);
 
     const products = productsRes.data?.map((row: any) => row.data) || [];
     const interiors = interiorsRes.data?.map((row: any) => row.data) || [];
+    const currencies = currencyRes.data || [];
+
+    // Determine target currency (default to AUD)
+    const requestedCurrency = body.currency || 'AUD';
+    const currencyInfo: CurrencyInfo = currencies.find((c: any) => c.code === requestedCurrency) || {
+      code: 'AUD',
+      symbol: '$',
+      exchange_rate: 1,
+      decimal_places: 2,
+    };
     
     // TODO: Fetch accessories from DB when table exists
     // For now, return empty array - accessories priced at 0 if not in DB
     const accessories: any[] = [];
 
-    // Calculate base pricing
+    // Calculate base pricing (this is WHOLESALE price)
     const pricing = await calculatePricing(body, products, interiors, accessories);
-    const retailPrice = pricing.totalPrice;
-    const gst = retailPrice * 0.1;
+    const wholesalePrice = pricing.totalPrice;
+    
+    // Apply markup based on user's tier
+    // Wholesale (0%) = base price, Cash Sale (25%) = public price
+    const markupMultiplier = 1 + (userContext.markupPercentage / 100);
+    const markedUpPrice = wholesalePrice * markupMultiplier;
+    
+    // GST is calculated on the marked-up price
+    const gst = markedUpPrice * 0.1;
 
-    // Apply distributor discount if applicable
-    let finalPrice = retailPrice;
-    let appliedDiscount = 0;
+    // For staff view: show wholesale as "cost" and markup as margin
+    const publicPrice = wholesalePrice * 1.25; // Cash Sale price (25% markup)
+    const margin = markedUpPrice - wholesalePrice;
 
-    if (userContext.isDistributor && userContext.discountPercentage > 0) {
-      appliedDiscount = retailPrice * (userContext.discountPercentage / 100);
-      finalPrice = retailPrice - appliedDiscount;
-    }
+    // The price to show is the marked-up price for this user's tier
+    const priceToShowAUD = markedUpPrice;
+    const gstToShowAUD = gst;
 
-    // Calculate GST on final price
-    const finalGst = finalPrice * 0.1;
+    // Convert to requested currency
+    const convertPrice = (audAmount: number): number => {
+      if (currencyInfo.code === 'AUD') return audAmount;
+      return Math.round(audAmount * currencyInfo.exchange_rate * 100) / 100;
+    };
 
-    // Estimated cost (for staff view) - example: 60% of retail
-    const estimatedCost = retailPrice * 0.6;
-    const margin = retailPrice - estimatedCost;
+    // Apply markup to breakdown items, then convert currency
+    const markedUpBreakdown = pricing.breakdown.map(item => ({
+      ...item,
+      price: item.price * markupMultiplier, // Apply markup to each line item
+    }));
+
+    // Convert breakdown items to target currency
+    const convertedBreakdown = markedUpBreakdown.map(item => ({
+      ...item,
+      price: convertPrice(item.price),
+    }));
 
     // Build response based on role
     const response: PricingResponse = {
-      // Distributors see discounted price as their price
-      // Public sees retail price
-      totalPrice: userContext.isDistributor ? finalPrice : retailPrice,
-      basePrice: pricing.basePrice,
-      gst: userContext.isDistributor ? finalGst : gst,
-      currency: 'AUD',
-      breakdown: pricing.breakdown,
+      totalPrice: convertPrice(priceToShowAUD),
+      basePrice: convertPrice(pricing.basePrice),
+      gst: convertPrice(gstToShowAUD),
+      currency: currencyInfo.code,
+      currencySymbol: currencyInfo.symbol,
+      exchangeRate: currencyInfo.exchange_rate,
+      breakdown: convertedBreakdown,
     };
+
+    // Include original AUD values if currency is different
+    if (currencyInfo.code !== 'AUD') {
+      response.totalPriceAUD = priceToShowAUD;
+    }
 
     // Add staff-only fields
     const isStaff = ['admin', 'sales', 'pricing_manager'].includes(userContext.role || '');
     
     if (isStaff) {
-      response.retailPrice = retailPrice;
-      response.cost = estimatedCost;
-      response.margin = margin;
-      
-      if (userContext.isDistributor || appliedDiscount > 0) {
-        response.discountApplied = appliedDiscount;
-        response.tierName = userContext.tierName;
-      }
+      response.retailPrice = convertPrice(publicPrice); // Cash Sale price (public)
+      response.cost = convertPrice(wholesalePrice); // Wholesale price (base cost)
+      response.margin = convertPrice(margin); // Markup amount
+    }
+
+    // Always include tier info for logged-in users
+    if (userContext.userId) {
+      (response as any).tierName = userContext.tierName;
+      (response as any).tierCode = userContext.tierCode;
+      (response as any).markupPercent = userContext.markupPercentage;
     }
 
     // Log the pricing request (non-blocking)
