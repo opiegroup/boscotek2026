@@ -212,13 +212,23 @@ export interface FrameColorOption {
 
 // --- ADMIN & BACKEND TYPES ---
 
-export type UserRole = 'admin' | 'viewer';
+export type UserRole = 'admin' | 'pricing_manager' | 'sales' | 'distributor' | 'viewer';
 
 export interface User {
   id: string;
   email: string;
   role: UserRole;
   name: string;
+}
+
+// Extended user with distributor info
+export interface ExtendedUser extends User {
+  isDistributor: boolean;
+  distributorInfo?: {
+    companyName: string;
+    accountNumber: string;
+    tierName: string | null;
+  };
 }
 
 export interface ImportSource {

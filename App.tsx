@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet } from './types';
 import ConfiguratorControls from './components/ConfiguratorControls';
@@ -9,12 +8,14 @@ import { getQuote } from './services/pricingService';
 import { submitQuote } from './services/mockBackend'; // Direct call for simplicity in this demo structure
 import { generateReferenceCode } from './services/referenceService';
 import { CatalogProvider, useCatalog } from './contexts/CatalogContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import AdminDashboard from './components/admin/AdminDashboard';
 import BoscotekLogo from './components/BoscotekLogo';
 
 // Internal App Content (Needs Access to Context)
 const BoscotekApp: React.FC = () => {
   const { products, isLoading } = useCatalog();
+  const { user, isAuthenticated, isAdmin, isStaff, isDistributor, signOut } = useAuth();
   const [isAdminMode, setIsAdminMode] = useState(false);
   
   // Navigation State
@@ -268,8 +269,24 @@ const BoscotekApp: React.FC = () => {
     return (
       <div className="min-h-screen text-white flex flex-col relative" style={{ backgroundColor: '#3e3e3e' }}>
         
-        {/* Top Right Admin Access */}
-        <div className="absolute top-6 right-6 z-10 flex gap-4">
+        {/* Top Right User/Admin Access */}
+        <div className="absolute top-6 right-6 z-10 flex items-center gap-4">
+           {/* User indicator */}
+           {isAuthenticated && user && (
+              <div className="flex items-center gap-2 text-xs text-zinc-400 bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm">
+                 <span className={`w-2 h-2 rounded-full ${isDistributor ? 'bg-blue-500' : isStaff ? 'bg-green-500' : 'bg-zinc-500'}`} />
+                 <span>{user.name}</span>
+                 {user.role && <span className="text-zinc-500">({user.role})</span>}
+                 <button 
+                   onClick={signOut}
+                   className="ml-2 text-zinc-500 hover:text-white"
+                 >
+                   Sign Out
+                 </button>
+              </div>
+           )}
+           
+           {/* Cart button */}
            {quoteItems.length > 0 && (
               <button 
                 onClick={() => setViewMode('cart')}
@@ -279,12 +296,26 @@ const BoscotekApp: React.FC = () => {
                  <span className="bg-black text-amber-500 text-xs rounded-full w-5 h-5 flex items-center justify-center">{quoteItems.length}</span>
               </button>
            )}
-           <button 
-             onClick={() => setIsAdminMode(true)} 
-             className="text-xs text-zinc-400 hover:text-white font-medium bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm transition-colors"
-           >
-             Admin Access
-           </button>
+           
+           {/* Admin/Staff access */}
+           {(isAdmin || isStaff) && (
+              <button 
+                onClick={() => setIsAdminMode(true)} 
+                className="text-xs text-zinc-400 hover:text-white font-medium bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm transition-colors"
+              >
+                {isAdmin ? 'Admin' : 'Staff'} Dashboard
+              </button>
+           )}
+           
+           {/* Login for non-authenticated users */}
+           {!isAuthenticated && (
+              <button 
+                onClick={() => setIsAdminMode(true)} 
+                className="text-xs text-zinc-400 hover:text-white font-medium bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm transition-colors"
+              >
+                Sign In
+              </button>
+           )}
         </div>
 
         <main className="flex-1 flex flex-col items-center justify-center p-8">
@@ -375,9 +406,11 @@ const BoscotekApp: React.FC = () => {
 
 const App: React.FC = () => {
   return (
-    <CatalogProvider>
-      <BoscotekApp />
-    </CatalogProvider>
+    <AuthProvider>
+      <CatalogProvider>
+        <BoscotekApp />
+      </CatalogProvider>
+    </AuthProvider>
   );
 };
 
