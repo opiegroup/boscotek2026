@@ -5,7 +5,11 @@ import { UserRole } from '../../types';
 interface UserWithRole {
   id: string;
   email: string;
+  full_name: string | null;
+  phone: string | null;
+  company: string | null;
   created_at: string;
+  last_sign_in: string | null;
   role: UserRole | null;
 }
 
@@ -29,48 +33,46 @@ const UserManagement: React.FC = () => {
     setError(null);
 
     try {
-      // Get all users from auth.users (requires service role, so we use an RPC or Edge Function)
-      // For now, we'll get users who have roles assigned
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
+      // Call the RPC function that fetches users with emails and profiles
+      const { data: userDetails, error: rpcError } = await supabase
+        .rpc('get_users_with_emails');
 
-      if (rolesError) throw rolesError;
+      if (rpcError) {
+        // Fallback to just loading roles if RPC fails (insufficient permissions)
+        console.warn('RPC failed, falling back to roles only:', rpcError);
+        
+        const { data: rolesData, error: rolesError } = await supabase
+          .from('user_roles')
+          .select('user_id, role');
 
-      // Get user details for each role
-      const userIds = [...new Set(rolesData?.map(r => r.user_id) || [])];
-      
-      // Since we can't query auth.users directly from client, we'll show what we have
-      // In production, you'd create an Edge Function to list users
-      const usersWithRoles: UserWithRole[] = rolesData?.map(r => ({
-        id: r.user_id,
-        email: `User ${r.user_id.substring(0, 8)}...`, // Placeholder
-        created_at: new Date().toISOString(),
-        role: r.role as UserRole,
-      })) || [];
+        if (rolesError) throw rolesError;
 
-      // Try to get actual user emails from a users view if it exists
-      const { data: userDetails } = await supabase
-        .rpc('get_users_with_emails')
-        .select('*');
+        const usersWithRoles: UserWithRole[] = rolesData?.map(r => ({
+          id: r.user_id,
+          email: `User ${r.user_id.substring(0, 8)}...`,
+          full_name: null,
+          phone: null,
+          company: null,
+          created_at: new Date().toISOString(),
+          last_sign_in: null,
+          role: r.role as UserRole,
+        })) || [];
 
-      if (userDetails) {
-        // Merge with actual user data
-        userDetails.forEach((u: any) => {
-          const existing = usersWithRoles.find(ur => ur.id === u.id);
-          if (existing) {
-            existing.email = u.email;
-            existing.created_at = u.created_at;
-          } else {
-            usersWithRoles.push({
-              id: u.id,
-              email: u.email,
-              created_at: u.created_at,
-              role: null,
-            });
-          }
-        });
+        setUsers(usersWithRoles);
+        return;
       }
+
+      // Map RPC results to our interface
+      const usersWithRoles: UserWithRole[] = (userDetails || []).map((u: any) => ({
+        id: u.id,
+        email: u.email,
+        full_name: u.full_name,
+        phone: u.phone,
+        company: u.company,
+        created_at: u.created_at,
+        last_sign_in: u.last_sign_in,
+        role: u.role as UserRole | null,
+      }));
 
       setUsers(usersWithRoles);
     } catch (err: any) {
@@ -125,6 +127,49 @@ const UserManagement: React.FC = () => {
     } catch (err: any) {
       console.error('Error updating role:', err);
       alert(`Failed to update role: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Edit user state
+  const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
+  const [editForm, setEditForm] = useState({ full_name: '', phone: '', company: '' });
+
+  // Update edit form when user changes
+  useEffect(() => {
+    if (editingUser) {
+      setEditForm({
+        full_name: editingUser.full_name || '',
+        phone: editingUser.phone || '',
+        company: editingUser.company || '',
+      });
+    }
+  }, [editingUser]);
+
+  // Save user profile
+  const handleSaveProfile = async () => {
+    if (!editingUser) return;
+    setSaving(editingUser.id);
+
+    try {
+      // Update user_profiles table
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert({
+          id: editingUser.id,
+          full_name: editForm.full_name || null,
+          phone: editForm.phone || null,
+          company: editForm.company || null,
+        });
+
+      if (error) throw error;
+
+      await loadUsers();
+      setEditingUser(null);
+    } catch (err: any) {
+      console.error('Error saving profile:', err);
+      alert(`Failed to save: ${err.message}`);
     } finally {
       setSaving(null);
     }
@@ -214,8 +259,11 @@ const UserManagement: React.FC = () => {
           <table className="w-full">
             <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
               <tr>
-                <th className="text-left px-6 py-3">User</th>
+                <th className="text-left px-6 py-3">Name</th>
+                <th className="text-left px-6 py-3">Email</th>
+                <th className="text-left px-6 py-3">Company</th>
                 <th className="text-left px-6 py-3">Current Role</th>
+                <th className="text-left px-6 py-3">Last Active</th>
                 <th className="text-left px-6 py-3">Actions</th>
               </tr>
             </thead>
@@ -223,8 +271,23 @@ const UserManagement: React.FC = () => {
               {users.map(user => (
                 <tr key={user.id} className="hover:bg-zinc-800/50">
                   <td className="px-6 py-4">
-                    <div className="font-medium text-white">{user.email}</div>
-                    <div className="text-xs text-zinc-500 font-mono">{user.id}</div>
+                    <div className="font-medium text-white">
+                      {user.full_name || <span className="text-zinc-500 italic">No name</span>}
+                    </div>
+                    {user.phone && (
+                      <div className="text-xs text-zinc-500">{user.phone}</div>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-white">{user.email}</div>
+                    <div className="text-xs text-zinc-600 font-mono">{user.id.substring(0, 8)}...</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {user.company ? (
+                      <span className="text-zinc-300">{user.company}</span>
+                    ) : (
+                      <span className="text-zinc-600">-</span>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     {user.role ? (
@@ -236,22 +299,44 @@ const UserManagement: React.FC = () => {
                     )}
                   </td>
                   <td className="px-6 py-4">
-                    <select
-                      value={user.role || 'none'}
-                      onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole | 'none')}
-                      disabled={saving === user.id}
-                      className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none disabled:opacity-50"
-                    >
-                      <option value="none">Remove Role</option>
-                      <option value="admin">Admin</option>
-                      <option value="pricing_manager">Pricing Manager</option>
-                      <option value="sales">Sales</option>
-                      <option value="distributor">Distributor</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                    {saving === user.id && (
-                      <span className="ml-2 text-amber-500 text-xs">Saving...</span>
+                    {user.last_sign_in ? (
+                      <div>
+                        <div className="text-sm text-zinc-300">
+                          {new Date(user.last_sign_in).toLocaleDateString()}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          {new Date(user.last_sign_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-zinc-600">Never</span>
                     )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={user.role || 'none'}
+                        onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole | 'none')}
+                        disabled={saving === user.id}
+                        className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none disabled:opacity-50"
+                      >
+                        <option value="none">Remove Role</option>
+                        <option value="admin">Admin</option>
+                        <option value="pricing_manager">Pricing Manager</option>
+                        <option value="sales">Sales</option>
+                        <option value="distributor">Distributor</option>
+                        <option value="viewer">Viewer</option>
+                      </select>
+                      {saving === user.id && (
+                        <span className="text-amber-500 text-xs">Saving...</span>
+                      )}
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
+                      >
+                        Edit
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -300,6 +385,94 @@ const UserManagement: React.FC = () => {
           Note: Users must first create an account via the configurator sign-up flow.
         </p>
       </div>
+
+      {/* Edit User Modal */}
+      {editingUser && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white">Edit User Profile</h3>
+                <p className="text-sm text-zinc-500">{editingUser.email}</p>
+              </div>
+              <button
+                onClick={() => setEditingUser(null)}
+                className="text-zinc-500 hover:text-white text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">FULL NAME</label>
+                <input
+                  type="text"
+                  value={editForm.full_name}
+                  onChange={(e) => setEditForm({ ...editForm, full_name: e.target.value })}
+                  placeholder="John Smith"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">PHONE</label>
+                <input
+                  type="tel"
+                  value={editForm.phone}
+                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                  placeholder="+61 400 000 000"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">COMPANY</label>
+                <input
+                  type="text"
+                  value={editForm.company}
+                  onChange={(e) => setEditForm({ ...editForm, company: e.target.value })}
+                  placeholder="Company Name"
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                />
+              </div>
+
+              <div className="bg-zinc-800/50 rounded p-3 text-xs text-zinc-400">
+                <div className="flex justify-between mb-1">
+                  <span>User ID:</span>
+                  <span className="font-mono text-zinc-500">{editingUser.id}</span>
+                </div>
+                <div className="flex justify-between mb-1">
+                  <span>Created:</span>
+                  <span>{new Date(editingUser.created_at).toLocaleDateString()}</span>
+                </div>
+                {editingUser.last_sign_in && (
+                  <div className="flex justify-between">
+                    <span>Last Sign In:</span>
+                    <span>{new Date(editingUser.last_sign_in).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setEditingUser(null)}
+                className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveProfile}
+                disabled={saving === editingUser.id}
+                className="flex-1 bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
+              >
+                {saving === editingUser.id ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

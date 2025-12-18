@@ -8,6 +8,12 @@ interface PricingTier {
   markup_percentage: number;
 }
 
+interface UserProfile {
+  full_name: string | null;
+  phone: string | null;
+  company: string | null;
+}
+
 interface Distributor {
   id: string;
   user_id: string;
@@ -28,6 +34,8 @@ interface Distributor {
   internal_notes: string | null;
   created_at: string;
   pricing_tier?: PricingTier;
+  user_profile?: UserProfile;
+  user_email?: string;
 }
 
 const DistributorManagement: React.FC = () => {
@@ -53,17 +61,42 @@ const DistributorManagement: React.FC = () => {
       if (tiersError) throw tiersError;
       setPricingTiers(tiersData || []);
 
-      // Load distributors with their tier info
+      // Load distributors with their tier info and user profiles
       const { data: distData, error: distError } = await supabase
         .from('distributors')
         .select(`
           *,
-          pricing_tier:pricing_tiers(id, name, code, discount_percentage)
+          pricing_tier:pricing_tiers(id, name, code, markup_percentage),
+          user_profile:user_profiles(full_name, phone, company)
         `)
         .order('company_name');
 
       if (distError) throw distError;
-      setDistributors(distData || []);
+
+      // Fetch user emails for distributors
+      const userIds = distData?.map(d => d.user_id) || [];
+      let userEmails: Record<string, string> = {};
+
+      if (userIds.length > 0) {
+        try {
+          const { data: usersData } = await supabase.rpc('get_users_with_emails');
+          if (usersData) {
+            usersData.forEach((u: any) => {
+              userEmails[u.id] = u.email;
+            });
+          }
+        } catch {
+          // Silently fail if RPC not available
+        }
+      }
+
+      // Merge user emails into distributor data
+      const distributorsWithEmails = (distData || []).map(d => ({
+        ...d,
+        user_email: userEmails[d.user_id] || null,
+      }));
+
+      setDistributors(distributorsWithEmails);
     } catch (err: any) {
       console.error('Error loading distributors:', err);
       setError(err.message);
@@ -303,6 +336,7 @@ const DistributorManagement: React.FC = () => {
               <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
                 <tr>
                   <th className="text-left px-6 py-3">Company</th>
+                  <th className="text-left px-6 py-3">User Account</th>
                   <th className="text-left px-6 py-3">Account #</th>
                   <th className="text-left px-6 py-3">Pricing Tier</th>
                   <th className="text-left px-6 py-3">Status</th>
@@ -314,9 +348,20 @@ const DistributorManagement: React.FC = () => {
                   <tr key={dist.id} className="hover:bg-zinc-800/50">
                     <td className="px-6 py-4">
                       <div className="font-medium text-white">{dist.company_name}</div>
+                      {dist.trading_name && dist.trading_name !== dist.company_name && (
+                        <div className="text-xs text-zinc-400">t/a {dist.trading_name}</div>
+                      )}
                       {dist.contact_email && (
                         <div className="text-xs text-zinc-500">{dist.contact_email}</div>
                       )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-white">
+                        {dist.user_profile?.full_name || dist.contact_name || <span className="text-zinc-500 italic">No name</span>}
+                      </div>
+                      <div className="text-xs text-zinc-500">
+                        {dist.user_email || <span className="italic">No email</span>}
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <span className="font-mono text-amber-500">{dist.account_number}</span>
