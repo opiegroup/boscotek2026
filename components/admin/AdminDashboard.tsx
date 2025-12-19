@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../../services/supabaseClient';
 import { useCatalog } from '../../contexts/CatalogContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
@@ -46,6 +47,61 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     sendToBoscotekSales: true
   });
   
+  // Dashboard Stats
+  const [dashboardStats, setDashboardStats] = useState({
+    bimLeadsCount: 0,
+    bimLeadsNew: 0,
+    companiesCount: 0,
+    companiesApproved: 0,
+    usersCount: 0,
+    quotesTotal: 0,
+    quotesNew: 0,
+    quotesValue: 0,
+    quotesThisMonth: 0,
+    quotesThisMonthValue: 0,
+  });
+
+  // Load dashboard stats
+  const loadDashboardStats = async () => {
+    try {
+      // BIM Leads
+      const { data: bimLeads } = await supabase.from('bim_leads').select('id, status');
+      const bimLeadsNew = bimLeads?.filter(l => l.status === 'new').length || 0;
+
+      // Companies
+      const { data: companies } = await supabase.from('companies').select('id, is_approved');
+      const companiesApproved = companies?.filter(c => c.is_approved).length || 0;
+
+      // Users
+      const { count: usersCount } = await supabase.from('user_roles').select('*', { count: 'exact', head: true });
+
+      // Quotes (from local state for now)
+      const thisMonth = new Date();
+      thisMonth.setDate(1);
+      thisMonth.setHours(0, 0, 0, 0);
+      
+      const quotesThisMonth = quotes.filter(q => new Date(q.createdAt) >= thisMonth);
+      const quotesNew = quotes.filter(q => q.status === 'new');
+      const quotesValue = quotes.reduce((sum, q) => sum + (q.pricing?.totalPrice || 0), 0);
+      const quotesThisMonthValue = quotesThisMonth.reduce((sum, q) => sum + (q.pricing?.totalPrice || 0), 0);
+
+      setDashboardStats({
+        bimLeadsCount: bimLeads?.length || 0,
+        bimLeadsNew,
+        companiesCount: companies?.length || 0,
+        companiesApproved,
+        usersCount: usersCount || 0,
+        quotesTotal: quotes.length,
+        quotesNew: quotesNew.length,
+        quotesValue,
+        quotesThisMonth: quotesThisMonth.length,
+        quotesThisMonthValue,
+      });
+    } catch (err) {
+      console.error('Error loading dashboard stats:', err);
+    }
+  };
+  
   // Load email settings from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('boscotek_email_settings');
@@ -77,7 +133,16 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       loadInteriors();
       loadQuotes();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAuthenticated, activeStep]); 
+
+  // Load dashboard stats when quotes change or when on dashboard
+  useEffect(() => {
+    if (isAuthenticated && activeStep === 0) {
+      loadDashboardStats();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAuthenticated, quotes, activeStep]);
 
   const loadInteriors = async () => {
     const data = await getInteriors();
@@ -238,30 +303,204 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         
         {/* DASHBOARD */}
         {activeStep === 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-               <h1 className="text-3xl font-bold">Overview</h1>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+               <div>
+                 <h1 className="text-3xl font-bold">Dashboard</h1>
+                 <p className="text-zinc-500 text-sm">Overview of your Boscotek configurator</p>
+               </div>
                <div className="flex gap-2">
+                  <button 
+                    onClick={loadDashboardStats}
+                    className="bg-zinc-800 border border-zinc-700 text-zinc-300 px-4 py-2 rounded text-sm hover:bg-zinc-700"
+                  >
+                    Refresh
+                  </button>
                   <button onClick={handleSeed} className="bg-blue-900/30 border border-blue-500/50 text-blue-300 px-4 py-2 rounded text-sm hover:bg-blue-900/50">
-                     Initialize / Seed Database
+                     Initialize DB
                   </button>
                </div>
             </div>
-            
-            <div className="grid grid-cols-3 gap-6 mb-8">
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
-                <div className="text-zinc-500 text-sm font-mono mb-2">QUOTES RECEIVED</div>
-                <div className="text-4xl font-bold text-amber-500">{quotes.length}</div>
+
+            {/* Key Metrics */}
+            <div className="grid grid-cols-4 gap-4">
+              {/* BIM Leads */}
+              <button 
+                onClick={() => setActiveStep(7)}
+                className="bg-gradient-to-br from-amber-900/30 to-amber-950/50 border border-amber-500/30 p-5 rounded-lg text-left hover:border-amber-500/50 transition-colors group"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-2xl">🔥</span>
+                  {dashboardStats.bimLeadsNew > 0 && (
+                    <span className="bg-amber-500 text-black text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                      {dashboardStats.bimLeadsNew} NEW
+                    </span>
+                  )}
+                </div>
+                <div className="text-3xl font-bold text-amber-500 mb-1">{dashboardStats.bimLeadsCount}</div>
+                <div className="text-zinc-500 text-xs font-mono uppercase">BIM Leads</div>
+              </button>
+
+              {/* Companies */}
+              <button 
+                onClick={() => setActiveStep(10)}
+                className="bg-gradient-to-br from-green-900/30 to-green-950/50 border border-green-500/30 p-5 rounded-lg text-left hover:border-green-500/50 transition-colors"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-2xl">🏢</span>
+                  <span className="text-xs text-green-400">{dashboardStats.companiesApproved} approved</span>
+                </div>
+                <div className="text-3xl font-bold text-green-400 mb-1">{dashboardStats.companiesCount}</div>
+                <div className="text-zinc-500 text-xs font-mono uppercase">Companies</div>
+              </button>
+
+              {/* Users */}
+              <button 
+                onClick={() => setActiveStep(9)}
+                className="bg-gradient-to-br from-blue-900/30 to-blue-950/50 border border-blue-500/30 p-5 rounded-lg text-left hover:border-blue-500/50 transition-colors"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-2xl">👤</span>
+                </div>
+                <div className="text-3xl font-bold text-blue-400 mb-1">{dashboardStats.usersCount}</div>
+                <div className="text-zinc-500 text-xs font-mono uppercase">Users with Roles</div>
+              </button>
+
+              {/* Products */}
+              <button 
+                onClick={() => setActiveStep(1)}
+                className="bg-gradient-to-br from-purple-900/30 to-purple-950/50 border border-purple-500/30 p-5 rounded-lg text-left hover:border-purple-500/50 transition-colors"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <span className="text-2xl">📦</span>
+                  <span className="text-xs text-purple-400">{interiors.length} interiors</span>
+                </div>
+                <div className="text-3xl font-bold text-purple-400 mb-1">{products.length}</div>
+                <div className="text-zinc-500 text-xs font-mono uppercase">Products</div>
+              </button>
+            </div>
+
+            {/* Quote Stats */}
+            <div className="grid grid-cols-2 gap-6">
+              {/* Quotes Overview */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-bold text-white">Quote Activity</h3>
+                  <button 
+                    onClick={() => setActiveStep(6)}
+                    className="text-xs text-amber-500 hover:underline"
+                  >
+                    View All →
+                  </button>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <div className="text-zinc-500 text-xs font-mono mb-1">TOTAL QUOTES</div>
+                    <div className="text-2xl font-bold text-white">{dashboardStats.quotesTotal}</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <div className="text-zinc-500 text-xs font-mono mb-1">NEW (UNREAD)</div>
+                    <div className="text-2xl font-bold text-green-400">{dashboardStats.quotesNew}</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <div className="text-zinc-500 text-xs font-mono mb-1">THIS MONTH</div>
+                    <div className="text-2xl font-bold text-white">{dashboardStats.quotesThisMonth}</div>
+                  </div>
+                  <div className="bg-zinc-800/50 rounded-lg p-4">
+                    <div className="text-zinc-500 text-xs font-mono mb-1">THIS MONTH VALUE</div>
+                    <div className="text-2xl font-bold text-amber-500">
+                      ${dashboardStats.quotesThisMonthValue.toLocaleString()}
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
-                <div className="text-zinc-500 text-sm font-mono mb-2">LIVE PRODUCTS</div>
-                <div className="text-4xl font-bold text-white">{products.length}</div>
-              </div>
-              <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-lg">
-                 <div className="text-zinc-500 text-sm font-mono mb-2">PARTITION SETS</div>
-                 <div className="text-4xl font-bold text-zinc-300">{interiors.length}</div>
+
+              {/* Total Value */}
+              <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+                <h3 className="font-bold text-white mb-4">Quote Values</h3>
+                
+                <div className="flex flex-col justify-center h-[calc(100%-2rem)]">
+                  <div className="text-zinc-500 text-xs font-mono mb-2">TOTAL VALUE (ALL TIME)</div>
+                  <div className="text-4xl font-bold text-amber-500 mb-4">
+                    ${dashboardStats.quotesValue.toLocaleString()}
+                  </div>
+                  
+                  {dashboardStats.quotesTotal > 0 && (
+                    <div className="text-sm text-zinc-400">
+                      Average quote: <span className="text-white font-bold">
+                        ${Math.round(dashboardStats.quotesValue / dashboardStats.quotesTotal).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
+
+            {/* Recent Quotes Preview */}
+            {quotes.length > 0 && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
+                <div className="px-6 py-4 border-b border-zinc-700 flex justify-between items-center">
+                  <h3 className="font-bold text-white">Recent Quotes</h3>
+                  <button 
+                    onClick={() => setActiveStep(6)}
+                    className="text-xs text-amber-500 hover:underline"
+                  >
+                    View All →
+                  </button>
+                </div>
+                <table className="w-full">
+                  <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
+                    <tr>
+                      <th className="text-left px-6 py-3">Reference</th>
+                      <th className="text-left px-6 py-3">Customer</th>
+                      <th className="text-left px-6 py-3">Product</th>
+                      <th className="text-left px-6 py-3">Value</th>
+                      <th className="text-left px-6 py-3">Status</th>
+                      <th className="text-left px-6 py-3">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-800">
+                    {quotes.slice(0, 5).map(q => (
+                      <tr 
+                        key={q.id} 
+                        onClick={() => { setSelectedQuote(q); setActiveStep(6); }}
+                        className="hover:bg-zinc-800/50 cursor-pointer"
+                      >
+                        <td className="px-6 py-3">
+                          <span className="font-mono text-amber-500">{q.reference}</span>
+                        </td>
+                        <td className="px-6 py-3">
+                          <div className="font-medium text-white">{q.customer.name}</div>
+                          <div className="text-xs text-zinc-500">{q.customer.email}</div>
+                        </td>
+                        <td className="px-6 py-3 text-zinc-300">
+                          {q.configuration?.productName || 'N/A'}
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className="font-bold text-white">
+                            ${q.pricing?.totalPrice?.toLocaleString() || '0'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3">
+                          <span className={`text-xs uppercase font-bold px-2 py-0.5 rounded ${
+                            q.status === 'new' ? 'bg-green-900/50 text-green-400' : 
+                            q.status === 'quoted' ? 'bg-blue-900/50 text-blue-400' :
+                            q.status === 'won' ? 'bg-amber-900/50 text-amber-400' :
+                            'bg-zinc-700 text-zinc-400'
+                          }`}>
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-3 text-zinc-400 text-sm">
+                          {new Date(q.createdAt).toLocaleDateString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
