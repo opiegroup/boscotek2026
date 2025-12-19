@@ -61,42 +61,67 @@ const DistributorManagement: React.FC = () => {
       if (tiersError) throw tiersError;
       setPricingTiers(tiersData || []);
 
-      // Load distributors with their tier info and user profiles
+      // Load distributors with their tier info
       const { data: distData, error: distError } = await supabase
         .from('distributors')
         .select(`
           *,
-          pricing_tier:pricing_tiers(id, name, code, markup_percentage),
-          user_profile:user_profiles(full_name, phone, company)
+          pricing_tier:pricing_tiers(id, name, code, markup_percentage)
         `)
         .order('company_name');
 
       if (distError) throw distError;
 
-      // Fetch user emails for distributors
+      // Fetch user profiles separately
       const userIds = distData?.map(d => d.user_id) || [];
-      let userEmails: Record<string, string> = {};
+      let userProfiles: Record<string, { full_name: string | null; phone: string | null; company: string | null; email: string | null }> = {};
 
       if (userIds.length > 0) {
+        // Try to get user details from RPC
         try {
           const { data: usersData } = await supabase.rpc('get_users_with_emails');
           if (usersData) {
             usersData.forEach((u: any) => {
-              userEmails[u.id] = u.email;
+              userProfiles[u.id] = {
+                full_name: u.full_name,
+                phone: u.phone,
+                company: u.company,
+                email: u.email,
+              };
             });
           }
         } catch {
-          // Silently fail if RPC not available
+          // Fallback: try to get profiles directly
+          const { data: profilesData } = await supabase
+            .from('user_profiles')
+            .select('id, full_name, phone, company')
+            .in('id', userIds);
+
+          if (profilesData) {
+            profilesData.forEach((p: any) => {
+              userProfiles[p.id] = {
+                full_name: p.full_name,
+                phone: p.phone,
+                company: p.company,
+                email: null,
+              };
+            });
+          }
         }
       }
 
-      // Merge user emails into distributor data
-      const distributorsWithEmails = (distData || []).map(d => ({
+      // Merge user profiles into distributor data
+      const distributorsWithProfiles = (distData || []).map(d => ({
         ...d,
-        user_email: userEmails[d.user_id] || null,
+        user_profile: userProfiles[d.user_id] ? {
+          full_name: userProfiles[d.user_id].full_name,
+          phone: userProfiles[d.user_id].phone,
+          company: userProfiles[d.user_id].company,
+        } : undefined,
+        user_email: userProfiles[d.user_id]?.email || null,
       }));
 
-      setDistributors(distributorsWithEmails);
+      setDistributors(distributorsWithProfiles);
     } catch (err: any) {
       console.error('Error loading distributors:', err);
       setError(err.message);

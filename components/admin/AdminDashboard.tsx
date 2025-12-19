@@ -6,9 +6,10 @@ import { ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../
 import BoscotekLogo from '../BoscotekLogo';
 import BIMLeadsManager from './BIMLeadsManager';
 import UserManagement from './UserManagement';
-import DistributorManagement from './DistributorManagement';
+import CompanyManagement from './CompanyManagement';
 import PricingTierManagement from './PricingTierManagement';
 import CurrencyManagement from './CurrencyManagement';
+import PricingCSV from './PricingCSV';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -202,7 +203,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           </div>
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
           <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads</button>
-          <button onClick={() => setActiveStep(10)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 10 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>👥 Distributors</button>
+          <button onClick={() => setActiveStep(10)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 10 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>🏢 Companies</button>
           
           {/* Catalogue Section */}
           <div className="pt-4 pb-2">
@@ -211,6 +212,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           <button onClick={() => setActiveStep(1)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 1 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Products & Options</button>
           <button onClick={() => setActiveStep(11)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 11 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>💰 Pricing Tiers</button>
           <button onClick={() => setActiveStep(12)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 12 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>💱 Currencies</button>
+          <button onClick={() => setActiveStep(13)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 13 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>📊 Pricing CSV</button>
           
           {/* Admin Section - Only show for admins */}
           {isAdmin && (
@@ -580,9 +582,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           <UserManagement />
         )}
 
-        {/* DISTRIBUTOR MANAGEMENT */}
+        {/* COMPANIES & CONTACTS */}
         {activeStep === 10 && (
-          <DistributorManagement />
+          <CompanyManagement />
         )}
 
         {/* PRICING TIERS */}
@@ -593,6 +595,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         {/* CURRENCIES */}
         {activeStep === 12 && (
           <CurrencyManagement />
+        )}
+
+        {/* PRICING CSV */}
+        {activeStep === 13 && (
+          <PricingCSV />
         )}
 
         {/* EMAIL SETTINGS */}

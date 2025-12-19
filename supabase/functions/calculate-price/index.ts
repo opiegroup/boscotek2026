@@ -146,7 +146,45 @@ async function getUserContext(authHeader: string | null, supabaseClient: any): P
 
     const role = roleData?.[0]?.role as UserRole || null;
 
-    // Check if user has a distributor account with a pricing tier
+    // Check if user is linked to a company with a pricing tier (new schema)
+    const { data: contactData } = await supabaseClient
+      .from('contacts')
+      .select(`
+        company:companies (
+          pricing_tier_id,
+          is_active,
+          is_approved,
+          pricing_tier:pricing_tiers (
+            markup_percentage,
+            name,
+            code
+          )
+        )
+      `)
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .single();
+
+    if (contactData?.company) {
+      const company = contactData.company as { 
+        is_active: boolean; 
+        is_approved: boolean; 
+        pricing_tier: { markup_percentage: number; name: string; code: string } | null 
+      };
+      
+      if (company.is_active && company.is_approved && company.pricing_tier) {
+        return {
+          userId: user.id,
+          role,
+          hasCustomTier: true,
+          markupPercentage: company.pricing_tier.markup_percentage || 0,
+          tierName: company.pricing_tier.name,
+          tierCode: company.pricing_tier.code,
+        };
+      }
+    }
+
+    // Fallback: Check old distributors table for backwards compatibility
     const { data: distData } = await supabaseClient
       .from('distributors')
       .select(`

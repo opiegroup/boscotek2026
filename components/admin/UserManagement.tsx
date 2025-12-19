@@ -37,9 +37,12 @@ const UserManagement: React.FC = () => {
       const { data: userDetails, error: rpcError } = await supabase
         .rpc('get_users_with_emails');
 
+      console.log('RPC result:', { userDetails, rpcError });
+
       if (rpcError) {
         // Fallback to just loading roles if RPC fails (insufficient permissions)
         console.warn('RPC failed, falling back to roles only:', rpcError);
+        setError(`Could not load user emails: ${rpcError.message}. Showing user IDs only.`);
         
         const { data: rolesData, error: rolesError } = await supabase
           .from('user_roles')
@@ -49,7 +52,7 @@ const UserManagement: React.FC = () => {
 
         const usersWithRoles: UserWithRole[] = rolesData?.map(r => ({
           id: r.user_id,
-          email: `User ${r.user_id.substring(0, 8)}...`,
+          email: `(ID: ${r.user_id.substring(0, 8)}...)`,
           full_name: null,
           phone: null,
           company: null,
@@ -62,10 +65,17 @@ const UserManagement: React.FC = () => {
         return;
       }
 
+      if (!userDetails || userDetails.length === 0) {
+        console.warn('RPC returned empty data');
+        setError('No users found. Make sure you have admin permissions.');
+        setUsers([]);
+        return;
+      }
+
       // Map RPC results to our interface
       const usersWithRoles: UserWithRole[] = (userDetails || []).map((u: any) => ({
         id: u.id,
-        email: u.email,
+        email: u.email || '(no email)',
         full_name: u.full_name,
         phone: u.phone,
         company: u.company,
@@ -74,6 +84,7 @@ const UserManagement: React.FC = () => {
         role: u.role as UserRole | null,
       }));
 
+      console.log('Mapped users:', usersWithRoles);
       setUsers(usersWithRoles);
     } catch (err: any) {
       console.error('Error loading users:', err);
@@ -153,23 +164,54 @@ const UserManagement: React.FC = () => {
     setSaving(editingUser.id);
 
     try {
-      // Update user_profiles table
-      const { error } = await supabase
+      console.log('Saving profile for user:', editingUser.id, editForm);
+      
+      // First try to update existing profile
+      const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .upsert({
-          id: editingUser.id,
-          full_name: editForm.full_name || null,
-          phone: editForm.phone || null,
-          company: editForm.company || null,
-        });
+        .select('id')
+        .eq('id', editingUser.id)
+        .single();
 
-      if (error) throw error;
+      let error;
+      
+      if (existingProfile) {
+        // Update existing
+        const result = await supabase
+          .from('user_profiles')
+          .update({
+            full_name: editForm.full_name || null,
+            phone: editForm.phone || null,
+            company: editForm.company || null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingUser.id);
+        error = result.error;
+        console.log('Update result:', result);
+      } else {
+        // Insert new
+        const result = await supabase
+          .from('user_profiles')
+          .insert({
+            id: editingUser.id,
+            full_name: editForm.full_name || null,
+            phone: editForm.phone || null,
+            company: editForm.company || null,
+          });
+        error = result.error;
+        console.log('Insert result:', result);
+      }
+
+      if (error) {
+        console.error('Database error:', error);
+        throw error;
+      }
 
       await loadUsers();
       setEditingUser(null);
     } catch (err: any) {
       console.error('Error saving profile:', err);
-      alert(`Failed to save: ${err.message}`);
+      alert(`Failed to save: ${err.message}\n\nCheck browser console for details.`);
     } finally {
       setSaving(null);
     }
@@ -393,7 +435,6 @@ const UserManagement: React.FC = () => {
             <div className="flex justify-between items-start mb-6">
               <div>
                 <h3 className="text-xl font-bold text-white">Edit User Profile</h3>
-                <p className="text-sm text-zinc-500">{editingUser.email}</p>
               </div>
               <button
                 onClick={() => setEditingUser(null)}
@@ -404,6 +445,15 @@ const UserManagement: React.FC = () => {
             </div>
 
             <div className="space-y-4">
+              {/* Email - read only */}
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">EMAIL ADDRESS</label>
+                <div className="w-full bg-zinc-800/50 border border-zinc-700 text-zinc-300 p-3 rounded">
+                  {editingUser.email}
+                </div>
+                <p className="text-xs text-zinc-600 mt-1">Email cannot be changed here</p>
+              </div>
+
               <div>
                 <label className="block text-xs font-mono text-zinc-500 mb-2">FULL NAME</label>
                 <input
@@ -440,7 +490,7 @@ const UserManagement: React.FC = () => {
               <div className="bg-zinc-800/50 rounded p-3 text-xs text-zinc-400">
                 <div className="flex justify-between mb-1">
                   <span>User ID:</span>
-                  <span className="font-mono text-zinc-500">{editingUser.id}</span>
+                  <span className="font-mono text-zinc-500 text-[10px]">{editingUser.id}</span>
                 </div>
                 <div className="flex justify-between mb-1">
                   <span>Created:</span>
