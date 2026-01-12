@@ -239,7 +239,9 @@ export interface Brand {
   status: BrandStatus;
   themeJson: BrandTheme;
   featuresJson: BrandFeatures;
+  logoUrl: string | null;      // Direct logo URL (separate from theme)
   contactEmail: string | null;
+  salesEmail: string | null;   // Sales enquiry email
   supportEmail: string | null;
   phone: string | null;
   addressJson: Record<string, string> | null;

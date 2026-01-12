@@ -3,7 +3,7 @@ import { supabase } from '../services/supabaseClient';
 import type { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 // Role types matching database enum
-export type UserRole = 'admin' | 'pricing_manager' | 'sales' | 'distributor' | 'viewer';
+export type UserRole = 'super_admin' | 'admin' | 'pricing_manager' | 'sales' | 'distributor' | 'viewer';
 
 export interface AuthUser {
   id: string;
@@ -27,12 +27,14 @@ interface AuthContextType {
   
   // Role checks
   isAuthenticated: boolean;
-  isAdmin: boolean;
+  isSuperAdmin: boolean;  // God Mode - full access to all brands
+  isAdmin: boolean;       // Admin or Super Admin
   isPricingManager: boolean;
   isSales: boolean;
   isDistributor: boolean;
-  isStaff: boolean; // admin, sales, or pricing_manager
-  canManagePricing: boolean; // admin or pricing_manager
+  isStaff: boolean; // super_admin, admin, sales, or pricing_manager
+  canManagePricing: boolean; // super_admin, admin, or pricing_manager
+  isGodMode: boolean; // Alias for isSuperAdmin
   
   // Actions
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
@@ -235,12 +237,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Computed role checks
   const role = user?.role;
   const isAuthenticated = !!user;
-  const isAdmin = role === 'admin';
+  const isSuperAdmin = role === 'super_admin';
+  const isAdmin = role === 'admin' || role === 'super_admin';
   const isPricingManager = role === 'pricing_manager';
   const isSales = role === 'sales';
   const isDistributor = user?.isDistributor || role === 'distributor';
   const isStaff = isAdmin || isPricingManager || isSales;
   const canManagePricing = isAdmin || isPricingManager;
+  const isGodMode = isSuperAdmin; // Alias for clarity
 
   const value: AuthContextType = {
     user,
@@ -248,12 +252,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading,
     error,
     isAuthenticated,
+    isSuperAdmin,
     isAdmin,
     isPricingManager,
     isSales,
     isDistributor,
     isStaff,
     canManagePricing,
+    isGodMode,
     signIn,
     signUp,
     signOut,

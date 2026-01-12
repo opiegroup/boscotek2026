@@ -264,4 +264,93 @@ export function withBrandAccess<P extends object>(
   };
 }
 
+/**
+ * DistributorBrandGuard
+ * 
+ * Component that restricts distributors to only their assigned brands.
+ * If a distributor navigates to a brand they don't have access to,
+ * they are shown a message and redirected to their permitted brand.
+ */
+interface DistributorBrandGuardProps {
+  children: ReactNode;
+}
+
+export const DistributorBrandGuard: React.FC<DistributorBrandGuardProps> = ({ children }) => {
+  const { brand, brandSlug, accessLevel, availableBrands, isLoading } = useBrand();
+  const { isDistributor, isStaff, isSuperAdmin } = useAuth();
+  const [redirecting, setRedirecting] = React.useState(false);
+  
+  React.useEffect(() => {
+    // Only check for distributors (not staff or super admins)
+    if (isLoading || !isDistributor || isStaff || isSuperAdmin) return;
+    
+    // Check if distributor has access to current brand
+    if (accessLevel === 'none' && availableBrands.length > 0) {
+      // Find their permitted brand
+      const permittedBrand = availableBrands[0];
+      if (permittedBrand && permittedBrand.slug !== brandSlug) {
+        setRedirecting(true);
+        // Redirect to their permitted brand
+        setTimeout(() => {
+          window.location.href = `/${permittedBrand.slug}/`;
+        }, 2000);
+      }
+    }
+  }, [isLoading, isDistributor, isStaff, isSuperAdmin, accessLevel, availableBrands, brandSlug]);
+  
+  // Show loading state
+  if (isLoading) {
+    return <>{children}</>;
+  }
+  
+  // Show redirect message for distributors without access
+  if (redirecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-3">Access Restricted</h2>
+          <p className="text-zinc-400 mb-6">
+            You don't have access to the {brand?.name || 'this'} storefront. 
+            Redirecting you to your permitted brand...
+          </p>
+          <div className="animate-spin h-6 w-6 border-2 border-amber-500 border-t-transparent rounded-full mx-auto" />
+        </div>
+      </div>
+    );
+  }
+  
+  // Show access denied for distributors without any brands
+  if (isDistributor && !isStaff && !isSuperAdmin && accessLevel === 'none' && availableBrands.length === 0) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-zinc-950">
+        <div className="text-center p-8 max-w-md">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-6">
+            <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-white mb-3">No Brand Access</h2>
+          <p className="text-zinc-400 mb-6">
+            Your account doesn't have access to any brand storefronts. 
+            Please contact your administrator.
+          </p>
+          <a 
+            href="/"
+            className="inline-block px-6 py-3 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors"
+          >
+            Return Home
+          </a>
+        </div>
+      </div>
+    );
+  }
+  
+  return <>{children}</>;
+};
+
 export default BrandContext;

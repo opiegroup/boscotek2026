@@ -14,6 +14,7 @@ import CompanyManagement from './CompanyManagement';
 import PricingTierManagement from './PricingTierManagement';
 import CurrencyManagement from './CurrencyManagement';
 import PricingCSV from './PricingCSV';
+import BrandSettings from './BrandSettings';
 
 interface AdminDashboardProps {
   onExit: () => void;
@@ -316,6 +317,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               <div className="pt-4 pb-2">
                 <div className="text-[10px] font-bold text-zinc-600 uppercase tracking-wider px-3">Admin</div>
               </div>
+              <button onClick={() => setActiveStep(14)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 14 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>⚙️ Brand Settings</button>
               <button onClick={() => setActiveStep(9)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 9 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>🔐 Users & Roles</button>
               <button onClick={() => setActiveStep(8)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 8 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>📧 Email Settings</button>
             </>
@@ -1020,6 +1022,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* BRAND SETTINGS */}
+        {activeStep === 14 && (
+          <BrandSettings />
         )}
         </div>
       </main>

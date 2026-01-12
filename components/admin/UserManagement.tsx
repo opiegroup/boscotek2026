@@ -1,6 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { UserRole } from '../../types';
+import { useBrand } from '../../contexts/BrandContext';
+import { useAuth } from '../../contexts/AuthContext';
+
+interface BrandAccess {
+  brand_id: string;
+  brand_name: string;
+  brand_slug: string;
+  access_level: 'viewer' | 'sales' | 'pricing' | 'admin';
+  scopes: string[];
+  is_active: boolean;
+}
 
 interface UserWithRole {
   id: string;
@@ -11,9 +22,11 @@ interface UserWithRole {
   created_at: string;
   last_sign_in: string | null;
   role: UserRole | null;
+  brand_accesses: BrandAccess[];
 }
 
 const ROLE_LABELS: Record<UserRole, { label: string; color: string; description: string }> = {
+  super_admin: { label: 'Super Admin', color: 'bg-amber-500', description: 'God Mode - Full access to all brands' },
   admin: { label: 'Admin', color: 'bg-red-500', description: 'Full system access' },
   pricing_manager: { label: 'Pricing Manager', color: 'bg-purple-500', description: 'Manage pricing and catalogue' },
   sales: { label: 'Sales', color: 'bg-blue-500', description: 'Create quotes and manage customers' },
@@ -21,29 +34,72 @@ const ROLE_LABELS: Record<UserRole, { label: string; color: string; description:
   viewer: { label: 'Viewer', color: 'bg-zinc-500', description: 'Read-only access' },
 };
 
+const BRAND_ACCESS_LEVELS = [
+  { value: 'viewer', label: 'Viewer', description: 'Read-only access' },
+  { value: 'sales', label: 'Sales', description: 'Create quotes' },
+  { value: 'pricing', label: 'Pricing', description: 'Manage pricing' },
+  { value: 'admin', label: 'Admin', description: 'Full brand access' },
+];
+
 const UserManagement: React.FC = () => {
+  const { brand, brandSlug, availableBrands } = useBrand();
+  const { isSuperAdmin, isAdmin } = useAuth();
+  
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [viewAllBrands, setViewAllBrands] = useState(false);
 
-  // Load users and their roles
+  // Load users with brand access
   const loadUsers = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      // Call the RPC function that fetches users with emails and profiles
+      // Try the new RPC function first
+      const brandIdFilter = (isSuperAdmin && viewAllBrands) ? null : brand?.id;
+      
+      const { data: userData, error: rpcError } = await supabase
+        .rpc('get_users_with_brand_access', { 
+          p_brand_id: brandIdFilter 
+        });
+
+      if (rpcError) {
+        console.warn('get_users_with_brand_access RPC failed:', rpcError);
+        // Fallback to old method
+        await loadUsersLegacy();
+        return;
+      }
+
+      const usersWithRoles: UserWithRole[] = (userData || []).map((u: any) => ({
+        id: u.user_id,
+        email: u.email || '(no email)',
+        full_name: u.full_name,
+        phone: null,
+        company: null,
+        created_at: new Date().toISOString(),
+        last_sign_in: null,
+        role: u.global_role as UserRole | null,
+        brand_accesses: u.brand_accesses || [],
+      }));
+
+      setUsers(usersWithRoles);
+    } catch (err: any) {
+      console.error('Error loading users:', err);
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback to legacy user loading
+  const loadUsersLegacy = async () => {
+    try {
       const { data: userDetails, error: rpcError } = await supabase
         .rpc('get_users_with_emails');
 
-      console.log('RPC result:', { userDetails, rpcError });
-
       if (rpcError) {
-        // Fallback to just loading roles if RPC fails (insufficient permissions)
-        console.warn('RPC failed, falling back to roles only:', rpcError);
-        setError(`Could not load user emails: ${rpcError.message}. Showing user IDs only.`);
-        
         const { data: rolesData, error: rolesError } = await supabase
           .from('user_roles')
           .select('user_id, role');
@@ -59,20 +115,13 @@ const UserManagement: React.FC = () => {
           created_at: new Date().toISOString(),
           last_sign_in: null,
           role: r.role as UserRole,
+          brand_accesses: [],
         })) || [];
 
         setUsers(usersWithRoles);
         return;
       }
 
-      if (!userDetails || userDetails.length === 0) {
-        console.warn('RPC returned empty data');
-        setError('No users found. Make sure you have admin permissions.');
-        setUsers([]);
-        return;
-      }
-
-      // Map RPC results to our interface
       const usersWithRoles: UserWithRole[] = (userDetails || []).map((u: any) => ({
         id: u.id,
         email: u.email || '(no email)',
@@ -82,29 +131,25 @@ const UserManagement: React.FC = () => {
         created_at: u.created_at,
         last_sign_in: u.last_sign_in,
         role: u.role as UserRole | null,
+        brand_accesses: [],
       }));
 
-      console.log('Mapped users:', usersWithRoles);
       setUsers(usersWithRoles);
     } catch (err: any) {
-      console.error('Error loading users:', err);
       setError(err.message);
-    } finally {
-      setLoading(false);
     }
   };
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [brand?.id, viewAllBrands]);
 
-  // Assign or update role
+  // Assign or update global role
   const handleRoleChange = async (userId: string, newRole: UserRole | 'none') => {
     setSaving(userId);
     
     try {
       if (newRole === 'none') {
-        // Remove role
         const { error } = await supabase
           .from('user_roles')
           .delete()
@@ -112,11 +157,9 @@ const UserManagement: React.FC = () => {
         
         if (error) throw error;
       } else {
-        // Check if user already has a role
         const existingUser = users.find(u => u.id === userId);
         
         if (existingUser?.role) {
-          // Update existing role
           const { error } = await supabase
             .from('user_roles')
             .update({ role: newRole })
@@ -124,7 +167,6 @@ const UserManagement: React.FC = () => {
           
           if (error) throw error;
         } else {
-          // Insert new role
           const { error } = await supabase
             .from('user_roles')
             .insert({ user_id: userId, role: newRole });
@@ -133,7 +175,6 @@ const UserManagement: React.FC = () => {
         }
       }
       
-      // Reload users
       await loadUsers();
     } catch (err: any) {
       console.error('Error updating role:', err);
@@ -143,11 +184,56 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  // Edit user state
+  // Assign user to brand
+  const handleAssignToBrand = async (userId: string, brandId: string, accessLevel: string) => {
+    setSaving(userId);
+    
+    try {
+      const { error } = await supabase.rpc('assign_user_to_brand', {
+        p_user_id: userId,
+        p_brand_id: brandId,
+        p_access_level: accessLevel,
+        p_scopes: [],
+      });
+      
+      if (error) throw error;
+      
+      await loadUsers();
+    } catch (err: any) {
+      console.error('Error assigning to brand:', err);
+      alert(`Failed to assign to brand: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Remove user from brand
+  const handleRemoveFromBrand = async (userId: string, brandId: string) => {
+    setSaving(userId);
+    
+    try {
+      const { error } = await supabase.rpc('remove_user_from_brand', {
+        p_user_id: userId,
+        p_brand_id: brandId,
+      });
+      
+      if (error) throw error;
+      
+      await loadUsers();
+    } catch (err: any) {
+      console.error('Error removing from brand:', err);
+      alert(`Failed to remove from brand: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Modal states
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', company: '' });
+  const [showBrandAssign, setShowBrandAssign] = useState<{ userId: string; userName: string } | null>(null);
+  const [newBrandAssign, setNewBrandAssign] = useState({ brandId: '', accessLevel: 'viewer' });
 
-  // Update edit form when user changes
   useEffect(() => {
     if (editingUser) {
       setEditForm({
@@ -158,15 +244,11 @@ const UserManagement: React.FC = () => {
     }
   }, [editingUser]);
 
-  // Save user profile
   const handleSaveProfile = async () => {
     if (!editingUser) return;
     setSaving(editingUser.id);
 
     try {
-      console.log('Saving profile for user:', editingUser.id, editForm);
-      
-      // First try to update existing profile
       const { data: existingProfile } = await supabase
         .from('user_profiles')
         .select('id')
@@ -176,7 +258,6 @@ const UserManagement: React.FC = () => {
       let error;
       
       if (existingProfile) {
-        // Update existing
         const result = await supabase
           .from('user_profiles')
           .update({
@@ -187,9 +268,7 @@ const UserManagement: React.FC = () => {
           })
           .eq('id', editingUser.id);
         error = result.error;
-        console.log('Update result:', result);
       } else {
-        // Insert new
         const result = await supabase
           .from('user_profiles')
           .insert({
@@ -199,25 +278,20 @@ const UserManagement: React.FC = () => {
             company: editForm.company || null,
           });
         error = result.error;
-        console.log('Insert result:', result);
       }
 
-      if (error) {
-        console.error('Database error:', error);
-        throw error;
-      }
+      if (error) throw error;
 
       await loadUsers();
       setEditingUser(null);
     } catch (err: any) {
-      console.error('Error saving profile:', err);
-      alert(`Failed to save: ${err.message}\n\nCheck browser console for details.`);
+      alert(`Failed to save: ${err.message}`);
     } finally {
       setSaving(null);
     }
   };
 
-  // Add new user by email (invite)
+  // Invite user
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('viewer');
   const [inviting, setInviting] = useState(false);
@@ -228,8 +302,6 @@ const UserManagement: React.FC = () => {
 
     setInviting(true);
     try {
-      // Create user via Supabase Auth admin API (requires Edge Function)
-      // For now, show instructions
       alert(
         `To add a new user:\n\n` +
         `1. Have them sign up at the configurator\n` +
@@ -254,15 +326,45 @@ const UserManagement: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">User Management</h1>
-        <p className="text-zinc-400">Assign roles to control access levels across the platform.</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Users & Roles</h1>
+          <p className="text-zinc-400">
+            Manage user access and brand assignments.
+            {isSuperAdmin && (
+              <span className="ml-2 text-amber-500 text-sm">(God Mode Active)</span>
+            )}
+          </p>
+        </div>
+        
+        {/* Super Admin Toggle */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-3 bg-zinc-900 border border-zinc-800 rounded-lg px-4 py-2">
+            <span className="text-sm text-zinc-400">View:</span>
+            <button
+              onClick={() => setViewAllBrands(false)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                !viewAllBrands ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              Current Brand
+            </button>
+            <button
+              onClick={() => setViewAllBrands(true)}
+              className={`px-3 py-1 rounded text-sm font-medium transition-colors ${
+                viewAllBrands ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              All Brands
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Role Legend */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
         <h3 className="text-sm font-bold text-zinc-400 uppercase mb-3">Role Definitions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {(Object.entries(ROLE_LABELS) as [UserRole, typeof ROLE_LABELS[UserRole]][]).map(([role, info]) => (
             <div key={role} className="flex items-start gap-2">
               <span className={`w-3 h-3 rounded-full ${info.color} mt-1 flex-shrink-0`} />
@@ -284,7 +386,14 @@ const UserManagement: React.FC = () => {
       {/* Users Table */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden">
         <div className="bg-zinc-800 px-6 py-4 border-b border-zinc-700 flex justify-between items-center">
-          <h3 className="font-bold text-white">Users ({users.length})</h3>
+          <h3 className="font-bold text-white">
+            Users ({users.length})
+            {!viewAllBrands && brand && (
+              <span className="ml-2 text-sm font-normal text-zinc-400">
+                for {brand.name}
+              </span>
+            )}
+          </h3>
           <button
             onClick={loadUsers}
             className="text-xs text-zinc-400 hover:text-white px-3 py-1 bg-zinc-700 rounded"
@@ -295,103 +404,110 @@ const UserManagement: React.FC = () => {
 
         {users.length === 0 ? (
           <div className="p-8 text-center text-zinc-500">
-            No users with roles assigned yet.
+            No users found.
           </div>
         ) : (
-          <table className="w-full">
-            <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
-              <tr>
-                <th className="text-left px-6 py-3">Name</th>
-                <th className="text-left px-6 py-3">Email</th>
-                <th className="text-left px-6 py-3">Company</th>
-                <th className="text-left px-6 py-3">Current Role</th>
-                <th className="text-left px-6 py-3">Last Active</th>
-                <th className="text-left px-6 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-800">
-              {users.map(user => (
-                <tr key={user.id} className="hover:bg-zinc-800/50">
-                  <td className="px-6 py-4">
-                    <div className="font-medium text-white">
-                      {user.full_name || <span className="text-zinc-500 italic">No name</span>}
-                    </div>
-                    {user.phone && (
-                      <div className="text-xs text-zinc-500">{user.phone}</div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-white">{user.email}</div>
-                    <div className="text-xs text-zinc-600 font-mono">{user.id.substring(0, 8)}...</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    {user.company ? (
-                      <span className="text-zinc-300">{user.company}</span>
-                    ) : (
-                      <span className="text-zinc-600">-</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {user.role ? (
-                      <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-white ${ROLE_LABELS[user.role].color}`}>
-                        {ROLE_LABELS[user.role].label}
-                      </span>
-                    ) : (
-                      <span className="text-zinc-500 italic">No role</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    {user.last_sign_in ? (
-                      <div>
-                        <div className="text-sm text-zinc-300">
-                          {new Date(user.last_sign_in).toLocaleDateString()}
-                        </div>
-                        <div className="text-xs text-zinc-500">
-                          {new Date(user.last_sign_in).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-zinc-600">Never</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={user.role || 'none'}
-                        onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole | 'none')}
-                        disabled={saving === user.id}
-                        className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none disabled:opacity-50"
-                      >
-                        <option value="none">Remove Role</option>
-                        <option value="admin">Admin</option>
-                        <option value="pricing_manager">Pricing Manager</option>
-                        <option value="sales">Sales</option>
-                        <option value="distributor">Distributor</option>
-                        <option value="viewer">Viewer</option>
-                      </select>
-                      {saving === user.id && (
-                        <span className="text-amber-500 text-xs">Saving...</span>
-                      )}
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </td>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
+                <tr>
+                  <th className="text-left px-6 py-3">User</th>
+                  <th className="text-left px-6 py-3">Global Role</th>
+                  <th className="text-left px-6 py-3">Brand Access</th>
+                  <th className="text-left px-6 py-3">Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-zinc-800">
+                {users.map(user => (
+                  <tr key={user.id} className="hover:bg-zinc-800/50">
+                    <td className="px-6 py-4">
+                      <div className="font-medium text-white">
+                        {user.full_name || user.email.split('@')[0]}
+                      </div>
+                      <div className="text-sm text-zinc-500">{user.email}</div>
+                      <div className="text-xs text-zinc-600 font-mono">{user.id.substring(0, 8)}...</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      {isSuperAdmin ? (
+                        <select
+                          value={user.role || 'none'}
+                          onChange={(e) => handleRoleChange(user.id, e.target.value as UserRole | 'none')}
+                          disabled={saving === user.id}
+                          className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none disabled:opacity-50"
+                        >
+                          <option value="none">No Role</option>
+                          <option value="super_admin">⭐ Super Admin</option>
+                          <option value="admin">Admin</option>
+                          <option value="pricing_manager">Pricing Manager</option>
+                          <option value="sales">Sales</option>
+                          <option value="distributor">Distributor</option>
+                          <option value="viewer">Viewer</option>
+                        </select>
+                      ) : user.role ? (
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold text-white ${ROLE_LABELS[user.role].color}`}>
+                          {ROLE_LABELS[user.role].label}
+                        </span>
+                      ) : (
+                        <span className="text-zinc-500 italic">No role</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2">
+                        {user.brand_accesses.filter(ba => ba.is_active).map(access => (
+                          <div 
+                            key={access.brand_id} 
+                            className="flex items-center gap-1 bg-zinc-800 rounded-full pl-3 pr-1 py-1"
+                          >
+                            <span className="text-xs text-white font-medium">{access.brand_name}</span>
+                            <span className="text-xs text-zinc-400">({access.access_level})</span>
+                            {(isSuperAdmin || (isAdmin && access.brand_id === brand?.id)) && (
+                              <button
+                                onClick={() => handleRemoveFromBrand(user.id, access.brand_id)}
+                                className="ml-1 w-5 h-5 rounded-full bg-zinc-700 hover:bg-red-600 text-zinc-400 hover:text-white text-xs flex items-center justify-center"
+                                title="Remove access"
+                              >
+                                ×
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {user.brand_accesses.filter(ba => ba.is_active).length === 0 && (
+                          <span className="text-zinc-500 text-xs italic">No brand access</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-2">
+                        {saving === user.id && (
+                          <span className="text-amber-500 text-xs">Saving...</span>
+                        )}
+                        <button
+                          onClick={() => setShowBrandAssign({ userId: user.id, userName: user.full_name || user.email })}
+                          className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
+                        >
+                          + Brand
+                        </button>
+                        <button
+                          onClick={() => setEditingUser(user)}
+                          className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* Add User Section */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
         <h3 className="font-bold text-white mb-4">Add New User</h3>
-        <form onSubmit={handleInvite} className="flex gap-4 items-end">
-          <div className="flex-1">
+        <form onSubmit={handleInvite} className="flex gap-4 items-end flex-wrap">
+          <div className="flex-1 min-w-[200px]">
             <label className="block text-xs font-mono text-zinc-500 mb-2">EMAIL ADDRESS</label>
             <input
               type="email"
@@ -413,6 +529,7 @@ const UserManagement: React.FC = () => {
               <option value="sales">Sales</option>
               <option value="pricing_manager">Pricing Manager</option>
               <option value="admin">Admin</option>
+              {isSuperAdmin && <option value="super_admin">Super Admin</option>}
             </select>
           </div>
           <button
@@ -427,6 +544,85 @@ const UserManagement: React.FC = () => {
           Note: Users must first create an account via the configurator sign-up flow.
         </p>
       </div>
+
+      {/* Brand Assignment Modal */}
+      {showBrandAssign && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+          <div className="bg-zinc-900 border border-zinc-700 rounded-lg p-6 w-full max-w-md">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white">Assign Brand Access</h3>
+                <p className="text-sm text-zinc-400">For {showBrandAssign.userName}</p>
+              </div>
+              <button
+                onClick={() => setShowBrandAssign(null)}
+                className="text-zinc-500 hover:text-white text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">SELECT BRAND</label>
+                <select
+                  value={newBrandAssign.brandId}
+                  onChange={(e) => setNewBrandAssign({ ...newBrandAssign, brandId: e.target.value })}
+                  className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                >
+                  <option value="">Select a brand...</option>
+                  {availableBrands.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-zinc-500 mb-2">ACCESS LEVEL</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {BRAND_ACCESS_LEVELS.map(level => (
+                    <button
+                      key={level.value}
+                      type="button"
+                      onClick={() => setNewBrandAssign({ ...newBrandAssign, accessLevel: level.value })}
+                      className={`p-3 rounded border text-left transition-colors ${
+                        newBrandAssign.accessLevel === level.value
+                          ? 'border-amber-500 bg-amber-500/10'
+                          : 'border-zinc-700 hover:border-zinc-600'
+                      }`}
+                    >
+                      <div className="font-medium text-white text-sm">{level.label}</div>
+                      <div className="text-xs text-zinc-500">{level.description}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={() => setShowBrandAssign(null)}
+                className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={async () => {
+                  if (newBrandAssign.brandId) {
+                    await handleAssignToBrand(showBrandAssign.userId, newBrandAssign.brandId, newBrandAssign.accessLevel);
+                    setShowBrandAssign(null);
+                    setNewBrandAssign({ brandId: '', accessLevel: 'viewer' });
+                  }
+                }}
+                disabled={!newBrandAssign.brandId || saving === showBrandAssign.userId}
+                className="flex-1 bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
+              >
+                {saving === showBrandAssign.userId ? 'Assigning...' : 'Assign Access'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit User Modal */}
       {editingUser && (
@@ -445,7 +641,6 @@ const UserManagement: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              {/* Email - read only */}
               <div>
                 <label className="block text-xs font-mono text-zinc-500 mb-2">EMAIL ADDRESS</label>
                 <div className="w-full bg-zinc-800/50 border border-zinc-700 text-zinc-300 p-3 rounded">
@@ -492,16 +687,6 @@ const UserManagement: React.FC = () => {
                   <span>User ID:</span>
                   <span className="font-mono text-zinc-500 text-[10px]">{editingUser.id}</span>
                 </div>
-                <div className="flex justify-between mb-1">
-                  <span>Created:</span>
-                  <span>{new Date(editingUser.created_at).toLocaleDateString()}</span>
-                </div>
-                {editingUser.last_sign_in && (
-                  <div className="flex justify-between">
-                    <span>Last Sign In:</span>
-                    <span>{new Date(editingUser.last_sign_in).toLocaleDateString()}</span>
-                  </div>
-                )}
               </div>
             </div>
 

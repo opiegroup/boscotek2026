@@ -9,7 +9,7 @@ import { submitQuote } from './services/mockBackend'; // Direct call for simplic
 import { generateReferenceCode } from './services/referenceService';
 import { CatalogProvider, useCatalog } from './contexts/CatalogContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { BrandProvider, useBrand } from './contexts/BrandContext';
+import { BrandProvider, useBrand, DistributorBrandGuard } from './contexts/BrandContext';
 import BrandThemeProvider from './components/BrandThemeProvider';
 import BrandSelector from './components/BrandSelector';
 import AdminDashboard from './components/admin/AdminDashboard';
@@ -495,9 +495,11 @@ const App: React.FC = () => {
     <AuthProvider>
       <BrandProvider>
         <BrandThemeProvider>
-          <CatalogProvider>
-            <BoscotekApp />
-          </CatalogProvider>
+          <DistributorBrandGuard>
+            <CatalogProvider>
+              <BoscotekApp />
+            </CatalogProvider>
+          </DistributorBrandGuard>
         </BrandThemeProvider>
       </BrandProvider>
     </AuthProvider>
