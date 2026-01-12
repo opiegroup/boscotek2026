@@ -16,6 +16,107 @@ import CurrencyManagement from './CurrencyManagement';
 import PricingCSV from './PricingCSV';
 import BrandSettings from './BrandSettings';
 
+// --- Helper Components for NetSuite Reference Fields ---
+
+// Sales Order Number input with local state (saves on blur)
+const SalesOrderInput: React.FC<{
+  quoteId: string;
+  initialValue: string;
+  onSaved: (value: string) => void;
+}> = ({ quoteId, initialValue, onSaved }) => {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue, quoteId]);
+  
+  const handleSave = async () => {
+    if (value === initialValue) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const success = await updateQuoteSalesOrderNumber(quoteId, value);
+      if (success) {
+        onSaved(value);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to save sales order number:', err);
+    }
+    setSaving(false);
+  };
+  
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        placeholder="e.g. SO-12345"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget.blur())}
+        className="w-full max-w-xs bg-zinc-900 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none font-mono"
+      />
+      {saving && <span className="text-xs text-amber-500">Saving...</span>}
+      {saved && <span className="text-xs text-green-500">✓ Saved</span>}
+    </div>
+  );
+};
+
+// OG Number input with local state (saves on blur)
+const OgNumberInput: React.FC<{
+  quoteId: string;
+  itemId: string;
+  initialValue: string;
+  onSaved: (value: string) => void;
+}> = ({ quoteId, itemId, initialValue, onSaved }) => {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  
+  useEffect(() => {
+    setValue(initialValue);
+  }, [initialValue, quoteId, itemId]);
+  
+  const handleSave = async () => {
+    if (value === initialValue) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      const success = await updateQuoteItemOgNumber(quoteId, itemId, value);
+      if (success) {
+        onSaved(value);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch (err) {
+      console.error('Failed to save OG number:', err);
+    }
+    setSaving(false);
+  };
+  
+  return (
+    <div className="flex items-center gap-2 flex-1">
+      <input
+        type="text"
+        placeholder="e.g. OG-12345"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget.blur())}
+        className="flex-1 max-w-[200px] bg-zinc-950 border border-zinc-700 text-white text-sm rounded px-2 py-1 focus:border-amber-500 outline-none font-mono"
+      />
+      {saving && <span className="text-xs text-amber-500">Saving...</span>}
+      {saved && <span className="text-xs text-green-500">✓</span>}
+    </div>
+  );
+};
+
+// --- End Helper Components ---
+
 interface AdminDashboardProps {
   onExit: () => void;
 }
@@ -658,16 +759,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <div className="p-4">
                              <div>
                                 <label className="text-[10px] text-zinc-500 uppercase font-mono mb-1 block">Sales Order Number</label>
-                                <input
-                                   type="text"
-                                   placeholder="e.g. SO-12345"
-                                   value={selectedQuote.salesOrderNumber || ''}
-                                   onChange={async (e) => {
-                                      const newValue = e.target.value;
-                                      await updateQuoteSalesOrderNumber(selectedQuote.id, newValue);
+                                <SalesOrderInput 
+                                   quoteId={selectedQuote.id}
+                                   initialValue={selectedQuote.salesOrderNumber || ''}
+                                   onSaved={(newValue) => {
+                                      // Update selectedQuote
                                       setSelectedQuote({ ...selectedQuote, salesOrderNumber: newValue });
+                                      // Also update quotes array so it persists when switching quotes
+                                      setQuotes(quotes.map(q => 
+                                         q.id === selectedQuote.id ? { ...q, salesOrderNumber: newValue } : q
+                                      ));
                                    }}
-                                   className="w-full max-w-xs bg-zinc-900 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none font-mono"
                                 />
                                 <p className="text-[10px] text-zinc-600 mt-1">Links this quote to NetSuite production system</p>
                              </div>
@@ -698,20 +800,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                    <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/30">
                                       <div className="flex items-center gap-3">
                                          <label className="text-[10px] text-zinc-500 uppercase font-mono whitespace-nowrap">OG Number</label>
-                                         <input
-                                            type="text"
-                                            placeholder="e.g. OG-12345"
-                                            value={item.ogNumber || ''}
-                                            onChange={async (e) => {
-                                               const newValue = e.target.value;
-                                               await updateQuoteItemOgNumber(selectedQuote.id, item.id, newValue);
-                                               // Update local state
+                                         <OgNumberInput
+                                            quoteId={selectedQuote.id}
+                                            itemId={item.id}
+                                            initialValue={item.ogNumber || ''}
+                                            onSaved={(newValue) => {
                                                const updatedItems = selectedQuote.items.map(i => 
                                                   i.id === item.id ? { ...i, ogNumber: newValue } : i
                                                );
-                                               setSelectedQuote({ ...selectedQuote, items: updatedItems });
+                                               const updatedQuote = { ...selectedQuote, items: updatedItems };
+                                               setSelectedQuote(updatedQuote);
+                                               // Also update quotes array so it persists when switching quotes
+                                               setQuotes(quotes.map(q => 
+                                                  q.id === selectedQuote.id ? updatedQuote : q
+                                               ));
                                             }}
-                                            className="flex-1 max-w-[200px] bg-zinc-950 border border-zinc-700 text-white text-sm rounded px-2 py-1 focus:border-amber-500 outline-none font-mono"
                                          />
                                       </div>
                                    </div>

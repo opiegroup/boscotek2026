@@ -534,23 +534,36 @@ export const updateQuoteStatus = async (quoteId: string, status: QuoteStatus, in
 };
 
 // Update NetSuite Sales Order number for a quote
-export const updateQuoteSalesOrderNumber = async (quoteId: string, salesOrderNumber: string): Promise<void> => {
-  await supabase.from('quotes').update({ sales_order_number: salesOrderNumber || null }).eq('id', quoteId);
+export const updateQuoteSalesOrderNumber = async (quoteId: string, salesOrderNumber: string): Promise<boolean> => {
+  const { error } = await supabase
+    .from('quotes')
+    .update({ sales_order_number: salesOrderNumber || null })
+    .eq('id', quoteId);
+  
+  if (error) {
+    console.error('Failed to update sales order number:', error);
+    return false;
+  }
+  console.log('Sales order number saved:', salesOrderNumber);
+  return true;
 };
 
 // Update OG number for a specific line item in a quote
-export const updateQuoteItemOgNumber = async (quoteId: string, itemId: string, ogNumber: string): Promise<void> => {
+export const updateQuoteItemOgNumber = async (quoteId: string, itemId: string, ogNumber: string): Promise<boolean> => {
   // First fetch the quote to get current items
-  const { data: quote, error } = await supabase
+  const { data: quote, error: fetchError } = await supabase
     .from('quotes')
     .select('items_data')
     .eq('id', quoteId)
     .single();
   
-  if (error || !quote) return;
+  if (fetchError || !quote) {
+    console.error('Failed to fetch quote for OG update:', fetchError);
+    return false;
+  }
   
   // Update the OG number for the specific item
-  const updatedItems = quote.items_data.map((item: any) => {
+  const updatedItems = (quote.items_data || []).map((item: any) => {
     if (item.id === itemId) {
       return { ...item, ogNumber: ogNumber || null };
     }
@@ -558,7 +571,17 @@ export const updateQuoteItemOgNumber = async (quoteId: string, itemId: string, o
   });
   
   // Save back to database
-  await supabase.from('quotes').update({ items_data: updatedItems }).eq('id', quoteId);
+  const { error: updateError } = await supabase
+    .from('quotes')
+    .update({ items_data: updatedItems })
+    .eq('id', quoteId);
+  
+  if (updateError) {
+    console.error('Failed to update OG number:', updateError);
+    return false;
+  }
+  console.log('OG number saved for item', itemId, ':', ogNumber);
+  return true;
 };
 
 // --- IMPORT & AI ---
