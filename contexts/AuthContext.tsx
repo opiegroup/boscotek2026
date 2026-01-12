@@ -66,18 +66,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     };
 
     try {
-      // Fetch user role
+      // Fetch user role using RPC for proper priority ordering
+      // (super_admin > admin > pricing_manager > sales > distributor > viewer)
       const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', supabaseUser.id)
-        .order('role') // Get highest priority role
-        .limit(1);
+        .rpc('get_user_role');
 
       if (roleError) {
-        console.warn('Failed to fetch user role:', roleError);
-      } else if (roleData && roleData.length > 0) {
-        baseUser.role = roleData[0].role as UserRole;
+        console.warn('Failed to fetch user role via RPC, trying direct query:', roleError);
+        // Fallback to direct query with proper ordering
+        const { data: fallbackData } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', supabaseUser.id);
+        
+        if (fallbackData && fallbackData.length > 0) {
+          // Manually prioritize roles
+          const roles = fallbackData.map(r => r.role);
+          if (roles.includes('super_admin')) baseUser.role = 'super_admin';
+          else if (roles.includes('admin')) baseUser.role = 'admin';
+          else if (roles.includes('pricing_manager')) baseUser.role = 'pricing_manager';
+          else if (roles.includes('sales')) baseUser.role = 'sales';
+          else if (roles.includes('distributor')) baseUser.role = 'distributor';
+          else if (roles.includes('viewer')) baseUser.role = 'viewer';
+        }
+      } else if (roleData) {
+        baseUser.role = roleData as UserRole;
       }
 
       // If distributor, fetch distributor details
