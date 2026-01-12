@@ -47,6 +47,111 @@ Distributors see their specific pricing tier applied automatically when logged i
 6. **All pricing calculations run server-side** (Supabase Edge Functions) and return only permitted fields to the client.
 7. **Every quote and pricing override must be auditable** (who, when, what changed, before/after).
 8. **Notifications are event-driven** - key actions trigger notifications to relevant roles via email and in-app.
+9. **Treat `brand_id` as mandatory in every server-side read and write path, and test for leakage.**
+
+## Brand Isolation and Multi-Brand Architecture
+
+This platform is a single core engine that serves multiple brand-scoped storefronts.
+
+### Core Principles
+
+- **Brand is a first-class boundary** and must be enforced in data, APIs, permissions, caching, and UI.
+- **Every major entity must be brand-scoped**: products, rulesets, pricing, quotes, orders, customer associations, media, CMS content, CSV imports, audit logs.
+- **No cross-brand access is allowed** unless explicitly permitted by RBAC and explicit brand selection.
+- **All queries must include `brand_id` filtering server-side**. Never rely on client-side filtering for brand boundaries.
+- **All cache keys must include `brand_id`** to prevent cross-brand leakage.
+
+### Opie Group Brands
+
+| Brand | Slug | Status |
+|-------|------|--------|
+| Boscotek | `boscotek` | Active |
+| Bosco Office & Storage | `bosco-office` | Draft |
+| Lectrum | `lectrum` | Draft |
+| Gilkon | `gilkon` | Draft |
+| Argent | `argent` | Draft |
+| SMC Stainless | `smc-stainless` | Draft |
+| Bonwick & Co | `bonwick` | Draft |
+| Opie Infrastructure | `opie-infrastructure` | Draft |
+
+### Brand Context Resolution
+
+**URL Strategy (Hostname-based recommended):**
+- `configurator.boscotek.com.au`
+- `configurator.lectrum.com.au`
+- Fallback path-based: `/boscotek/...`, `/lectrum/...`
+
+**Resolution Flow:**
+1. Request arrives
+2. Middleware resolves `brandSlug` from hostname or path
+3. Server loads `brand` record from DB
+4. Server sets `brand_id` into request context
+5. All downstream queries are scoped by `brand_id`
+
+**Rules:**
+- Public: brand is resolved from hostname or route prefix
+- Authenticated: user role grants access to one or more brands via `user_brand_access` table
+- Admin: can switch brand context via UI, but every API call still requires `brand_id`
+- Never accept `brand_id` from the client as trusted input on public endpoints
+- For admin/sales endpoints, accept `brand_id` only if it matches resolved brand context and user permission
+
+### Brand Permission Model
+
+```
+user_brand_access table:
+- user_id (UUID)
+- brand_id (UUID)
+- access_level (viewer | sales | pricing | admin)
+- scopes (JSONB) - optional granular permissions
+```
+
+**Access Levels:**
+- `viewer`: Read-only access to brand data
+- `sales`: Can create quotes, manage customers within brand
+- `pricing`: Can edit pricing and catalogue within brand
+- `admin`: Full control within brand
+
+**Matrix Example:**
+- Admin Timm: admin on all brands
+- Sales Rep A: sales on Boscotek and Lectrum only
+- Pricing Manager: pricing on Boscotek only
+
+### Implementation Requirements
+
+When implementing features involving brand-scoped data:
+
+1. **Specify how brand context is determined** (hostname, path, JWT claim)
+2. **Enforce brand filtering** in all database queries
+3. **Log brand context** in audit trails
+4. **Test for leakage** - verify users cannot access other brands' data
+5. **Include brand_id in cache keys** for any cached data
+
+### Route Structure
+
+```
+Public:
+  /{brand}/                     # Brand homepage
+  /{brand}/configurator         # Product configurator
+  /{brand}/product/{slug}       # Product detail
+  /{brand}/share/{token}        # Shared configuration
+
+Sales:
+  /{brand}/sales                # Sales dashboard
+  /{brand}/sales/quotes         # Quote list
+  /{brand}/sales/quotes/{id}    # Quote detail
+
+Admin:
+  /{brand}/admin                # Admin dashboard
+  /{brand}/admin/catalogue      # Product catalogue
+  /{brand}/admin/rulesets       # Pricing rules
+  /{brand}/admin/imports        # CSV imports
+  /{brand}/admin/audit          # Audit logs
+
+API:
+  /api/public/...               # Resolves brand from hostname/prefix
+  /api/admin/...                # Requires auth + brand scope
+  /api/sales/...                # Requires auth + brand scope
+```
 
 ## Current Stack (Preserve This)
 

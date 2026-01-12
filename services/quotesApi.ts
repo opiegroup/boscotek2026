@@ -47,13 +47,20 @@ export const getEmailSettings = (): EmailSettings => {
 export const submitQuoteFunction = async (
   customer: CustomerDetails,
   items: QuoteLineItem[],
-  totals: Totals
+  totals: Totals,
+  brandId?: string
 ) => {
   // Include email settings from localStorage
   const emailSettings = getEmailSettings();
   
   return supabase.functions.invoke<SubmitQuoteResponse>('submit-quote', {
-    body: { customer, items, totals, emailSettings }
+    body: { 
+      customer, 
+      items, 
+      totals, 
+      emailSettings,
+      brand_id: brandId 
+    }
   });
 };
 

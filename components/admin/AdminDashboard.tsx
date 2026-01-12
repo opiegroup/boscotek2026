@@ -4,7 +4,10 @@ import { useCatalog } from '../../contexts/CatalogContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
 import { ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
-import BoscotekLogo from '../BoscotekLogo';
+import BrandLogo from '../BrandLogo';
+import BrandSwitcher from '../BrandSwitcher';
+import BrandTabs from './BrandTabs';
+import { useBrand } from '../../contexts/BrandContext';
 import BIMLeadsManager from './BIMLeadsManager';
 import UserManagement from './UserManagement';
 import CompanyManagement from './CompanyManagement';
@@ -34,7 +37,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [activeStep, setActiveStep] = useState<number>(0);
   
   // Get auth context for role checks
-  const { isAdmin, canManagePricing } = useAuth(); 
+  const { isAdmin, canManagePricing } = useAuth();
+  
+  // Get brand context
+  const { brand, brandSlug } = useBrand(); 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   
   // Email Settings State
@@ -61,21 +67,27 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     quotesThisMonthValue: 0,
   });
 
-  // Load dashboard stats
+  // Load dashboard stats - FILTERED BY CURRENT BRAND
   const loadDashboardStats = async () => {
     try {
-      // BIM Leads
-      const { data: bimLeads } = await supabase.from('bim_leads').select('id, status');
+      // For Boscotek: show ALL existing data (legacy data without brand_id)
+      // For other brands: show nothing (they don't have data yet)
+      const isBoscotek = brandSlug === 'boscotek';
+      
+      // BIM Leads - only show for Boscotek
+      let bimLeadsQuery = supabase.from('bim_leads').select('id, status');
+      const { data: bimLeads } = isBoscotek ? await bimLeadsQuery : { data: [] };
       const bimLeadsNew = bimLeads?.filter(l => l.status === 'new').length || 0;
 
-      // Companies
-      const { data: companies } = await supabase.from('companies').select('id, is_approved');
+      // Companies - only show for Boscotek
+      let companiesQuery = supabase.from('companies').select('id, is_approved');
+      const { data: companies } = isBoscotek ? await companiesQuery : { data: [] };
       const companiesApproved = companies?.filter(c => c.is_approved).length || 0;
 
-      // Users
+      // Users - count all (users are not brand-specific)
       const { count: usersCount } = await supabase.from('user_roles').select('*', { count: 'exact', head: true });
 
-      // Quotes (from local state for now)
+      // Quotes (from local state - already filtered by brand in loadQuotes)
       const thisMonth = new Date();
       thisMonth.setDate(1);
       thisMonth.setHours(0, 0, 0, 0);
@@ -128,30 +140,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     });
   }, []);
 
+  // Reload data when brand changes
   useEffect(() => {
     if (isAuthenticated) {
       loadInteriors();
       loadQuotes();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, activeStep]); 
+  }, [isAuthenticated, activeStep, brandSlug]); 
 
-  // Load dashboard stats when quotes change or when on dashboard
+  // Load dashboard stats when quotes change, brand changes, or when on dashboard
   useEffect(() => {
     if (isAuthenticated && activeStep === 0) {
       loadDashboardStats();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, quotes, activeStep]);
+  }, [isAuthenticated, quotes, activeStep, brandSlug]);
 
   const loadInteriors = async () => {
-    const data = await getInteriors();
-    setInteriors(data);
+    // For Boscotek: load all interiors (legacy data)
+    // For other brands: empty (no data yet)
+    if (brandSlug === 'boscotek') {
+      const data = await getInteriors();
+      setInteriors(data);
+    } else {
+      setInteriors([]);
+    }
   }
 
   const loadQuotes = async () => {
-    const data = await getQuotes();
-    setQuotes(data);
+    // For Boscotek: load all quotes (legacy data)
+    // For other brands: empty (no data yet)
+    if (brandSlug === 'boscotek') {
+      const data = await getQuotes();
+      setQuotes(data);
+    } else {
+      setQuotes([]);
+    }
   }
 
   // --- AUTH HANDLERS ---
@@ -216,7 +241,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-xl shadow-2xl">
           <div className="mb-8 flex justify-center">
-            <BoscotekLogo className="h-10" />
+            <BrandLogo className="h-10" />
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -256,8 +281,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       {/* Sidebar */}
       <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-20">
         <div className="p-6 border-b border-zinc-800 flex flex-col items-start gap-3">
-          <BoscotekLogo className="h-6" showText={true} />
-          <div className="text-xs font-mono text-zinc-500 bg-zinc-950 px-2 py-1 rounded">ADMIN ACCESS</div>
+          <BrandLogo className="h-6" showText={true} />
+          <div className="flex items-center gap-2 w-full">
+            <div className="text-xs font-mono text-zinc-500 bg-zinc-950 px-2 py-1 rounded">ADMIN ACCESS</div>
+          </div>
+          {/* Brand Switcher */}
+          <div className="w-full pt-2 border-t border-zinc-800 mt-2">
+            <BrandSwitcher showLabel={true} className="w-full" />
+          </div>
         </div>
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <button onClick={() => setActiveStep(0)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 0 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Dashboard</button>
@@ -299,7 +330,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-8 overflow-y-auto">
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* Brand Tabs - Fixed at top */}
+        <div className="bg-zinc-950 border-b border-zinc-800 px-8 pt-4">
+          <BrandTabs />
+        </div>
+        
+        {/* Scrollable Content */}
+        <div className="flex-1 p-8 overflow-y-auto">
         
         {/* DASHBOARD */}
         {activeStep === 0 && (
@@ -307,7 +345,9 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             <div className="flex justify-between items-center">
                <div>
                  <h1 className="text-3xl font-bold">Dashboard</h1>
-                 <p className="text-zinc-500 text-sm">Overview of your Boscotek configurator</p>
+                 <p className="text-zinc-500 text-sm">
+                   Overview of your {brand?.name || 'Boscotek'} configurator
+                 </p>
                </div>
                <div className="flex gap-2">
                   <button 
@@ -981,6 +1021,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             </div>
           </div>
         )}
+        </div>
       </main>
     </div>
   );

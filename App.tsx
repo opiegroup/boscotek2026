@@ -9,13 +9,17 @@ import { submitQuote } from './services/mockBackend'; // Direct call for simplic
 import { generateReferenceCode } from './services/referenceService';
 import { CatalogProvider, useCatalog } from './contexts/CatalogContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { BrandProvider, useBrand } from './contexts/BrandContext';
+import BrandThemeProvider from './components/BrandThemeProvider';
+import BrandSelector from './components/BrandSelector';
 import AdminDashboard from './components/admin/AdminDashboard';
-import BoscotekLogo from './components/BoscotekLogo';
+import BrandLogo, { BrandName } from './components/BrandLogo';
 
 // Internal App Content (Needs Access to Context)
 const BoscotekApp: React.FC = () => {
   const { products, isLoading } = useCatalog();
   const { user, isAuthenticated, isAdmin, isStaff, isDistributor, signOut } = useAuth();
+  const { brand, theme, isLoading: brandLoading } = useBrand();
   const [isAdminMode, setIsAdminMode] = useState(false);
   
   // Navigation State
@@ -222,8 +226,15 @@ const BoscotekApp: React.FC = () => {
     return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
   }
 
-  if (isLoading) {
-    return <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">Loading Catalog...</div>;
+  if (isLoading || brandLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">
+        <div className="text-center">
+          <div className="animate-spin h-8 w-8 border-2 border-amber-500 border-t-transparent rounded-full mx-auto mb-4" />
+          <p>Loading {brand?.name || 'Configurator'}...</p>
+        </div>
+      </div>
+    );
   }
 
   // 1. SUCCESS VIEW
@@ -264,10 +275,16 @@ const BoscotekApp: React.FC = () => {
      );
   }
 
-  // 3. CATALOG VIEW (Product Selection)
+  // 3. CATALOG VIEW (Product Selection) - BRAND-AWARE LANDING PAGE
   if (viewMode === 'catalog') {
+    const primaryColor = theme.primaryColor || '#f59e0b';
+    const accentColor = theme.accentColor || '#292926';
+    
     return (
-      <div className="min-h-screen text-white flex flex-col relative" style={{ backgroundColor: '#3e3e3e' }}>
+      <div 
+        className="min-h-screen text-white flex flex-col relative" 
+        style={{ backgroundColor: accentColor }}
+      >
         
         {/* Top Right User/Admin Access */}
         <div className="absolute top-6 right-6 z-10 flex items-center gap-4">
@@ -286,14 +303,20 @@ const BoscotekApp: React.FC = () => {
               </div>
            )}
            
-           {/* Cart button */}
+           {/* Cart button - uses brand primary color */}
            {quoteItems.length > 0 && (
               <button 
                 onClick={() => setViewMode('cart')}
-                className="flex items-center gap-2 bg-amber-500 text-black font-bold px-6 py-2 rounded-full shadow-lg hover:bg-amber-400 transition-all animate-bounce"
+                className="flex items-center gap-2 text-black font-bold px-6 py-2 rounded-full shadow-lg transition-all animate-bounce"
+                style={{ backgroundColor: primaryColor }}
               >
                  <span>View Cart</span>
-                 <span className="bg-black text-amber-500 text-xs rounded-full w-5 h-5 flex items-center justify-center">{quoteItems.length}</span>
+                 <span 
+                   className="text-xs rounded-full w-5 h-5 flex items-center justify-center"
+                   style={{ backgroundColor: 'black', color: primaryColor }}
+                 >
+                   {quoteItems.length}
+                 </span>
               </button>
            )}
            
@@ -319,24 +342,87 @@ const BoscotekApp: React.FC = () => {
         </div>
 
         <main className="flex-1 flex flex-col items-center justify-center p-8">
+           {/* Brand Logo - Dynamic */}
            <div className="mb-10 transform scale-125">
-             <BoscotekLogo className="h-16" showText={true} />
+             <BrandLogo className="h-16" showText={true} />
            </div>
 
-           <h1 className="text-3xl font-bold mb-8 text-white">Select a Product to Configure</h1>
+           {/* Brand Name & Tagline */}
+           <h1 className="text-3xl font-bold mb-2 text-white">
+             <BrandName /> Product Configurator
+           </h1>
+           <p className="text-zinc-400 mb-8">
+             Select a product to configure and get an instant quote
+           </p>
            
-           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
-              {products.map(prod => (
-                <button 
-                  key={prod.id} 
-                  onClick={() => handleSelectProduct(prod)}
-                  className="bg-[#2a2a2a] border border-[#4a4a4a] hover:border-amber-500 p-8 rounded-xl text-left transition-all group shadow-xl hover:shadow-2xl hover:-translate-y-1"
-                >
-                  <h3 className="text-xl font-bold mb-2 group-hover:text-amber-500">{prod.name}</h3>
-                  <p className="text-zinc-400 text-sm">{prod.description}</p>
-                  <div className="mt-4 text-xs font-mono text-zinc-500">From ${prod.basePrice}</div>
-                </button>
-              ))}
+           {/* Product Grid - uses brand accent color for hover */}
+           {products.length > 0 ? (
+             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
+                {products.map(prod => (
+                  <button 
+                    key={prod.id} 
+                    onClick={() => handleSelectProduct(prod)}
+                    className="bg-[#2a2a2a] border border-[#4a4a4a] p-8 rounded-xl text-left transition-all group shadow-xl hover:shadow-2xl hover:-translate-y-1"
+                    style={{ 
+                      '--hover-border-color': primaryColor 
+                    } as React.CSSProperties}
+                    onMouseEnter={(e) => e.currentTarget.style.borderColor = primaryColor}
+                    onMouseLeave={(e) => e.currentTarget.style.borderColor = '#4a4a4a'}
+                  >
+                    <h3 
+                      className="text-xl font-bold mb-2 transition-colors"
+                      style={{ color: 'white' }}
+                      onMouseEnter={(e) => e.currentTarget.style.color = primaryColor}
+                      onMouseLeave={(e) => e.currentTarget.style.color = 'white'}
+                    >
+                      {prod.name}
+                    </h3>
+                    <p className="text-zinc-400 text-sm">{prod.description}</p>
+                    <div className="mt-4 text-xs font-mono text-zinc-500">From ${prod.basePrice}</div>
+                  </button>
+                ))}
+             </div>
+           ) : (
+             /* Empty State - No products for this brand yet */
+             <div className="max-w-lg text-center">
+               <div 
+                 className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center"
+                 style={{ backgroundColor: `${primaryColor}20` }}
+               >
+                 <svg 
+                   className="w-10 h-10" 
+                   fill="none" 
+                   stroke={primaryColor}
+                   viewBox="0 0 24 24"
+                 >
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                 </svg>
+               </div>
+               <h2 className="text-xl font-bold text-white mb-3">
+                 Coming Soon
+               </h2>
+               <p className="text-zinc-400 mb-6">
+                 The <span style={{ color: primaryColor }}>{brand?.name}</span> product configurator is currently being set up. 
+                 Check back soon for configurable products!
+               </p>
+               <div className="flex flex-col items-center gap-4">
+                 {isAdmin && (
+                   <button
+                     onClick={() => setIsAdminMode(true)}
+                     className="px-6 py-3 rounded-lg font-medium text-black transition-colors"
+                     style={{ backgroundColor: primaryColor }}
+                   >
+                     Add Products
+                   </button>
+                 )}
+                 <BrandSelector label="View Other Brands" />
+               </div>
+             </div>
+           )}
+           
+           {/* Brand Footer */}
+           <div className="mt-12 text-center text-zinc-500 text-sm">
+             <p>Part of the <span className="text-zinc-400">Opie Manufacturing Group</span></p>
            </div>
         </main>
       </div>
@@ -407,9 +493,13 @@ const BoscotekApp: React.FC = () => {
 const App: React.FC = () => {
   return (
     <AuthProvider>
-      <CatalogProvider>
-        <BoscotekApp />
-      </CatalogProvider>
+      <BrandProvider>
+        <BrandThemeProvider>
+          <CatalogProvider>
+            <BoscotekApp />
+          </CatalogProvider>
+        </BrandThemeProvider>
+      </BrandProvider>
     </AuthProvider>
   );
 };

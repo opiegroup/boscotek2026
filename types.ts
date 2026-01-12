@@ -210,6 +210,56 @@ export interface FrameColorOption {
   code: string;
 }
 
+// --- BRAND TYPES ---
+
+export type BrandStatus = 'active' | 'draft' | 'disabled';
+export type BrandAccessLevel = 'viewer' | 'sales' | 'pricing' | 'admin' | 'none';
+
+export interface BrandTheme {
+  logo?: string;
+  primaryColor?: string;
+  accentColor?: string;
+  fontFamily?: string;
+}
+
+export interface BrandFeatures {
+  enableBimExport?: boolean;
+  enableQuoteCart?: boolean;
+  enableDistributorPricing?: boolean;
+  enableDrawerConfigurator?: boolean;
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  code: string | null;
+  primaryDomain: string | null;
+  allowedDomains: string[];
+  status: BrandStatus;
+  themeJson: BrandTheme;
+  featuresJson: BrandFeatures;
+  contactEmail: string | null;
+  supportEmail: string | null;
+  phone: string | null;
+  addressJson: Record<string, string> | null;
+  metaTitle: string | null;
+  metaDescription: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UserBrandAccess {
+  id: string;
+  userId: string;
+  brandId: string;
+  accessLevel: BrandAccessLevel;
+  scopes: string[];
+  isActive: boolean;
+  grantedAt: string;
+  grantedBy: string | null;
+}
+
 // --- ADMIN & BACKEND TYPES ---
 
 export type UserRole = 'admin' | 'pricing_manager' | 'sales' | 'distributor' | 'viewer';

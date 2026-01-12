@@ -89,15 +89,23 @@ export const seedDatabase = async () => {
 
 // --- CATALOG API (READ) ---
 
-const refreshCache = async () => {
-  // Fetch Products
-  const { data: prodData } = await supabase.from('products').select('*');
+const refreshCache = async (brandId?: string) => {
+  // Fetch Products (optionally filtered by brand)
+  let prodQuery = supabase.from('products').select('*');
+  if (brandId) {
+    prodQuery = prodQuery.eq('brand_id', brandId);
+  }
+  const { data: prodData } = await prodQuery;
   if (prodData) {
     CACHE.products = prodData.map((row: any) => row.data as ProductDefinition);
   }
 
-  // Fetch Interiors
-  const { data: intData } = await supabase.from('drawer_interiors').select('*');
+  // Fetch Interiors (optionally filtered by brand)
+  let intQuery = supabase.from('drawer_interiors').select('*');
+  if (brandId) {
+    intQuery = intQuery.eq('brand_id', brandId);
+  }
+  const { data: intData } = await intQuery;
   if (intData) {
     CACHE.interiors = intData.map((row: any) => row.data as DrawerInteriorOption);
   }
@@ -109,16 +117,17 @@ const refreshCache = async () => {
   CACHE.isLoaded = true;
 };
 
-export const getProducts = async (): Promise<ProductDefinition[]> => {
+export const getProducts = async (brandId?: string): Promise<ProductDefinition[]> => {
   // ALWAYS use SEED_CATALOG as source of truth for product definitions
   // This ensures drawer options are always correct (75, 100, 150, 225, 300 only)
   // Database is used for pricing overrides via Admin, but core structure comes from code
+  // Note: In future, filter SEED_CATALOG by brand or fetch from DB with brand_id filter
   return SEED_CATALOG;
 };
 
-export const getInteriors = async (): Promise<DrawerInteriorOption[]> => {
+export const getInteriors = async (brandId?: string): Promise<DrawerInteriorOption[]> => {
   if (!CACHE.isLoaded || CACHE.interiors.length === 0) {
-    await refreshCache();
+    await refreshCache(brandId);
   }
   if (CACHE.interiors.length === 0) {
     return SEED_INTERIORS;
@@ -126,9 +135,9 @@ export const getInteriors = async (): Promise<DrawerInteriorOption[]> => {
   return CACHE.interiors;
 };
 
-export const getAccessories = async (): Promise<DrawerAccessory[]> => {
+export const getAccessories = async (brandId?: string): Promise<DrawerAccessory[]> => {
   if (!CACHE.isLoaded || CACHE.accessories.length === 0) {
-    await refreshCache();
+    await refreshCache(brandId);
   }
   if (CACHE.accessories.length === 0) {
     return SEED_ACCESSORIES;
@@ -491,8 +500,15 @@ export const submitQuote = async (
   };
 };
 
-export const getQuotes = async (): Promise<Quote[]> => {
-  const { data, error } = await supabase.from('quotes').select('*').order('created_at', { ascending: false });
+export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
+  let query = supabase.from('quotes').select('*').order('created_at', { ascending: false });
+  
+  // Filter by brand_id if provided
+  if (brandId) {
+    query = query.eq('brand_id', brandId);
+  }
+  
+  const { data, error } = await query;
   if (error) return [];
   
   return data.map((d: any) => ({
@@ -504,7 +520,8 @@ export const getQuotes = async (): Promise<Quote[]> => {
     customer: d.customer_data,
     items: d.items_data,
     totals: d.totals,
-    internalNotes: d.internal_notes
+    internalNotes: d.internal_notes,
+    brandId: d.brand_id
   }));
 };
 
