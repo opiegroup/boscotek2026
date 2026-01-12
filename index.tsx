@@ -1,11 +1,19 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import AppRouter from './Router';
 
-// Embedding Instructions:
-// 1. Ensure a div with id="boscotek-configurator-root" exists on the page.
-// 2. Load the bundled JS.
-// 3. The app will mount into the div automatically.
+/**
+ * OPIE Group Product Configurator Platform
+ * 
+ * Multi-brand configurator with routing:
+ * - / : OPIE Group brand selector
+ * - /{brand}/ : Brand landing page
+ * - /{brand}/configurator : Product configurator
+ * 
+ * Embedding:
+ * - Add ?embed=1 to any configurator URL to use embed mode
+ * - Example: <iframe src="https://configurator.opie.com.au/boscotek/configurator?embed=1" />
+ */
 
 const rootElement = document.getElementById('boscotek-configurator-root');
 if (!rootElement) {
@@ -15,6 +23,6 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <AppRouter />
   </React.StrictMode>
 );

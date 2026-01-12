@@ -27,7 +27,7 @@ const FALLBACK_BRANDS: Brand[] = [
     code: 'AR',
     primaryDomain: 'configurator.argent.com.au',
     allowedDomains: [],
-    status: 'active',
+    status: 'draft',
     themeJson: { primaryColor: '#8b5cf6', accentColor: '#2e1065' },
     featuresJson: { enableBimExport: true, enableQuoteCart: true },
     logoUrl: null,
@@ -37,7 +37,7 @@ const FALLBACK_BRANDS: Brand[] = [
     phone: null,
     addressJson: null,
     metaTitle: 'Argent Configurator',
-    metaDescription: 'Configure Argent products',
+    metaDescription: 'Precision-engineered fabrication solutions built for specialised industrial and infrastructure applications.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -48,7 +48,7 @@ const FALLBACK_BRANDS: Brand[] = [
     code: 'BO',
     primaryDomain: 'configurator.boscooffice.com.au',
     allowedDomains: [],
-    status: 'active',
+    status: 'draft',
     themeJson: { primaryColor: '#f59e0b', accentColor: '#292926' },
     featuresJson: { enableBimExport: true, enableQuoteCart: true },
     logoUrl: null,
@@ -58,7 +58,7 @@ const FALLBACK_BRANDS: Brand[] = [
     phone: null,
     addressJson: null,
     metaTitle: 'Bosco Office Configurator',
-    metaDescription: 'Configure Bosco Office & Storage products',
+    metaDescription: 'Smart office storage systems designed for modern workplaces, combining functionality, durability, and clean design.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -79,7 +79,7 @@ const FALLBACK_BRANDS: Brand[] = [
     phone: null,
     addressJson: null,
     metaTitle: 'Boscotek Configurator',
-    metaDescription: 'Configure Boscotek industrial storage products',
+    metaDescription: 'Heavy-duty industrial workbenches and storage systems engineered for performance, strength, and flexibility.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -90,7 +90,7 @@ const FALLBACK_BRANDS: Brand[] = [
     code: 'GK',
     primaryDomain: 'configurator.gilkon.com.au',
     allowedDomains: [],
-    status: 'active',
+    status: 'draft',
     themeJson: { primaryColor: '#3b82f6', accentColor: '#1e3a5f' },
     featuresJson: { enableBimExport: true, enableQuoteCart: true },
     logoUrl: null,
@@ -100,7 +100,7 @@ const FALLBACK_BRANDS: Brand[] = [
     phone: null,
     addressJson: null,
     metaTitle: 'Gilkon Configurator',
-    metaDescription: 'Configure Gilkon mounting solutions',
+    metaDescription: 'Integrated AV, display, and mounting solutions designed for commercial and technical environments.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -113,7 +113,7 @@ const FALLBACK_BRANDS: Brand[] = [
     allowedDomains: [],
     status: 'active',
     themeJson: { primaryColor: '#10b981', accentColor: '#1f2937' },
-    featuresJson: { enableBimExport: true, enableQuoteCart: true },
+    featuresJson: { enableBimExport: false, enableQuoteCart: true },
     logoUrl: null,
     contactEmail: null,
     salesEmail: null,
@@ -121,7 +121,7 @@ const FALLBACK_BRANDS: Brand[] = [
     phone: null,
     addressJson: null,
     metaTitle: 'Lectrum Configurator',
-    metaDescription: 'Configure Lectrum products',
+    metaDescription: 'Premium lecterns and presentation furniture crafted for professional, education, and corporate spaces.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -401,4 +401,89 @@ export function clearBrandCache(): void {
  */
 export async function getDefaultBrand(): Promise<Brand | null> {
   return getBrandBySlug('boscotek');
+}
+
+/**
+ * Public brand data for the group landing page
+ * Only includes safe-to-expose fields
+ */
+export interface PublicBrand {
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+  status: 'active' | 'draft' | 'disabled';
+  description: string | null;
+  primaryColor: string;
+}
+
+/**
+ * Fetch public brand list for the OPIE Group landing page
+ * Returns only active brands with safe-to-expose data
+ */
+export async function getPublicBrands(): Promise<PublicBrand[]> {
+  try {
+    const { data, error } = await supabase
+      .from('brands')
+      .select('name, slug, logo_url, status, meta_description, theme_json')
+      .in('status', ['active', 'draft'])
+      .order('name');
+    
+    if (error || !data || data.length === 0) {
+      console.warn('No brands in DB, using fallback brands for public list:', error);
+      // Return fallback brands with public-safe data
+      return FALLBACK_BRANDS.map(b => ({
+        name: b.name,
+        slug: b.slug,
+        logoUrl: b.logoUrl,
+        status: b.status as 'active' | 'draft' | 'disabled',
+        description: b.metaDescription,
+        primaryColor: b.themeJson?.primaryColor || '#f59e0b',
+      }));
+    }
+    
+    return data.map(row => ({
+      name: row.name,
+      slug: row.slug,
+      logoUrl: row.logo_url,
+      status: row.status,
+      description: row.meta_description,
+      primaryColor: row.theme_json?.primaryColor || '#f59e0b',
+    }));
+  } catch (err) {
+    console.error('Error fetching public brands:', err);
+    // Return fallback brands on error
+    return FALLBACK_BRANDS.map(b => ({
+      name: b.name,
+      slug: b.slug,
+      logoUrl: b.logoUrl,
+      status: b.status as 'active' | 'draft' | 'disabled',
+      description: b.metaDescription,
+      primaryColor: b.themeJson?.primaryColor || '#f59e0b',
+    }));
+  }
+}
+
+/**
+ * Check if a brand has products configured
+ * Used to show "Coming soon" on brand cards
+ */
+export async function brandHasProducts(brandId: string): Promise<boolean> {
+  try {
+    const { count, error } = await supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .eq('brand_id', brandId)
+      .eq('is_active', true);
+    
+    if (error) {
+      console.warn('Error checking brand products:', error);
+      // Default to true (assume has products) on error
+      return true;
+    }
+    
+    return (count ?? 0) > 0;
+  } catch (err) {
+    console.error('Error checking brand products:', err);
+    return true;
+  }
 }

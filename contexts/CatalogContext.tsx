@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode, useCa
 import { ProductDefinition, DrawerInteriorOption } from '../types';
 import { getProducts, getInteriors } from '../services/mockBackend';
 import { useBrand } from './BrandContext';
+import { getLectrumProducts } from '../services/products/lectrumCatalog';
 
 interface CatalogContextType {
   products: ProductDefinition[];
@@ -30,22 +31,31 @@ export const CatalogProvider: React.FC<{ children: ReactNode }> = ({ children })
   const refreshCatalog = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [prods, ints] = await Promise.all([
-        getProducts(brand?.id),
-        getInteriors(brand?.id)
-      ]);
-      
-      // IMPORTANT: Only show products for the correct brand
-      // Currently, SEED_CATALOG products are for Boscotek only
-      // Other brands should show empty until products are created
-      if (brandSlug === 'boscotek') {
-        setProducts(prods);
-        setInteriors(ints);
-      } else {
-        // Non-Boscotek brands have no products yet
-        // TODO: In production, products will come from DB filtered by brand_id
-        setProducts([]);
-        setInteriors([]);
+      // Brand-specific product loading
+      switch (brandSlug) {
+        case 'boscotek':
+          // Boscotek uses the existing product catalog
+          const [prods, ints] = await Promise.all([
+            getProducts(brand?.id),
+            getInteriors(brand?.id)
+          ]);
+          setProducts(prods);
+          setInteriors(ints);
+          break;
+          
+        case 'lectrum':
+          // Lectrum has its own product catalog
+          const lectrumProducts = getLectrumProducts();
+          setProducts(lectrumProducts);
+          setInteriors([]); // Lectrum doesn't use drawer interiors
+          break;
+          
+        default:
+          // Other brands have no products yet
+          // TODO: In production, products will come from DB filtered by brand_id
+          setProducts([]);
+          setInteriors([]);
+          break;
       }
     } catch (err) {
       console.error("Failed to load catalog", err);

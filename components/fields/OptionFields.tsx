@@ -104,25 +104,66 @@ type ColorFieldProps = {
   onChange: (val: string) => void;
 };
 
-export const ColorField: React.FC<ColorFieldProps> = ({ options, value, onChange }) => (
-  <div className="flex flex-wrap gap-2">
-    {options.map((opt) => (
-      <button
-        key={opt.id}
-        onClick={() => onChange(opt.id)}
-        title={opt.label}
-        className={`
-          w-8 h-8 rounded-full border-2 transition-all shadow-sm
-          ${value === opt.id ? 'border-amber-500 scale-110' : 'border-zinc-600 hover:border-zinc-400'}
-        `}
-        style={{ backgroundColor: opt.value as string }}
-      />
-    ))}
-    <div className="w-full text-xs text-zinc-500 mt-1 pl-1 font-mono">
-      {options.find(o => o.id === value)?.label}
+export const ColorField: React.FC<ColorFieldProps> = ({ options, value, onChange }) => {
+  const [hoveredColor, setHoveredColor] = React.useState<string | null>(null);
+  
+  const selectedOption = options.find(o => o.id === value);
+  const hoveredOption = hoveredColor ? options.find(o => o.id === hoveredColor) : null;
+  const displayOption = hoveredOption || selectedOption;
+  
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {options.map((opt) => {
+          // Get hex colour from meta.hex, fallback to value if it looks like a hex code
+          const hexColour = opt.meta?.hex || (typeof opt.value === 'string' && opt.value.startsWith('#') ? opt.value : '#888888');
+          const isSelected = value === opt.id;
+          return (
+            <button
+              key={opt.id}
+              onClick={() => onChange(opt.id)}
+              onMouseEnter={() => setHoveredColor(opt.id)}
+              onMouseLeave={() => setHoveredColor(null)}
+              title={opt.label}
+              className={`
+                w-8 h-8 rounded-full border-2 transition-all shadow-sm relative
+                ${isSelected ? 'border-amber-500 scale-110 ring-2 ring-amber-500/30' : 'border-zinc-600 hover:border-zinc-400 hover:scale-105'}
+              `}
+              style={{ backgroundColor: hexColour }}
+            >
+              {isSelected && (
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="w-2 h-2 rounded-full bg-white/80 shadow" />
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {/* Selected/hovered color name display */}
+      <div className="flex items-center gap-2 px-2 py-1.5 bg-zinc-800/50 rounded border border-zinc-700">
+        {displayOption && (
+          <>
+            <span 
+              className="w-4 h-4 rounded-full border border-zinc-600 flex-shrink-0" 
+              style={{ backgroundColor: displayOption.meta?.hex || '#888' }}
+            />
+            <div className="flex-1 min-w-0">
+              <span className={`text-sm font-medium ${hoveredOption ? 'text-zinc-300' : 'text-amber-400'}`}>
+                {displayOption.label}
+              </span>
+              {displayOption.description && (
+                <span className="text-xs text-zinc-500 ml-2">
+                  ({displayOption.description})
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 type QtyListFieldProps = {
   group: OptionGroup;
