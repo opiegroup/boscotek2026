@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
 import { useCatalog } from '../../contexts/CatalogContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, seedDatabase } from '../../services/mockBackend';
+import { login, checkSession, logout, updateBasePrice, updateOption, updateInteriorOption, getInteriors, getQuotes, updateQuoteStatus, updateQuoteSalesOrderNumber, updateQuoteItemOgNumber, seedDatabase } from '../../services/mockBackend';
 import { ProductDefinition, DrawerInteriorOption, Quote, QuoteStatus } from '../../types';
 import BrandLogo from '../BrandLogo';
 import BrandSwitcher from '../BrandSwitcher';
@@ -95,8 +95,8 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
       
       const quotesThisMonth = quotes.filter(q => new Date(q.createdAt) >= thisMonth);
       const quotesNew = quotes.filter(q => q.status === 'new');
-      const quotesValue = quotes.reduce((sum, q) => sum + (q.pricing?.totalPrice || 0), 0);
-      const quotesThisMonthValue = quotesThisMonth.reduce((sum, q) => sum + (q.pricing?.totalPrice || 0), 0);
+      const quotesValue = quotes.reduce((sum, q) => sum + (q.totals?.total || 0), 0);
+      const quotesThisMonthValue = quotesThisMonth.reduce((sum, q) => sum + (q.totals?.total || 0), 0);
 
       setDashboardStats({
         bimLeadsCount: bimLeads?.length || 0,
@@ -521,7 +521,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                         </td>
                         <td className="px-6 py-3">
                           <span className="font-bold text-white">
-                            ${q.pricing?.totalPrice?.toLocaleString() || '0'}
+                            ${q.totals?.total?.toLocaleString() || '0'}
                           </span>
                         </td>
                         <td className="px-6 py-3">
@@ -650,6 +650,30 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                        )}
                        </div>
 
+                       {/* NetSuite Reference Section */}
+                       <div className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+                          <div className="bg-zinc-800 px-4 py-2 border-b border-zinc-700">
+                             <h3 className="font-bold uppercase text-zinc-400 text-xs">NetSuite Reference</h3>
+                          </div>
+                          <div className="p-4">
+                             <div>
+                                <label className="text-[10px] text-zinc-500 uppercase font-mono mb-1 block">Sales Order Number</label>
+                                <input
+                                   type="text"
+                                   placeholder="e.g. SO-12345"
+                                   value={selectedQuote.salesOrderNumber || ''}
+                                   onChange={async (e) => {
+                                      const newValue = e.target.value;
+                                      await updateQuoteSalesOrderNumber(selectedQuote.id, newValue);
+                                      setSelectedQuote({ ...selectedQuote, salesOrderNumber: newValue });
+                                   }}
+                                   className="w-full max-w-xs bg-zinc-900 border border-zinc-700 text-white text-sm rounded px-3 py-2 focus:border-amber-500 outline-none font-mono"
+                                />
+                                <p className="text-[10px] text-zinc-600 mt-1">Links this quote to NetSuite production system</p>
+                             </div>
+                          </div>
+                       </div>
+
                        {/* Line Items with Full Detail */}
                        <div>
                           <h3 className="font-bold uppercase text-zinc-500 text-xs mb-3">Products ({selectedQuote.items.length})</h3>
@@ -667,6 +691,28 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                                          {item.quantity > 1 && (
                                             <div className="text-xs text-zinc-500">${item.unitPrice.toLocaleString()} each</div>
                                          )}
+                                      </div>
+                                   </div>
+                                   
+                                   {/* OG Number - NetSuite Reference */}
+                                   <div className="px-4 py-3 border-b border-zinc-800 bg-zinc-900/30">
+                                      <div className="flex items-center gap-3">
+                                         <label className="text-[10px] text-zinc-500 uppercase font-mono whitespace-nowrap">OG Number</label>
+                                         <input
+                                            type="text"
+                                            placeholder="e.g. OG-12345"
+                                            value={item.ogNumber || ''}
+                                            onChange={async (e) => {
+                                               const newValue = e.target.value;
+                                               await updateQuoteItemOgNumber(selectedQuote.id, item.id, newValue);
+                                               // Update local state
+                                               const updatedItems = selectedQuote.items.map(i => 
+                                                  i.id === item.id ? { ...i, ogNumber: newValue } : i
+                                               );
+                                               setSelectedQuote({ ...selectedQuote, items: updatedItems });
+                                            }}
+                                            className="flex-1 max-w-[200px] bg-zinc-950 border border-zinc-700 text-white text-sm rounded px-2 py-1 focus:border-amber-500 outline-none font-mono"
+                                         />
                                       </div>
                                    </div>
                                    

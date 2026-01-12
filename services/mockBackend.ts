@@ -521,7 +521,8 @@ export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
     items: d.items_data,
     totals: d.totals,
     internalNotes: d.internal_notes,
-    brandId: d.brand_id
+    brandId: d.brand_id,
+    salesOrderNumber: d.sales_order_number
   }));
 };
 
@@ -530,6 +531,34 @@ export const updateQuoteStatus = async (quoteId: string, status: QuoteStatus, in
   if (internalNotes !== undefined) updates.internal_notes = internalNotes;
   
   await supabase.from('quotes').update(updates).eq('id', quoteId);
+};
+
+// Update NetSuite Sales Order number for a quote
+export const updateQuoteSalesOrderNumber = async (quoteId: string, salesOrderNumber: string): Promise<void> => {
+  await supabase.from('quotes').update({ sales_order_number: salesOrderNumber || null }).eq('id', quoteId);
+};
+
+// Update OG number for a specific line item in a quote
+export const updateQuoteItemOgNumber = async (quoteId: string, itemId: string, ogNumber: string): Promise<void> => {
+  // First fetch the quote to get current items
+  const { data: quote, error } = await supabase
+    .from('quotes')
+    .select('items_data')
+    .eq('id', quoteId)
+    .single();
+  
+  if (error || !quote) return;
+  
+  // Update the OG number for the specific item
+  const updatedItems = quote.items_data.map((item: any) => {
+    if (item.id === itemId) {
+      return { ...item, ogNumber: ogNumber || null };
+    }
+    return item;
+  });
+  
+  // Save back to database
+  await supabase.from('quotes').update({ items_data: updatedItems }).eq('id', quoteId);
 };
 
 // --- IMPORT & AI ---

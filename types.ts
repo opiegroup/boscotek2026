@@ -105,6 +105,7 @@ export interface QuoteLineItem {
   specsSummary: string[]; // Human readable list of major options
   breakdown?: LineItem[]; // Detailed list of components and codes
   thumbnail?: string; // Base64 data URL of the configured item
+  ogNumber?: string; // NetSuite OG number for this line item
 }
 
 export interface Quote {
@@ -121,6 +122,7 @@ export interface Quote {
     total: number;
   };
   internalNotes?: string;
+  salesOrderNumber?: string; // NetSuite Sales Order number
 }
 
 // --- INTERIOR CONFIGURATION TYPES ---
