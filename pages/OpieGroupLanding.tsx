@@ -15,6 +15,7 @@ import AdminDashboard from '../components/admin/AdminDashboard';
  */
 const OpieGroupLandingContent: React.FC = () => {
   const [brands, setBrands] = useState<PublicBrand[]>([]);
+  const [masterLogo, setMasterLogo] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   
@@ -26,6 +27,12 @@ const OpieGroupLandingContent: React.FC = () => {
       try {
         const publicBrands = await getPublicBrands();
         setBrands(publicBrands);
+        
+        // Find the Opie Group master brand for the logo
+        const opieGroup = publicBrands.find(b => b.slug === 'opie-group');
+        if (opieGroup?.logoUrl) {
+          setMasterLogo(opieGroup.logoUrl);
+        }
       } catch (err) {
         console.error('Failed to load brands:', err);
       } finally {
@@ -35,9 +42,9 @@ const OpieGroupLandingContent: React.FC = () => {
     loadBrands();
   }, []);
 
-  // Separate active and coming soon brands
-  const activeBrands = brands.filter(b => b.status === 'active');
-  const comingSoonBrands = brands.filter(b => b.status === 'draft');
+  // Separate active and coming soon brands (exclude opie-group from display)
+  const activeBrands = brands.filter(b => b.status === 'active' && b.slug !== 'opie-group');
+  const comingSoonBrands = brands.filter(b => b.status === 'draft' && b.slug !== 'opie-group');
 
   // Show admin panel if requested
   if (showAdminPanel) {
@@ -55,7 +62,7 @@ const OpieGroupLandingContent: React.FC = () => {
       {/* Header */}
       <header className="border-b border-zinc-800">
         <div className="max-w-7xl mx-auto px-6 py-6 flex items-center justify-between">
-          <OpieLogo />
+          <OpieLogo logoUrl={masterLogo} />
           
           {/* Right Side - Auth Actions */}
           <div className="flex items-center gap-4">
@@ -168,7 +175,7 @@ const OpieGroupLandingContent: React.FC = () => {
       <footer className="border-t border-zinc-800 py-8 px-6">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <OpieLogo size="small" />
+            <OpieLogo size="small" logoUrl={masterLogo} />
             <span className="text-sm text-zinc-500">
               © {new Date().getFullYear()} Opie Manufacturing Group
             </span>
@@ -274,8 +281,24 @@ const BrandCard: React.FC<BrandCardProps> = ({ brand, isActive }) => {
 /**
  * OPIE Logo component
  */
-const OpieLogo: React.FC<{ size?: 'small' | 'large' }> = ({ size = 'large' }) => {
+const OpieLogo: React.FC<{ size?: 'small' | 'large'; logoUrl?: string | null }> = ({ size = 'large', logoUrl }) => {
   const isSmall = size === 'small';
+  
+  // If we have a custom logo URL, show it
+  if (logoUrl) {
+    return (
+      <div className={`flex items-center select-none ${isSmall ? 'h-8' : 'h-12'}`}>
+        <img 
+          src={logoUrl} 
+          alt="OPIE Group" 
+          className="h-full w-auto object-contain"
+          onError={(e) => {
+            e.currentTarget.style.display = 'none';
+          }}
+        />
+      </div>
+    );
+  }
   
   return (
     <div className={`flex items-center gap-3 select-none ${isSmall ? 'gap-2' : ''}`}>

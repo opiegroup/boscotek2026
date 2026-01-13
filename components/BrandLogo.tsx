@@ -28,12 +28,13 @@ const BrandLogo: React.FC<BrandLogoProps> = ({ className = "h-8", showText = tru
     return <BoscotekLogo className={className} showText={showText} />;
   }
   
-  // If brand has a custom logo URL (valid URL starting with http or /), use an image
-  if (theme.logo && (theme.logo.startsWith('http') || theme.logo.startsWith('/'))) {
+  // If brand has a custom logo URL or data URL, use an image
+  const logoSrc = theme.logo || (brand as any)?.logoUrl;
+  if (logoSrc && (logoSrc.startsWith('http') || logoSrc.startsWith('/') || logoSrc.startsWith('data:'))) {
     return (
       <div className={`select-none flex items-center ${className}`}>
         <img 
-          src={theme.logo} 
+          src={logoSrc} 
           alt={`${brand?.name || 'Brand'} Logo`}
           className="h-full w-auto object-contain"
           onError={(e) => {

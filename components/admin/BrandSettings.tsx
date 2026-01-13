@@ -102,36 +102,18 @@ const BrandSettings: React.FC = () => {
     setError(null);
     
     try {
-      // Create a preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      // Convert file to base64 data URL and store directly
+      // (bypasses Supabase storage issues)
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
       
-      // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${brandSlug}-logo-${Date.now()}.${fileExt}`;
-      const filePath = `brands/${brandSlug}/${fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('brand-assets')
-        .upload(filePath, file, { upsert: true });
-      
-      if (uploadError) {
-        // If bucket doesn't exist, try creating it or use a fallback
-        console.error('Upload error:', uploadError);
-        setError('Failed to upload logo. Storage may not be configured.');
-        setUploadingLogo(false);
-        return;
-      }
-      
-      // Get public URL
-      const { data: { publicUrl } } = supabase.storage
-        .from('brand-assets')
-        .getPublicUrl(filePath);
-      
-      setFormData(prev => ({ ...prev, logoUrl: publicUrl }));
+      // Store the data URL directly as the logo
+      setFormData(prev => ({ ...prev, logoUrl: dataUrl }));
+      setLogoPreview(dataUrl);
       setSuccess('Logo uploaded successfully');
     } catch (err) {
       console.error('Logo upload error:', err);
@@ -257,11 +239,15 @@ const BrandSettings: React.FC = () => {
               <div className="flex items-start gap-6">
                 {/* Logo Preview */}
                 <div className="w-32 h-32 bg-zinc-800 rounded-lg border border-zinc-700 flex items-center justify-center overflow-hidden">
-                  {logoPreview ? (
+                  {(logoPreview || formData.logoUrl) ? (
                     <img 
-                      src={logoPreview} 
+                      src={logoPreview || formData.logoUrl} 
                       alt="Logo preview" 
                       className="max-w-full max-h-full object-contain"
+                      onError={(e) => {
+                        // If image fails to load, hide it
+                        (e.target as HTMLImageElement).style.display = 'none';
+                      }}
                     />
                   ) : (
                     <span className="text-zinc-500 text-sm">No logo</span>

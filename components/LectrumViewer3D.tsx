@@ -143,28 +143,35 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   // Load logo texture when URL changes
   useEffect(() => {
     if (logoImageUrl && hasLogoAccessory) {
+      console.log('=== LOADING LOGO TEXTURE ===');
+      console.log('URL type:', logoImageUrl.startsWith('data:') ? 'data URL' : 'regular URL');
+      
       const loader = new THREE.TextureLoader();
       loader.load(
         logoImageUrl,
         (texture) => {
+          console.log('✅ Logo texture loaded!', texture.image?.width, 'x', texture.image?.height);
           texture.colorSpace = THREE.SRGBColorSpace;
-          // Improve texture mapping
+          // Reset everything to defaults
           texture.wrapS = THREE.ClampToEdgeWrapping;
           texture.wrapT = THREE.ClampToEdgeWrapping;
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
-          // Flip Y for correct orientation
+          texture.repeat.set(1, 1);
+          texture.offset.set(0, 0);
+          texture.center.set(0, 0);
           texture.flipY = true;
           texture.needsUpdate = true;
           setLogoTexture(texture);
         },
-        undefined,
+        (progress) => {
+          console.log('Loading logo texture...', progress);
+        },
         (err) => {
-          console.error('Failed to load logo texture:', err);
+          console.error('❌ Failed to load logo texture:', err);
           setLogoTexture(null);
         }
       );
     } else {
+      console.log('No logo to load - hasLogoAccessory:', hasLogoAccessory, 'logoImageUrl:', logoImageUrl ? 'present' : 'none');
       setLogoTexture(null);
     }
   }, [logoImageUrl, hasLogoAccessory]);
@@ -211,19 +218,19 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     if (hasLogoAccessory) {
       // Logo accessory selected - use WHITE background
       if (logoTexture) {
-        // Has uploaded logo - apply texture
-        return new THREE.MeshStandardMaterial({
+        // Has uploaded logo - apply texture with emissive to make it visible
+        console.log('Creating logo material WITH texture');
+        return new THREE.MeshBasicMaterial({
           map: logoTexture,
           color: '#ffffff',
-          metalness: 0.05,
-          roughness: 0.4,
+          side: THREE.DoubleSide,
         });
       }
-      // No logo uploaded yet - show white background
-      return new THREE.MeshStandardMaterial({
+      // No logo uploaded yet - show bright white background
+      console.log('Creating logo material WITHOUT texture (white)');
+      return new THREE.MeshBasicMaterial({
         color: '#ffffff',
-        metalness: 0.1,
-        roughness: 0.4,
+        side: THREE.DoubleSide,
       });
     }
     // No logo accessory - match panel colour
@@ -253,7 +260,9 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       console.log('=== UPDATING MATERIALS ===');
       console.log('hasLogoAccessory:', hasLogoAccessory);
       console.log('logoTexture:', logoTexture ? 'loaded' : 'none');
+      console.log('logoMaterial has map:', logoMaterial.map ? 'YES' : 'NO');
       console.log('logoMaterial color:', hasLogoAccessory ? 'WHITE' : 'panel colour');
+      console.log('Looking for logo materials:', mapping.logo);
       
       model.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -265,7 +274,10 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
               // Order: logo -> black -> frame -> panel -> silver (black before frame!)
               if (matchesMaterial(matName, mapping.logo)) {
                 console.log('  Applying logo material to:', matName, hasLogoAccessory ? '(WHITE)' : '(panel)');
-                return logoMaterial;
+                // Clone the material to ensure updates are applied
+                const newMaterial = logoMaterial.clone();
+                newMaterial.needsUpdate = true;
+                return newMaterial;
               }
               if (matchesMaterial(matName, mapping.black)) {
                 return staticMaterials.black;
@@ -286,7 +298,34 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             const materialName = child.userData.originalMaterialName || '';
             if (matchesMaterial(materialName, mapping.logo)) {
               console.log('  Applying logo material to mesh:', child.name, 'material:', materialName, hasLogoAccessory ? '(WHITE)' : '(panel)');
-              child.material = logoMaterial;
+              
+              // Always regenerate UVs for logo mesh (OBJ UVs are often bad)
+              if (child.geometry) {
+                console.log('  Generating planar UVs for logo mesh...');
+                child.geometry.computeBoundingBox();
+                const bbox = child.geometry.boundingBox;
+                if (bbox) {
+                  const pos = child.geometry.attributes.position;
+                  const uvs = new Float32Array(pos.count * 2);
+                  const sizeX = bbox.max.x - bbox.min.x || 1;
+                  const sizeY = bbox.max.y - bbox.min.y || 1;
+                  
+                  for (let i = 0; i < pos.count; i++) {
+                    // Map X,Y position to 0-1 UV range
+                    uvs[i * 2] = (pos.getX(i) - bbox.min.x) / sizeX;
+                    uvs[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / sizeY;
+                  }
+                  child.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+                  child.geometry.attributes.uv.needsUpdate = true;
+                  console.log('  UVs generated, bbox:', bbox.min.x.toFixed(1), bbox.min.y.toFixed(1), 'to', bbox.max.x.toFixed(1), bbox.max.y.toFixed(1));
+                }
+              }
+              
+              // Clone the material to ensure updates are applied
+              const newMaterial = logoMaterial.clone();
+              newMaterial.needsUpdate = true;
+              child.material = newMaterial;
+              child.material.needsUpdate = true;
             } else if (matchesMaterial(materialName, mapping.black)) {
               child.material = staticMaterials.black;
             } else if (matchesMaterial(materialName, mapping.frame)) {
@@ -331,21 +370,19 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       console.log('Model ID:', modelId);
       
       // Logo material - WHITE when logo accessory selected, otherwise matches panel color
-      let currentLogoMaterial: THREE.MeshStandardMaterial;
+      let currentLogoMaterial: THREE.Material;
       if (hasLogoAccessoryRef.current) {
-        // Logo accessory selected - WHITE background
+        // Logo accessory selected - use MeshBasicMaterial for better visibility
         if (logoTextureRef.current) {
-          currentLogoMaterial = new THREE.MeshStandardMaterial({
+          currentLogoMaterial = new THREE.MeshBasicMaterial({
             map: logoTextureRef.current,
             color: '#ffffff',
-            metalness: 0.05,
-            roughness: 0.4,
+            side: THREE.DoubleSide,
           });
         } else {
-          currentLogoMaterial = new THREE.MeshStandardMaterial({
+          currentLogoMaterial = new THREE.MeshBasicMaterial({
             color: '#ffffff',
-            metalness: 0.1,
-            roughness: 0.4,
+            side: THREE.DoubleSide,
           });
         }
       } else {
@@ -357,12 +394,60 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
         });
       }
       
+      // Get logo dimensions
+      const logoW = logoTextureRef.current?.image?.width || 1;
+      const logoH = logoTextureRef.current?.image?.height || 1;
+      const logoAspect = logoW / logoH;
+      
+      const generatePlanarUVs = (mesh: THREE.Mesh) => {
+        if (!mesh.geometry) return;
+        mesh.geometry.computeBoundingBox();
+        const bbox = mesh.geometry.boundingBox;
+        if (!bbox) return;
+        
+        const pos = mesh.geometry.attributes.position;
+        const uvs = new Float32Array(pos.count * 2);
+        
+        // Find min/max for each axis across all vertices
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i);
+          const y = pos.getY(i);
+          minX = Math.min(minX, x);
+          maxX = Math.max(maxX, x);
+          minY = Math.min(minY, y);
+          maxY = Math.max(maxY, y);
+        }
+        
+        const w = maxX - minX || 1;
+        const h = maxY - minY || 1;
+        
+        console.log('Logo panel - X:', minX.toFixed(1), 'to', maxX.toFixed(1), '=', w.toFixed(1));
+        console.log('Logo panel - Y:', minY.toFixed(1), 'to', maxY.toFixed(1), '=', h.toFixed(1));
+        
+        // Simple: fill panel with logo (may stretch, but will show whole logo)
+        for (let i = 0; i < pos.count; i++) {
+          const x = pos.getX(i);
+          const y = pos.getY(i);
+          uvs[i * 2] = 1 - (x - minX) / w;
+          uvs[i * 2 + 1] = (y - minY) / h;
+        }
+        
+        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      };
+      
       // Helper to get replacement material for a given material name
       // Order matters! More specific patterns should be checked first
-      const getReplacementMaterial = (matName: string): THREE.Material | null => {
+      const getReplacementMaterial = (matName: string, mesh?: THREE.Mesh): THREE.Material | null => {
         // Check logo FIRST
         if (matchesMaterial(matName, mapping.logo)) {
           console.log('  Material:', matName, '-> LOGO', hasLogoAccessoryRef.current ? '(WHITE + logo)' : '(panel colour)');
+          // Generate proper UVs for logo mesh
+          if (mesh) {
+            generatePlanarUVs(mesh);
+          }
           return currentLogoMaterial;
         }
         // Check black BEFORE frame (Toppanelfelt contains "toppanel" but should be black)
@@ -401,7 +486,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             const newMaterials = child.material.map((mat, index) => {
               const matName = mat.name || `material_${index}`;
               originalNames.push(matName);
-              const replacement = getReplacementMaterial(matName);
+              const replacement = getReplacementMaterial(matName, child);
               return replacement || mat;
             });
             
@@ -411,9 +496,9 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             // Single material mesh
             const matName = child.material?.name || child.name || '';
             console.log('  Single material:', matName);
-            
+
             child.userData.originalMaterialName = matName;
-            const replacement = getReplacementMaterial(matName);
+            const replacement = getReplacementMaterial(matName, child);
             if (replacement) {
               child.material = replacement;
             }
@@ -611,7 +696,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
   ({ config, product }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const controlsRef = useRef<any>(null);
-    const [bgMode, setBgMode] = useState<BgMode>('dark');
+    const [bgMode, setBgMode] = useState<BgMode>('photo');
     
     // Expose thumbnail capture method
     useImperativeHandle(ref, () => ({
