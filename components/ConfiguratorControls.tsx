@@ -4,7 +4,7 @@ import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration
 import { resolvePartitionCode, DRAWER_ACCESSORIES, filterAccessoriesForDrawer, resolveAccessoryCode } from '../data/catalog';
 import { useCatalog } from '../contexts/CatalogContext';
 import { calculateUsedHeight, filterInteriorsForDrawer, normalizeDrawerStack, summarizeDrawers } from '../services/drawerUtils';
-import { CheckboxField, ColorField, QtyListField, RadioField, SelectField } from './fields/OptionFields';
+import { CheckboxField, ColorField, QtyListField, RadioField, SelectField, LogoUploadField } from './fields/OptionFields';
 
 // Accessory categories for grouping in UI
 const ACCESSORY_CATEGORIES = [
@@ -32,6 +32,8 @@ interface ConfiguratorControlsProps {
   // New props for Embedded Cabinets
   onEmbeddedCabinetChange?: (cabinets: EmbeddedCabinet[]) => void;
   isEditingCartItem?: boolean;
+  // Logo upload for Lectrum products
+  onLogoChange?: (logoUrl: string | undefined) => void;
 }
 
 const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({ 
@@ -43,7 +45,8 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   activeDrawerIndex,
   onSelectDrawer,
   onEmbeddedCabinetChange,
-  isEditingCartItem = false
+  isEditingCartItem = false,
+  onLogoChange
 }) => {
   
   const { interiors, products } = useCatalog();
@@ -700,11 +703,26 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
               )}
               
               {group.type === 'qty_list' && (
-                <QtyListField 
-                  group={group} 
-                  values={(config.selections[group.id] as Record<string, number>) || {}} 
-                  onChange={(vals) => onChange(group.id, vals)} 
-                />
+                <>
+                  <QtyListField 
+                    group={group} 
+                    values={(config.selections[group.id] as Record<string, number>) || {}} 
+                    onChange={(vals) => onChange(group.id, vals)} 
+                  />
+                  {/* Logo upload for Lectrum products with logo accessories */}
+                  {product.id.startsWith('lectrum-') && group.id === 'accessories' && onLogoChange && (
+                    <LogoUploadField
+                      logoImageUrl={config.logoImageUrl}
+                      onLogoChange={onLogoChange}
+                      hasLogoAccessory={(() => {
+                        const logoIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
+                                        'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
+                        const accessories = config.selections[group.id] as Record<string, number> | undefined;
+                        return logoIds.some(id => (accessories?.[id] || 0) > 0);
+                      })()}
+                    />
+                  )}
+                </>
               )}
 
               {/* INDUSTRIAL WORKBENCH SPECIFIC: EMBEDDED CABINET TRIGGER */}

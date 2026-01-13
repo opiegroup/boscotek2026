@@ -115,6 +115,13 @@ const BrandConfigurator: React.FC = () => {
     }));
   };
 
+  const handleLogoChange = (logoUrl: string | undefined) => {
+    setConfig(prev => ({
+      ...prev,
+      logoImageUrl: logoUrl
+    }));
+  };
+
   const handleCustomDrawerChange = (newStack: DrawerConfiguration[]) => {
     setConfig(prev => ({
       ...prev,
@@ -468,6 +475,7 @@ const BrandConfigurator: React.FC = () => {
               activeDrawerIndex={activeDrawerIndex}
               onSelectDrawer={setActiveDrawerIndex}
               isEditingCartItem={editingItemId !== null}
+              onLogoChange={handleLogoChange}
             />
           </div>
 

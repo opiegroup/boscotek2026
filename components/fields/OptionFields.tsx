@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { OptionGroup, ProductAttribute } from '../../types';
 
 type SelectFieldProps = {
@@ -171,6 +171,16 @@ type QtyListFieldProps = {
   onChange: (val: Record<string, number>) => void;
 };
 
+// Logo accessory IDs that require image upload
+const LOGO_ACCESSORY_IDS = [
+  'logo-insert-aero-top', 
+  'logo-panel-aero-400', 
+  'logo-panel-aero-full',
+  'logo-panel-classic-400', 
+  'logo-panel-classic-full', 
+  'crystalite-logo-classic'
+];
+
 export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onChange }) => {
   const handleQtyChange = (itemId: string, delta: number) => {
     const currentQty = values[itemId] || 0;
@@ -182,14 +192,22 @@ export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onCha
     onChange(newValues);
   };
 
+  // Check if any logo accessory is selected
+  const hasLogoAccessorySelected = LOGO_ACCESSORY_IDS.some(id => (values[id] || 0) > 0);
+
   return (
     <div className="space-y-2">
       {group.options.map(opt => {
         const qty = values[opt.id] || 0;
+        const isLogoAccessory = LOGO_ACCESSORY_IDS.includes(opt.id);
+        
         return (
           <div key={opt.id} className={`flex items-center justify-between p-3 rounded border transition-colors ${qty > 0 ? 'bg-zinc-800 border-amber-500/50' : 'bg-zinc-900 border-zinc-700'}`}>
              <div className="flex-1">
-                <div className={`text-sm font-medium ${qty > 0 ? 'text-white' : 'text-zinc-400'}`}>{opt.label}</div>
+                <div className={`text-sm font-medium ${qty > 0 ? 'text-white' : 'text-zinc-400'}`}>
+                  {opt.label}
+                  {isLogoAccessory && <span className="ml-2 text-xs text-blue-400">📷</span>}
+                </div>
                 <div className="text-xs text-amber-500 font-bold">+${opt.priceDelta} ea</div>
              </div>
              
@@ -212,6 +230,139 @@ export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onCha
           </div>
         );
       })}
+      
+      {/* Show logo upload prompt when any logo accessory is selected */}
+      {hasLogoAccessorySelected && (
+        <div className="mt-3 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-blue-400">📷</span>
+            <span className="text-sm font-medium text-blue-300">Logo Image Required</span>
+          </div>
+          <p className="text-xs text-zinc-400 mb-2">
+            Upload your logo image to see it on the 3D model. Use the logo upload section below to add your custom logo.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Logo Upload Field Component
+type LogoUploadFieldProps = {
+  logoImageUrl?: string;
+  onLogoChange: (url: string | undefined) => void;
+  hasLogoAccessory: boolean;
+};
+
+export const LogoUploadField: React.FC<LogoUploadFieldProps> = ({ logoImageUrl, onLogoChange, hasLogoAccessory }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  
+  if (!hasLogoAccessory) return null;
+  
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select an image file (PNG, JPG, SVG)');
+      return;
+    }
+    
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      alert('Image must be less than 5MB');
+      return;
+    }
+    
+    setIsLoading(true);
+    
+    try {
+      // Convert to base64 data URL
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        onLogoChange(dataUrl);
+        setIsLoading(false);
+      };
+      reader.onerror = () => {
+        alert('Failed to read image file');
+        setIsLoading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error('Error processing logo:', err);
+      setIsLoading(false);
+    }
+  };
+  
+  const handleRemoveLogo = () => {
+    onLogoChange(undefined);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+  
+  return (
+    <div className="p-4 bg-zinc-800/50 rounded-lg border border-zinc-700 mt-4">
+      <h4 className="text-sm font-bold text-amber-500 mb-3 flex items-center gap-2">
+        <span>🎨</span>
+        Custom Logo Upload
+      </h4>
+      
+      {logoImageUrl ? (
+        <div className="space-y-3">
+          <div className="relative aspect-video bg-zinc-900 rounded-lg overflow-hidden border border-zinc-600">
+            <img 
+              src={logoImageUrl} 
+              alt="Custom Logo Preview" 
+              className="w-full h-full object-contain p-2"
+            />
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex-1 px-3 py-2 text-xs font-medium bg-zinc-700 hover:bg-zinc-600 text-white rounded transition-colors"
+            >
+              Change Logo
+            </button>
+            <button
+              onClick={handleRemoveLogo}
+              className="px-3 py-2 text-xs font-medium bg-red-900/30 hover:bg-red-900/50 text-red-400 rounded transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div 
+          onClick={() => fileInputRef.current?.click()}
+          className="border-2 border-dashed border-zinc-600 hover:border-amber-500 rounded-lg p-6 text-center cursor-pointer transition-colors"
+        >
+          {isLoading ? (
+            <div className="animate-spin h-8 w-8 border-2 border-amber-500 border-t-transparent rounded-full mx-auto" />
+          ) : (
+            <>
+              <div className="text-3xl mb-2">📤</div>
+              <div className="text-sm text-zinc-300 mb-1">Click to upload logo</div>
+              <div className="text-xs text-zinc-500">PNG, JPG, or SVG (max 5MB)</div>
+            </>
+          )}
+        </div>
+      )}
+      
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+      
+      <p className="text-xs text-zinc-500 mt-3">
+        Your logo will appear on the lectern's logo panel area in the 3D preview.
+      </p>
     </div>
   );
 };

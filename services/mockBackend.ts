@@ -3,6 +3,10 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { supabase } from "./supabaseClient";
 import { ImportBatch, ImportItem, User, ImportStatus, ProductDefinition, DrawerInteriorOption, DrawerAccessory, QuoteRequest, PricingResult, Quote, QuoteLineItem, CustomerDetails, QuoteStatus } from "../types";
 import { CATALOG as SEED_CATALOG, INTERIOR_OPTIONS as SEED_INTERIORS, DRAWER_ACCESSORIES as SEED_ACCESSORIES, resolvePartitionCode, resolveAccessoryCode } from '../data/catalog';
+import { getLectrumProducts } from './products/lectrumCatalog';
+
+// Merge Boscotek and Lectrum products
+const ALL_PRODUCTS = [...SEED_CATALOG, ...getLectrumProducts()];
 import { seedCatalog } from "./catalogApi";
 import { submitQuoteFunction } from "./quotesApi";
 
@@ -118,11 +122,11 @@ const refreshCache = async (brandId?: string) => {
 };
 
 export const getProducts = async (brandId?: string): Promise<ProductDefinition[]> => {
-  // ALWAYS use SEED_CATALOG as source of truth for product definitions
+  // ALWAYS use ALL_PRODUCTS as source of truth for product definitions
   // This ensures drawer options are always correct (75, 100, 150, 225, 300 only)
   // Database is used for pricing overrides via Admin, but core structure comes from code
-  // Note: In future, filter SEED_CATALOG by brand or fetch from DB with brand_id filter
-  return SEED_CATALOG;
+  // Note: In future, filter ALL_PRODUCTS by brand or fetch from DB with brand_id filter
+  return ALL_PRODUCTS;
 };
 
 export const getInteriors = async (brandId?: string): Promise<DrawerInteriorOption[]> => {
@@ -198,8 +202,8 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
   if (CACHE.accessories.length === 0) await getAccessories();
 
   // 1. Find Product
-  // ALWAYS use SEED_CATALOG for product definitions to ensure correct drawer options
-  const products = SEED_CATALOG;
+  // ALWAYS use ALL_PRODUCTS for product definitions to ensure correct drawer options
+  const products = ALL_PRODUCTS;
   const interiors = CACHE.interiors.length > 0 ? CACHE.interiors : SEED_INTERIORS;
   const accessories = CACHE.accessories.length > 0 ? CACHE.accessories : SEED_ACCESSORIES;
 

@@ -63,6 +63,7 @@ export interface ConfigurationState {
   selections: Record<string, any>; // groupId -> optionId (or { itemId: qty } for qty_list)
   customDrawers: DrawerConfiguration[]; // Array of drawer objects (Primary product)
   embeddedCabinets?: EmbeddedCabinet[]; // For nested modules like under-bench cabinets
+  logoImageUrl?: string; // Custom logo image for Lectrum products
   notes: string;
   internalReference: string;
 }
