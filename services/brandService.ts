@@ -417,6 +417,26 @@ export interface PublicBrand {
 }
 
 /**
+ * Fallback descriptions for brands (used when DB description is missing)
+ */
+const BRAND_DESCRIPTIONS: Record<string, string> = {
+  'bosco-office': 'Smart office storage systems designed for modern workplaces, combining functionality, durability, and clean design.',
+  'boscotek': 'Heavy-duty industrial workbenches and storage systems engineered for performance, strength, and flexibility.',
+  'argent': 'Precision-engineered fabrication solutions built for specialised industrial and infrastructure applications.',
+  'gilkon': 'Integrated AV, display, and mounting solutions designed for commercial and technical environments.',
+  'lectrum': 'Premium lecterns and presentation furniture crafted for professional, education, and corporate spaces.',
+};
+
+/**
+ * Brands that should be shown as active (overrides database status)
+ */
+const ACTIVE_BRAND_OVERRIDES: Set<string> = new Set([
+  'bosco-office',
+  'boscotek',
+  'lectrum',
+]);
+
+/**
  * Fetch public brand list for the OPIE Group landing page
  * Returns only active brands with safe-to-expose data
  */
@@ -436,7 +456,7 @@ export async function getPublicBrands(): Promise<PublicBrand[]> {
         slug: b.slug,
         logoUrl: b.logoUrl,
         status: b.status as 'active' | 'draft' | 'disabled',
-        description: b.metaDescription,
+        description: b.metaDescription || BRAND_DESCRIPTIONS[b.slug] || null,
         primaryColor: b.themeJson?.primaryColor || '#f59e0b',
       }));
     }
@@ -445,8 +465,10 @@ export async function getPublicBrands(): Promise<PublicBrand[]> {
       name: row.name,
       slug: row.slug,
       logoUrl: row.logo_url,
-      status: row.status,
-      description: row.meta_description,
+      // Override status for brands that should be active
+      status: ACTIVE_BRAND_OVERRIDES.has(row.slug) ? 'active' : row.status,
+      // Use curated descriptions first, then fall back to database
+      description: BRAND_DESCRIPTIONS[row.slug] || row.meta_description || null,
       primaryColor: row.theme_json?.primaryColor || '#f59e0b',
     }));
   } catch (err) {
@@ -457,7 +479,7 @@ export async function getPublicBrands(): Promise<PublicBrand[]> {
       slug: b.slug,
       logoUrl: b.logoUrl,
       status: b.status as 'active' | 'draft' | 'disabled',
-      description: b.metaDescription,
+      description: b.metaDescription || BRAND_DESCRIPTIONS[b.slug] || null,
       primaryColor: b.themeJson?.primaryColor || '#f59e0b',
     }));
   }

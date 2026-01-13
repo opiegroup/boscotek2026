@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getPublicBrands, PublicBrand } from '../services/brandService';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { BrandProvider } from '../contexts/BrandContext';
+import { CatalogProvider } from '../contexts/CatalogContext';
 import AdminDashboard from '../components/admin/AdminDashboard';
 
 /**
@@ -39,7 +41,13 @@ const OpieGroupLandingContent: React.FC = () => {
 
   // Show admin panel if requested
   if (showAdminPanel) {
-    return <AdminDashboard onExit={() => setShowAdminPanel(false)} />;
+    return (
+      <BrandProvider>
+        <CatalogProvider>
+          <AdminDashboard onExit={() => setShowAdminPanel(false)} />
+        </CatalogProvider>
+      </BrandProvider>
+    );
   }
 
   return (
