@@ -24,13 +24,17 @@ function getFrameColourOptions(): ProductAttribute[] {
     label: colour.label,
     value: colour.id,
     code: colour.code,
-    priceDelta: 0,
+    priceDelta: colour.priceDelta,
     meta: { hex: colour.hex },
   }));
 }
 
+// Premium for non-standard panel colours (Petronas is standard/included)
+const PANEL_COLOUR_PREMIUM = 269;
+
 /**
  * Convert panel colours to ProductAttribute options
+ * Petronas is the standard colour (no premium), all others add $269
  */
 function getPanelColourOptions(): ProductAttribute[] {
   return PANEL_COLOURS.map(colour => ({
@@ -38,7 +42,7 @@ function getPanelColourOptions(): ProductAttribute[] {
     label: colour.label,
     value: colour.id,
     code: colour.code,
-    priceDelta: 0,
+    priceDelta: colour.id === 'petronas' ? 0 : PANEL_COLOUR_PREMIUM,
     description: colour.description,
     meta: { hex: colour.hex },
   }));
@@ -179,15 +183,22 @@ export function generateLectrumReferenceCode(
 export function calculateLectrumPrice(
   productId: string,
   selections: Record<string, any>
-): { basePrice: number; accessoriesTotal: number; total: number } {
+): { basePrice: number; accessoriesTotal: number; panelPremium: number; total: number } {
   const model = getLectrumModelInfo(productId);
   if (!model) {
-    return { basePrice: 0, accessoriesTotal: 0, total: 0 };
+    return { basePrice: 0, accessoriesTotal: 0, panelPremium: 0, total: 0 };
   }
-  
+
   const basePrice = model.basePrice;
   let accessoriesTotal = 0;
-  
+  let panelPremium = 0;
+
+  // Check if non-standard panel colour is selected (Petronas is standard)
+  const panelColour = selections['panel-colour'] as string | undefined;
+  if (panelColour && panelColour !== 'petronas') {
+    panelPremium = PANEL_COLOUR_PREMIUM;
+  }
+
   // Calculate accessories total
   const accessories = selections['accessories'] as Record<string, number> | undefined;
   if (accessories) {
@@ -198,11 +209,12 @@ export function calculateLectrumPrice(
       }
     });
   }
-  
+
   return {
     basePrice,
     accessoriesTotal,
-    total: basePrice + accessoriesTotal,
+    panelPremium,
+    total: basePrice + panelPremium + accessoriesTotal,
   };
 }
 

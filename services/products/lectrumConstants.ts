@@ -14,13 +14,15 @@ export interface FrameColour {
   hex: string;
   code: string;
   texture?: string; // Path to texture image
+  priceDelta: number; // Price premium (Black = 0, others have premium)
 }
 
+// Frame colour premiums: Black is standard, others add premium
 export const FRAME_COLOURS: FrameColour[] = [
-  { id: 'black', label: 'Black', hex: '#1C1C1C', code: 'BLK', texture: '/textures/lectrum/frames/black.jpg' },
-  { id: 'white', label: 'White', hex: '#F2F0EC', code: 'WHT', texture: '/textures/lectrum/frames/white.jpg' },
-  { id: 'silver', label: 'Silver', hex: '#B5B5B5', code: 'SLV', texture: '/textures/lectrum/frames/silver.jpg' },
-  { id: 'gold', label: 'Gold', hex: '#C9A227', code: 'GLD', texture: '/textures/lectrum/frames/gold.jpg' },
+  { id: 'black', label: 'Black', hex: '#1C1C1C', code: 'BLK', texture: '/textures/lectrum/frames/black.jpg', priceDelta: 0 },
+  { id: 'white', label: 'White', hex: '#F2F0EC', code: 'WHT', texture: '/textures/lectrum/frames/white.jpg', priceDelta: 469 },
+  { id: 'silver', label: 'Silver', hex: '#B5B5B5', code: 'SLV', texture: '/textures/lectrum/frames/silver.jpg', priceDelta: 469 },
+  { id: 'gold', label: 'Gold', hex: '#C9A227', code: 'GLD', texture: '/textures/lectrum/frames/gold.jpg', priceDelta: 469 },
 ];
 
 // ============================================================================
@@ -248,6 +250,22 @@ export const LECTRUM_ACCESSORIES: LectrumAccessory[] = [
     price: 700,
     applicableSeries: ['aero'],
     category: 'logo',
+  },
+  {
+    id: 'gooseneck-mic-12',
+    name: 'Gooseneck Microphone Set - 12"',
+    description: 'Pair of 12 inch gooseneck microphones (left and right).',
+    price: 250,
+    applicableSeries: ['aero'],
+    category: 'microphone',
+  },
+  {
+    id: 'gooseneck-mic-18',
+    name: 'Gooseneck Microphone Set - 18"',
+    description: 'Pair of 18 inch gooseneck microphones (left and right).',
+    price: 320,
+    applicableSeries: ['aero'],
+    category: 'microphone',
   },
   {
     id: 'protective-cover-aero',

@@ -4,7 +4,7 @@ import { OrbitControls, Environment, ContactShadows, Html } from '@react-three/d
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
-import { ConfigurationState, ProductDefinition } from '../types';
+import { ConfigurationState, ProductDefinition, LogoTransform } from '../types';
 import { FRAME_COLOURS, PANEL_COLOURS } from '../services/products/lectrumConstants';
 import { getLectrumModelInfo } from '../services/products/lectrumCatalog';
 
@@ -132,13 +132,28 @@ interface LecternModelProps {
   panelColour: string;
   logoImageUrl?: string; // Custom logo image URL
   hasLogoAccessory: boolean; // Whether a logo accessory is selected
+  hasMicrophoneAccessory: boolean; // Whether a microphone accessory is selected (shows left/right goosenecks)
+  logoTransform?: LogoTransform; // Logo scale and position controls
 }
 
-const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory }) => {
+// Info about where the logo panel is located on the model
+interface LogoPanelInfo {
+  position: THREE.Vector3;  // World position of panel center
+  rotation: THREE.Euler;    // World rotation of panel
+  width: number;
+  height: number;
+}
+
+const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, hasMicrophoneAccessory, logoTransform }) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoTexture, setLogoTexture] = useState<THREE.Texture | null>(null);
+  const [logoPanelInfo, setLogoPanelInfo] = useState<LogoPanelInfo | null>(null); // Position of logo panel for procedural logo
+  const logoPlaneRef = useRef<THREE.Mesh | null>(null);
   const { invalidate } = useThree();
+  
+  // Default logo transform values
+  const transform = logoTransform || { scale: 1, offsetX: 0, offsetY: 0 };
   
   // Load logo texture when URL changes
   useEffect(() => {
@@ -187,6 +202,8 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   const panelHexRef = useRef(panelHex);
   const logoTextureRef = useRef(logoTexture);
   const hasLogoAccessoryRef = useRef(hasLogoAccessory);
+  const hasMicrophoneAccessoryRef = useRef(hasMicrophoneAccessory);
+  const logoTransformRef = useRef(transform);
   
   // Keep refs updated
   useEffect(() => {
@@ -197,7 +214,9 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   useEffect(() => {
     logoTextureRef.current = logoTexture;
     hasLogoAccessoryRef.current = hasLogoAccessory;
-  }, [logoTexture, hasLogoAccessory]);
+    hasMicrophoneAccessoryRef.current = hasMicrophoneAccessory;
+    logoTransformRef.current = transform;
+  }, [logoTexture, hasLogoAccessory, hasMicrophoneAccessory, transform]);
   
   // Static materials for non-color parts (created once)
   const staticMaterials = React.useMemo(() => ({
@@ -213,33 +232,20 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     }),
   }), []);
   
-  // Logo material - WHITE when logo accessory selected, otherwise matches panel colour
-  const logoMaterial = React.useMemo(() => {
+  // Logo panel background material - WHITE when logo accessory selected, otherwise matches panel colour
+  const logoPanelMaterial = React.useMemo(() => {
     if (hasLogoAccessory) {
-      // Logo accessory selected - use WHITE background
-      if (logoTexture) {
-        // Has uploaded logo - apply texture with emissive to make it visible
-        console.log('Creating logo material WITH texture');
-        return new THREE.MeshBasicMaterial({
-          map: logoTexture,
-          color: '#ffffff',
-          side: THREE.DoubleSide,
-        });
-      }
-      // No logo uploaded yet - show bright white background
-      console.log('Creating logo material WITHOUT texture (white)');
       return new THREE.MeshBasicMaterial({
         color: '#ffffff',
         side: THREE.DoubleSide,
       });
     }
-    // No logo accessory - match panel colour
     return new THREE.MeshStandardMaterial({
       color: panelHex,
       metalness: 0.1,
       roughness: 0.6,
     });
-  }, [panelHex, logoTexture, hasLogoAccessory]);
+  }, [panelHex, hasLogoAccessory]);
   
   // Dynamic materials for frame and panel - recreated when colors change
   const frameMaterial = React.useMemo(() => new THREE.MeshStandardMaterial({
@@ -255,32 +261,29 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   }), [panelHex]);
   
   // Update existing model's materials when colors or logo state changes
+  // Also find logo panel bounds for procedural logo placement
   useEffect(() => {
     if (model) {
       console.log('=== UPDATING MATERIALS ===');
       console.log('hasLogoAccessory:', hasLogoAccessory);
-      console.log('logoTexture:', logoTexture ? 'loaded' : 'none');
-      console.log('logoMaterial has map:', logoMaterial.map ? 'YES' : 'NO');
-      console.log('logoMaterial color:', hasLogoAccessory ? 'WHITE' : 'panel colour');
       console.log('Looking for logo materials:', mapping.logo);
+      
+      let foundLogoPanelInfo: LogoPanelInfo | null = null;
       
       model.traverse((child) => {
         if (child instanceof THREE.Mesh) {
           // Handle multi-material meshes
           if (Array.isArray(child.material) && child.userData.originalMaterialNames) {
             const originalNames = child.userData.originalMaterialNames as string[];
+            let hasLogoMaterial = false;
+            
             child.material = child.material.map((mat, index) => {
               const matName = originalNames[index] || '';
-              // Order: logo -> black -> frame -> panel -> silver (black before frame!)
+              // Order: logo -> frame -> panel -> silver -> black
               if (matchesMaterial(matName, mapping.logo)) {
-                console.log('  Applying logo material to:', matName, hasLogoAccessory ? '(WHITE)' : '(panel)');
-                // Clone the material to ensure updates are applied
-                const newMaterial = logoMaterial.clone();
-                newMaterial.needsUpdate = true;
-                return newMaterial;
-              }
-              if (matchesMaterial(matName, mapping.black)) {
-                return staticMaterials.black;
+                console.log('  Logo panel material found (multi-mat):', matName);
+                hasLogoMaterial = true;
+                return logoPanelMaterial.clone();
               }
               if (matchesMaterial(matName, mapping.frame)) {
                 return frameMaterial;
@@ -291,56 +294,115 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
               if (matchesMaterial(matName, mapping.silver)) {
                 return staticMaterials.silver;
               }
-              return mat; // Keep other materials unchanged
+              // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
+              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+                const micMat = staticMaterials.black.clone();
+                micMat.transparent = true;
+                micMat.opacity = hasMicrophoneAccessory ? 1 : 0;
+                console.log('  Microphone material', matName, '-> opacity:', hasMicrophoneAccessory ? 1 : 0);
+                return micMat;
+              }
+              if (matchesMaterial(matName, mapping.black)) {
+                return staticMaterials.black;
+              }
+              return mat;
             });
+            
+            // If this mesh has logo material, get its bounds for logo placement
+            if (hasLogoMaterial && !foundLogoPanelInfo) {
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                const worldPos = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                foundLogoPanelInfo = { position: localCenter, rotation, width, height };
+                console.log('  Logo panel from multi-mat mesh:', width.toFixed(1), 'x', height.toFixed(1));
+              }
+            }
           } else {
-            // Single material mesh - same order
+            // Single material mesh
             const materialName = child.userData.originalMaterialName || '';
             if (matchesMaterial(materialName, mapping.logo)) {
-              console.log('  Applying logo material to mesh:', child.name, 'material:', materialName, hasLogoAccessory ? '(WHITE)' : '(panel)');
+              console.log('  Logo panel mesh found:', child.name, 'material:', materialName);
               
-              // Always regenerate UVs for logo mesh (OBJ UVs are often bad)
-              if (child.geometry) {
-                console.log('  Generating planar UVs for logo mesh...');
-                child.geometry.computeBoundingBox();
-                const bbox = child.geometry.boundingBox;
-                if (bbox) {
-                  const pos = child.geometry.attributes.position;
-                  const uvs = new Float32Array(pos.count * 2);
-                  const sizeX = bbox.max.x - bbox.min.x || 1;
-                  const sizeY = bbox.max.y - bbox.min.y || 1;
-                  
-                  for (let i = 0; i < pos.count; i++) {
-                    // Map X,Y position to 0-1 UV range
-                    uvs[i * 2] = (pos.getX(i) - bbox.min.x) / sizeX;
-                    uvs[i * 2 + 1] = (pos.getY(i) - bbox.min.y) / sizeY;
-                  }
-                  child.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-                  child.geometry.attributes.uv.needsUpdate = true;
-                  console.log('  UVs generated, bbox:', bbox.min.x.toFixed(1), bbox.min.y.toFixed(1), 'to', bbox.max.x.toFixed(1), bbox.max.y.toFixed(1));
-                }
+              // Get logo panel bounds and world transform
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                const worldPos = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                
+                foundLogoPanelInfo = {
+                  position: localCenter,
+                  rotation,
+                  width,
+                  height,
+                };
+                
+                console.log('  Logo panel:', width.toFixed(1), 'x', height.toFixed(1),
+                            'pos:', localCenter.x.toFixed(1), localCenter.y.toFixed(1), localCenter.z.toFixed(1));
               }
               
-              // Clone the material to ensure updates are applied
-              const newMaterial = logoMaterial.clone();
-              newMaterial.needsUpdate = true;
-              child.material = newMaterial;
-              child.material.needsUpdate = true;
-            } else if (matchesMaterial(materialName, mapping.black)) {
-              child.material = staticMaterials.black;
+              // Apply white/panel material to the logo panel background
+              child.material = logoPanelMaterial.clone();
             } else if (matchesMaterial(materialName, mapping.frame)) {
               child.material = frameMaterial;
             } else if (matchesMaterial(materialName, mapping.panel)) {
               child.material = panelMaterial;
             } else if (matchesMaterial(materialName, mapping.silver)) {
               child.material = staticMaterials.silver;
+            } else if (materialName === 'Gooseneck' || materialName === 'gooseneck' || materialName === 'Foam' || materialName === 'foam') {
+              // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
+              const micMat = staticMaterials.black.clone();
+              micMat.transparent = true;
+              micMat.opacity = hasMicrophoneAccessory ? 1 : 0;
+              child.material = micMat;
+              console.log('  Microphone material', materialName, '-> opacity:', hasMicrophoneAccessory ? 1 : 0);
+            } else if (matchesMaterial(materialName, mapping.black)) {
+              child.material = staticMaterials.black;
             }
           }
         }
       });
+      
+      // Store logo panel info for procedural logo rendering
+      if (foundLogoPanelInfo) {
+        setLogoPanelInfo(foundLogoPanelInfo);
+      }
+      
       invalidate();
     }
-  }, [model, frameMaterial, panelMaterial, logoMaterial, staticMaterials, mapping, invalidate, hasLogoAccessory, logoTexture]);
+  }, [model, frameMaterial, panelMaterial, logoPanelMaterial, staticMaterials, mapping, invalidate, hasLogoAccessory, hasMicrophoneAccessory]);
   
   // Load the OBJ file
   useEffect(() => {
@@ -364,96 +426,22 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
         roughness: 0.85,
       });
       
+      // Logo panel background - WHITE when accessory selected, otherwise panel color
+      const currentLogoPanelMaterial = hasLogoAccessoryRef.current
+        ? new THREE.MeshBasicMaterial({ color: '#ffffff', side: THREE.DoubleSide })
+        : new THREE.MeshStandardMaterial({ color: panelHexRef.current, metalness: 0.1, roughness: 0.6 });
+      
       console.log('=== APPLYING MATERIALS ===');
       console.log('Frame color:', frameHexRef.current);
       console.log('Panel color:', panelHexRef.current);
       console.log('Model ID:', modelId);
       
-      // Logo material - WHITE when logo accessory selected, otherwise matches panel color
-      let currentLogoMaterial: THREE.Material;
-      if (hasLogoAccessoryRef.current) {
-        // Logo accessory selected - use MeshBasicMaterial for better visibility
-        if (logoTextureRef.current) {
-          currentLogoMaterial = new THREE.MeshBasicMaterial({
-            map: logoTextureRef.current,
-            color: '#ffffff',
-            side: THREE.DoubleSide,
-          });
-        } else {
-          currentLogoMaterial = new THREE.MeshBasicMaterial({
-            color: '#ffffff',
-            side: THREE.DoubleSide,
-          });
-        }
-      } else {
-        // No logo accessory - match panel color
-        currentLogoMaterial = new THREE.MeshStandardMaterial({
-          color: panelHexRef.current,
-          metalness: 0.1,
-          roughness: 0.6,
-        });
-      }
-      
-      // Get logo dimensions
-      const logoW = logoTextureRef.current?.image?.width || 1;
-      const logoH = logoTextureRef.current?.image?.height || 1;
-      const logoAspect = logoW / logoH;
-      
-      const generatePlanarUVs = (mesh: THREE.Mesh) => {
-        if (!mesh.geometry) return;
-        mesh.geometry.computeBoundingBox();
-        const bbox = mesh.geometry.boundingBox;
-        if (!bbox) return;
-        
-        const pos = mesh.geometry.attributes.position;
-        const uvs = new Float32Array(pos.count * 2);
-        
-        // Find min/max for each axis across all vertices
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i);
-          const y = pos.getY(i);
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-        
-        const w = maxX - minX || 1;
-        const h = maxY - minY || 1;
-        
-        console.log('Logo panel - X:', minX.toFixed(1), 'to', maxX.toFixed(1), '=', w.toFixed(1));
-        console.log('Logo panel - Y:', minY.toFixed(1), 'to', maxY.toFixed(1), '=', h.toFixed(1));
-        
-        // Simple: fill panel with logo (may stretch, but will show whole logo)
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i);
-          const y = pos.getY(i);
-          uvs[i * 2] = 1 - (x - minX) / w;
-          uvs[i * 2 + 1] = (y - minY) / h;
-        }
-        
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
-      };
-      
       // Helper to get replacement material for a given material name
-      // Order matters! More specific patterns should be checked first
-      const getReplacementMaterial = (matName: string, mesh?: THREE.Mesh): THREE.Material | null => {
-        // Check logo FIRST
+      // Order: logo -> frame -> panel -> silver -> black
+      const getReplacementMaterial = (matName: string): THREE.Material | null => {
         if (matchesMaterial(matName, mapping.logo)) {
-          console.log('  Material:', matName, '-> LOGO', hasLogoAccessoryRef.current ? '(WHITE + logo)' : '(panel colour)');
-          // Generate proper UVs for logo mesh
-          if (mesh) {
-            generatePlanarUVs(mesh);
-          }
-          return currentLogoMaterial;
-        }
-        // Check black BEFORE frame (Toppanelfelt contains "toppanel" but should be black)
-        if (matchesMaterial(matName, mapping.black)) {
-          console.log('  Material:', matName, '-> BLACK');
-          return staticMaterials.black;
+          console.log('  Material:', matName, '-> LOGO PANEL BG');
+          return currentLogoPanelMaterial;
         }
         if (matchesMaterial(matName, mapping.frame)) {
           console.log('  Material:', matName, '-> FRAME');
@@ -467,9 +455,15 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
           console.log('  Material:', matName, '-> SILVER');
           return staticMaterials.silver;
         }
+        if (matchesMaterial(matName, mapping.black)) {
+          console.log('  Material:', matName, '-> BLACK');
+          return staticMaterials.black;
+        }
         console.log('  Material:', matName, '-> NO MATCH (keeping original)');
         return null;
       };
+      
+      let detectedLogoPanelInfo: LogoPanelInfo | null = null;
       
       obj.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -481,26 +475,115 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             
             // Store original material names for later updates
             const originalNames: string[] = [];
+            let hasLogoMaterial = false;
             
             // Process each material in the array
             const newMaterials = child.material.map((mat, index) => {
               const matName = mat.name || `material_${index}`;
               originalNames.push(matName);
-              const replacement = getReplacementMaterial(matName, child);
+              if (matchesMaterial(matName, mapping.logo)) {
+                console.log('  >>> Logo material in multi-mat mesh:', matName);
+                hasLogoMaterial = true;
+              }
+              // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
+              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+                const micMat = staticMaterials.black.clone();
+                micMat.transparent = true;
+                micMat.opacity = hasMicrophoneAccessoryRef.current ? 1 : 0;
+                console.log('  Microphone material', matName, '-> opacity:', hasMicrophoneAccessoryRef.current ? 1 : 0);
+                return micMat;
+              }
+              const replacement = getReplacementMaterial(matName);
               return replacement || mat;
             });
             
             child.material = newMaterials;
             child.userData.originalMaterialNames = originalNames;
+            
+            // If this mesh has logo material, get its bounds and transform
+            if (hasLogoMaterial && !detectedLogoPanelInfo) {
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                const worldPos = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                detectedLogoPanelInfo = { position: localCenter, rotation, width, height };
+                console.log('  Logo panel from multi-mat:', width.toFixed(1), 'x', height.toFixed(1));
+              }
+            }
           } else {
             // Single material mesh
             const matName = child.material?.name || child.name || '';
             console.log('  Single material:', matName);
 
             child.userData.originalMaterialName = matName;
-            const replacement = getReplacementMaterial(matName, child);
+            const replacement = getReplacementMaterial(matName);
             if (replacement) {
               child.material = replacement;
+            }
+            
+            // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
+            if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+              const micMat = staticMaterials.black.clone();
+              micMat.transparent = true;
+              micMat.opacity = hasMicrophoneAccessoryRef.current ? 1 : 0;
+              child.material = micMat;
+              console.log('  Microphone material', matName, '-> opacity:', hasMicrophoneAccessoryRef.current ? 1 : 0);
+            }
+            
+            // Detect logo panel for procedural logo placement
+            if (matchesMaterial(matName, mapping.logo)) {
+              console.log('  >>> LOGO PANEL DETECTED:', matName);
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                // Get the mesh's world position and rotation
+                child.updateMatrixWorld(true);
+                const worldPos = new THREE.Vector3();
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                // Calculate local center of the panel
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5 // Slightly in front
+                );
+                // Transform to world position
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                // Get rotation as Euler
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                
+                detectedLogoPanelInfo = {
+                  position: localCenter,
+                  rotation: rotation,
+                  width,
+                  height,
+                };
+                console.log('  Logo panel:', width.toFixed(1), 'x', height.toFixed(1),
+                            'pos:', localCenter.x.toFixed(1), localCenter.y.toFixed(1), localCenter.z.toFixed(1),
+                            'rot:', (rotation.x * 180/Math.PI).toFixed(1), (rotation.y * 180/Math.PI).toFixed(1), (rotation.z * 180/Math.PI).toFixed(1));
+              }
             }
           }
           
@@ -509,6 +592,11 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
           child.receiveShadow = true;
         }
       });
+      
+      // Store detected logo panel info
+      if (detectedLogoPanelInfo) {
+        setLogoPanelInfo(detectedLogoPanelInfo);
+      }
       
       console.log('=== DONE ===');
     };
@@ -578,7 +666,87 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     return null;
   }
   
-  return <primitive object={model} />;
+  // Calculate logo plane dimensions based on texture aspect ratio and transform
+  const logoImg = logoTexture?.image as HTMLImageElement | undefined;
+  const logoImgW = logoImg?.width || 1;
+  const logoImgH = logoImg?.height || 1;
+  const logoAspect = logoImgW / logoImgH;
+  
+  // Show procedural logo plane if we have logo panel info, texture, and accessory selected
+  const showLogoPlane = hasLogoAccessory && logoTexture && logoPanelInfo;
+  
+  // Calculate logo plane size based on panel size and user scale
+  let logoPlaneWidth = 0;
+  let logoPlaneHeight = 0;
+  let logoPlanePosition: [number, number, number] = [0, 0, 0];
+  let logoPlaneRotation: [number, number, number] = [0, 0, 0];
+  
+  if (showLogoPlane && logoPanelInfo) {
+    // Base size: 70% of the smaller panel dimension
+    const baseSize = Math.min(logoPanelInfo.width, logoPanelInfo.height) * 0.7;
+    
+    // Apply user scale (0-1, where 1 = 70% of panel)
+    const userScale = Math.max(0.05, transform.scale);
+    const scaledSize = baseSize * userScale;
+    
+    // Calculate dimensions maintaining logo aspect ratio
+    if (logoAspect > 1) {
+      // Wide logo
+      logoPlaneWidth = scaledSize;
+      logoPlaneHeight = scaledSize / logoAspect;
+    } else {
+      // Tall or square logo
+      logoPlaneHeight = scaledSize;
+      logoPlaneWidth = scaledSize * logoAspect;
+    }
+    
+    // Manual positioning for the L2001C top logo panel
+    logoPlanePosition = [
+      11.5,                 // X=11.5
+      116,                  // Y=116
+      0,                    // Z=0
+    ];
+    
+    // Rotate to face forward - adjusted to match panel angle
+    logoPlaneRotation = [
+      0,
+      Math.PI / 2 - 0.026,  // ~1.5 degrees
+      0,
+    ];
+    
+    // Apply user offsets
+    logoPlanePosition[0] += transform.offsetX * 5;
+    logoPlanePosition[1] += transform.offsetY * 5;
+    
+    // Scale up by 20%
+    logoPlaneWidth *= 1.2;
+    logoPlaneHeight *= 1.2;
+
+    console.log('Logo plane: size=', logoPlaneWidth.toFixed(1), 'x', logoPlaneHeight.toFixed(1),
+                'pos:', logoPlanePosition[0].toFixed(1), logoPlanePosition[1].toFixed(1), logoPlanePosition[2].toFixed(1));
+  }
+  
+  return (
+    <group>
+      <primitive object={model} />
+      
+      {/* Procedural logo plane - positioned and rotated to match the logo panel */}
+      {showLogoPlane && (
+        <mesh
+          ref={logoPlaneRef}
+          position={logoPlanePosition}
+          rotation={logoPlaneRotation}
+        >
+          <planeGeometry args={[logoPlaneWidth, logoPlaneHeight]} />
+          <meshBasicMaterial
+            map={logoTexture}
+            transparent={true}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      )}
+    </group>
+  );
 };
 
 
@@ -641,26 +809,33 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   
   // Check if a logo accessory is selected
   const accessories = config.selections['accessories'] as Record<string, number> | undefined;
-  const logoAccessoryIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full', 
+  const logoAccessoryIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
                             'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
   const hasLogoAccessory = logoAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
   
-  // Get logo image URL from config
+  // Check if microphone accessory is selected (shows left/right goosenecks)
+  const microphoneAccessoryIds = ['gooseneck-mic-12', 'gooseneck-mic-18'];
+  const hasMicrophoneAccessory = microphoneAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
+  
+  // Get logo image URL and transform from config
   const logoImageUrl = config.logoImageUrl;
+  const logoTransform = config.logoTransform;
   
   // Debug logging
   console.log('=== LecternScene ===');
   console.log('accessories:', accessories);
   console.log('hasLogoAccessory:', hasLogoAccessory);
   console.log('logoImageUrl:', logoImageUrl ? 'has URL' : 'none');
+  console.log('logoTransform:', logoTransform);
   
-  // Scale: models are in cm, height is ~70cm, we want ~1.5 units tall
-  // Scale of 0.02 gives: 70 * 0.02 = 1.4 units tall
-  const modelScale = 0.02;
+  // Scale: models are in cm, height is ~116cm, we want ~2 units tall for good visibility
+  // Scale of 0.018 gives: 116 * 0.018 = ~2.1 units tall
+  const modelScale = 0.018;
   
   return (
-    <group position={[0, 0, 0]}>
-      <group scale={modelScale} rotation={[0, Math.PI, 0]}>
+    <group position={[0, -0.9, 0]}>
+      {/* Rotate to face front (toward camera) */}
+      <group scale={modelScale} rotation={[0, 0.0175, 0]}>
         <Suspense fallback={<LoadingFallback />}>
           <LecternModel
             modelId={modelId}
@@ -668,6 +843,8 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
             panelColour={panelColour}
             logoImageUrl={logoImageUrl}
             hasLogoAccessory={hasLogoAccessory}
+            hasMicrophoneAccessory={hasMicrophoneAccessory}
+            logoTransform={logoTransform}
           />
         </Suspense>
       </group>
@@ -716,7 +893,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
       <div className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
         <Canvas
           ref={canvasRef}
-          camera={{ position: [3, 2, 3], fov: 40 }}
+          camera={{ position: [0, 0.5, 4], fov: 35 }}
           shadows
           gl={{ preserveDrawingBuffer: true, antialias: true }}
         >
@@ -747,7 +924,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
           
           {/* Ground Shadow */}
           <ContactShadows
-            position={[0, -0.02, 0]}
+            position={[0, -0.92, 0]}
             opacity={0.4}
             scale={4}
             blur={2}
@@ -758,11 +935,11 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
           <OrbitControls
             ref={controlsRef}
             enablePan={false}
-            minDistance={2}
+            minDistance={2.5}
             maxDistance={8}
-            minPolarAngle={Math.PI * 0.15}
-            maxPolarAngle={Math.PI * 0.48}
-            target={[0, 0.6, 0]}
+            minPolarAngle={Math.PI * 0.2}
+            maxPolarAngle={Math.PI * 0.55}
+            target={[0, 0.2, 0]}
           />
         </Canvas>
         
