@@ -4,15 +4,29 @@ import { OrbitControls, Environment, ContactShadows, Html } from '@react-three/d
 import * as THREE from 'three';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
 import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
-import { ConfigurationState, ProductDefinition } from '../types';
+import { ConfigurationState, ProductDefinition, LogoTransform } from '../types';
 import { FRAME_COLOURS, PANEL_COLOURS } from '../services/products/lectrumConstants';
 import { getLectrumModelInfo } from '../services/products/lectrumCatalog';
 
 type BgMode = 'dark' | 'light' | 'photo';
 
 // ============================================================================
-// Types
+// Types & Constants
 // ============================================================================
+
+const LOGO_PANEL_ASPECT = 350 / 130; // width / height
+const LOGO_PADDING = 0.05; // 5% padding
+const LOGO_INSET_BY_MODEL: Record<string, number> = {
+  L2001: 0.35,
+  L2001C: 0.35,
+  'L2001-CTL': 0.35,
+  L20: 0.35,
+  L20S: 0.35,
+  'L20S-NCTL': 0.35,
+  L900: 0.35,
+  L101: 0.35,
+  default: 0.25,
+};
 
 interface LectrumViewer3DProps {
   config: ConfigurationState;
@@ -122,6 +136,180 @@ function getPanelColourHex(colourId: string): string {
   return colour?.hex || '#0C0C0C'; // Default to Petronas (true black)
 }
 
+function getTextureDims(tex: THREE.Texture | null): { width: number; height: number } {
+  const img = tex?.image as { width?: number; height?: number } | undefined;
+  return {
+    width: img?.width ?? 1,
+    height: img?.height ?? 1,
+  };
+}
+
+function computeFrontDir(mesh: THREE.Mesh): THREE.Vector3 {
+  const dir = new THREE.Vector3(0, 0, 1);
+  const normalAttr = mesh.geometry?.attributes?.normal as THREE.BufferAttribute | undefined;
+  if (normalAttr) {
+    dir.set(0, 0, 0);
+    for (let i = 0; i < normalAttr.count; i++) {
+      dir.x += normalAttr.getX(i);
+      dir.y += normalAttr.getY(i);
+      dir.z += normalAttr.getZ(i);
+    }
+    dir.normalize();
+    if (!Number.isFinite(dir.x) || dir.lengthSq() < 1e-6) {
+      dir.set(0, 0, 1);
+    }
+  }
+  return dir;
+}
+
+function splitOutLogoGroups(
+  mesh: THREE.Mesh,
+  logoMaterialIndices: number[],
+  logoMaterial: THREE.Material,
+  insetCm: number
+): THREE.Mesh | undefined {
+  const geom = mesh.geometry as THREE.BufferGeometry;
+  if (!geom?.groups?.length || logoMaterialIndices.length === 0) return;
+
+  const logoGroups = geom.groups.filter(g => logoMaterialIndices.includes(g.materialIndex));
+  if (!logoGroups.length) return;
+
+  const logoGeom = geom.clone();
+  logoGeom.clearGroups();
+  for (const g of logoGroups) {
+    logoGeom.addGroup(g.start, g.count, 0);
+  }
+
+  const remainingGroups = geom.groups.filter(g => !logoMaterialIndices.includes(g.materialIndex));
+  geom.clearGroups();
+  for (const g of remainingGroups) {
+    geom.addGroup(g.start, g.count, g.materialIndex);
+  }
+
+  const logoMesh = new THREE.Mesh(logoGeom, logoMaterial);
+  logoMesh.name = `${mesh.name || 'mesh'}_LOGO`;
+  logoMesh.position.copy(mesh.position);
+  logoMesh.rotation.copy(mesh.rotation);
+  logoMesh.scale.copy(mesh.scale);
+  logoMesh.translateZ(-insetCm);
+
+  mesh.parent?.add(logoMesh);
+  return logoMesh;
+}
+
+/**
+ * Planar UVs with contain-fit (CSS background-size: contain) inside padded area.
+ * Projects using averaged normal -> tangent/bitangent plane. Scale=0 hides mesh.
+ */
+function generateLogoUVsPlanar(
+  mesh: THREE.Mesh,
+  logoWidth: number,
+  logoHeight: number,
+  userScale: number,
+  targetPanelAspect: number = LOGO_PANEL_ASPECT,
+  paddingFraction: number = LOGO_PADDING,
+  transform?: LogoTransform,
+  flipU: boolean = true,
+  flipV: boolean = false,
+) {
+  const geom = mesh.geometry as THREE.BufferGeometry;
+  if (!geom) return;
+  const pos = geom.attributes.position as THREE.BufferAttribute;
+  const normal = geom.attributes.normal as THREE.BufferAttribute | undefined;
+  if (!pos) return;
+
+  const s = Math.max(0, Math.min(1, userScale ?? 1));
+  if (s <= 0) {
+    mesh.visible = false;
+    return;
+  }
+  mesh.visible = true;
+
+  const n = new THREE.Vector3(0, 0, 1);
+  if (normal) {
+    n.set(0, 0, 0);
+    for (let i = 0; i < normal.count; i++) {
+      n.x += normal.getX(i);
+      n.y += normal.getY(i);
+      n.z += normal.getZ(i);
+    }
+    if (n.lengthSq() < 1e-8) n.set(0, 0, 1);
+    n.normalize();
+  }
+
+  const up = Math.abs(n.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  const t = new THREE.Vector3().crossVectors(up, n).normalize();
+  const b = new THREE.Vector3().crossVectors(n, t).normalize();
+
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  const tmp = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    tmp.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+    const u = tmp.dot(t);
+    const v = tmp.dot(b);
+    minU = Math.min(minU, u);
+    maxU = Math.max(maxU, u);
+    minV = Math.min(minV, v);
+    maxV = Math.max(maxV, v);
+  }
+  const spanU = (maxU - minU) || 1;
+  const spanV = (maxV - minV) || 1;
+
+  const pad = Math.max(0, Math.min(0.49, paddingFraction));
+  const safeMinX = pad, safeMaxX = 1 - pad;
+  const safeMinY = pad, safeMaxY = 1 - pad;
+  const safeW = safeMaxX - safeMinX;
+  const safeH = safeMaxY - safeMinY;
+
+  const panelAspect = targetPanelAspect;
+  let panelW = safeW;
+  let panelH = panelW / panelAspect;
+  if (panelH > safeH) {
+    panelH = safeH;
+    panelW = panelH * panelAspect;
+  }
+  const panelMinX = safeMinX + (safeW - panelW) * 0.5;
+  const panelMinY = safeMinY + (safeH - panelH) * 0.5;
+
+  const logoAspect = Math.max(1, logoWidth) / Math.max(1, logoHeight);
+  let rectW = panelW;
+  let rectH = panelH;
+  if (logoAspect > panelAspect) rectH = rectW / logoAspect;
+  else rectW = rectH * logoAspect;
+
+  rectW *= s;
+  rectH *= s;
+  if (rectW <= 0 || rectH <= 0) {
+    mesh.visible = false;
+    return;
+  }
+
+  const ox = Math.max(-1, Math.min(1, transform?.offsetX ?? 0));
+  const oy = Math.max(-1, Math.min(1, transform?.offsetY ?? 0));
+  const remX = Math.max(0, panelW - rectW);
+  const remY = Math.max(0, panelH - rectH);
+  let rectMinX = panelMinX + remX * 0.5 + remX * 0.5 * ox;
+  let rectMinY = panelMinY + remY * 0.5 + remY * 0.5 * oy;
+  rectMinX = Math.min(1 - rectW, Math.max(0, rectMinX));
+  rectMinY = Math.min(1 - rectH, Math.max(0, rectMinY));
+
+  const uvs = new Float32Array(pos.count * 2);
+  for (let i = 0; i < pos.count; i++) {
+    tmp.set(pos.getX(i), pos.getY(i), pos.getZ(i));
+    const pu = (tmp.dot(t) - minU) / spanU;
+    const pv = (tmp.dot(b) - minV) / spanV;
+    let u = rectMinX + pu * rectW;
+    let v = rectMinY + pv * rectH;
+    if (flipU) u = 1 - u;
+    if (flipV) v = 1 - v;
+    uvs[i * 2] = Math.min(1, Math.max(0, u));
+    uvs[i * 2 + 1] = Math.min(1, Math.max(0, v));
+  }
+
+  geom.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+  (geom.attributes.uv as THREE.BufferAttribute).needsUpdate = true;
+}
+
 // ============================================================================
 // OBJ Model Component
 // ============================================================================
@@ -132,9 +320,10 @@ interface LecternModelProps {
   panelColour: string;
   logoImageUrl?: string; // Custom logo image URL
   hasLogoAccessory: boolean; // Whether a logo accessory is selected
+  logoTransform?: LogoTransform; // Scale/offset controls for logo panel
 }
 
-const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory }) => {
+const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, logoTransform }) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoTexture, setLogoTexture] = useState<THREE.Texture | null>(null);
@@ -178,6 +367,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   
   const frameHex = getFrameColourHex(frameColour);
   const panelHex = getPanelColourHex(panelColour);
+  const appliedLogoTransform: LogoTransform = logoTransform || { scale: 1, offsetX: 0, offsetY: 0 };
   
   // Get material mapping for this model
   const mapping = MATERIAL_MAPPINGS[modelId] || DEFAULT_MAPPING;
@@ -395,47 +585,20 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       }
       
       // Get logo dimensions
-      const logoW = logoTextureRef.current?.image?.width || 1;
-      const logoH = logoTextureRef.current?.image?.height || 1;
-      const logoAspect = logoW / logoH;
+      const { width: logoW, height: logoH } = getTextureDims(logoTextureRef.current);
       
-      const generatePlanarUVs = (mesh: THREE.Mesh) => {
-        if (!mesh.geometry) return;
-        mesh.geometry.computeBoundingBox();
-        const bbox = mesh.geometry.boundingBox;
-        if (!bbox) return;
-        
-        const pos = mesh.geometry.attributes.position;
-        const uvs = new Float32Array(pos.count * 2);
-        
-        // Find min/max for each axis across all vertices
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i);
-          const y = pos.getY(i);
-          minX = Math.min(minX, x);
-          maxX = Math.max(maxX, x);
-          minY = Math.min(minY, y);
-          maxY = Math.max(maxY, y);
-        }
-        
-        const w = maxX - minX || 1;
-        const h = maxY - minY || 1;
-        
-        console.log('Logo panel - X:', minX.toFixed(1), 'to', maxX.toFixed(1), '=', w.toFixed(1));
-        console.log('Logo panel - Y:', minY.toFixed(1), 'to', maxY.toFixed(1), '=', h.toFixed(1));
-        
-        // Simple: fill panel with logo (may stretch, but will show whole logo)
-        for (let i = 0; i < pos.count; i++) {
-          const x = pos.getX(i);
-          const y = pos.getY(i);
-          uvs[i * 2] = 1 - (x - minX) / w;
-          uvs[i * 2 + 1] = (y - minY) / h;
-        }
-        
-        mesh.geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
+      const applyLogoUVs = (mesh: THREE.Mesh, scale: number, offsets: LogoTransform | undefined) => {
+        generateLogoUVsPlanar(
+          mesh,
+          logoW,
+          logoH,
+          scale,
+          LOGO_PANEL_ASPECT,
+          LOGO_PADDING,
+          offsets,
+          true,
+          false
+        );
       };
       
       // Helper to get replacement material for a given material name
@@ -444,10 +607,6 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
         // Check logo FIRST
         if (matchesMaterial(matName, mapping.logo)) {
           console.log('  Material:', matName, '-> LOGO', hasLogoAccessoryRef.current ? '(WHITE + logo)' : '(panel colour)');
-          // Generate proper UVs for logo mesh
-          if (mesh) {
-            generatePlanarUVs(mesh);
-          }
           return currentLogoMaterial;
         }
         // Check black BEFORE frame (Toppanelfelt contains "toppanel" but should be black)
@@ -481,17 +640,45 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             
             // Store original material names for later updates
             const originalNames: string[] = [];
+            const logoMaterialIndices: number[] = [];
             
             // Process each material in the array
             const newMaterials = child.material.map((mat, index) => {
               const matName = mat.name || `material_${index}`;
               originalNames.push(matName);
+              if (matchesMaterial(matName, mapping.logo)) {
+                logoMaterialIndices.push(index);
+                const m = currentLogoMaterial.clone();
+                m.needsUpdate = true;
+                m.polygonOffset = true;
+                m.polygonOffsetFactor = -1;
+                m.polygonOffsetUnits = -1;
+                return m;
+              }
               const replacement = getReplacementMaterial(matName, child);
               return replacement || mat;
             });
             
             child.material = newMaterials;
             child.userData.originalMaterialNames = originalNames;
+
+            // Split out logo groups and apply UVs/inset to logo mesh only
+            if (logoMaterialIndices.length && !child.userData.logoSplitDone) {
+              child.userData.logoSplitDone = true;
+              const inset = LOGO_INSET_BY_MODEL[modelId] ?? LOGO_INSET_BY_MODEL.default;
+              const logoMat = currentLogoMaterial.clone();
+              logoMat.needsUpdate = true;
+              logoMat.polygonOffset = true;
+              logoMat.polygonOffsetFactor = -1;
+              logoMat.polygonOffsetUnits = -1;
+              const logoMesh = splitOutLogoGroups(child, logoMaterialIndices, logoMat, inset);
+              child.userData.logoMesh = logoMesh;
+              if (logoMesh) {
+                applyLogoUVs(logoMesh, Math.max(0, Math.min(1, appliedLogoTransform.scale ?? 1)), appliedLogoTransform);
+              }
+            } else if (child.userData.logoMesh) {
+              applyLogoUVs(child.userData.logoMesh, Math.max(0, Math.min(1, appliedLogoTransform.scale ?? 1)), appliedLogoTransform);
+            }
           } else {
             // Single material mesh
             const matName = child.material?.name || child.name || '';
@@ -501,6 +688,17 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             const replacement = getReplacementMaterial(matName, child);
             if (replacement) {
               child.material = replacement;
+            }
+
+            if (matchesMaterial(matName, mapping.logo)) {
+              applyLogoUVs(child, Math.max(0, Math.min(1, appliedLogoTransform.scale ?? 1)), appliedLogoTransform);
+              // Inset single-material logo mesh
+              const inset = LOGO_INSET_BY_MODEL[modelId] ?? LOGO_INSET_BY_MODEL.default;
+              if (!child.userData.logoInsetApplied) {
+                const frontDir = computeFrontDir(child);
+                child.position.addScaledVector(frontDir, -inset);
+                child.userData.logoInsetApplied = true;
+              }
             }
           }
           
@@ -668,6 +866,7 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
             panelColour={panelColour}
             logoImageUrl={logoImageUrl}
             hasLogoAccessory={hasLogoAccessory}
+            logoTransform={config.logoTransform}
           />
         </Suspense>
       </group>

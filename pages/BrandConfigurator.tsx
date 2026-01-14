@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet } from '../types';
+import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet, LogoTransform } from '../types';
 import ConfiguratorControls from '../components/ConfiguratorControls';
 import { Viewer3D, Viewer3DRef } from '../components/Viewer3D';
 import LectrumViewer3D, { LectrumViewer3DRef } from '../components/LectrumViewer3D';
@@ -43,6 +43,7 @@ const BrandConfigurator: React.FC = () => {
     selections: {},
     customDrawers: [],
     embeddedCabinets: [],
+    logoTransform: { scale: 1, offsetX: 0, offsetY: 0 },
     notes: '',
     internalReference: ''
   });
@@ -99,6 +100,7 @@ const BrandConfigurator: React.FC = () => {
       selections: initialSelections,
       customDrawers: [],
       embeddedCabinets: [],
+      logoTransform: { scale: 1, offsetX: 0, offsetY: 0 },
       notes: '',
       internalReference: ''
     });
@@ -119,6 +121,13 @@ const BrandConfigurator: React.FC = () => {
     setConfig(prev => ({
       ...prev,
       logoImageUrl: logoUrl
+    }));
+  };
+
+  const handleLogoTransformChange = (transform: LogoTransform) => {
+    setConfig(prev => ({
+      ...prev,
+      logoTransform: transform
     }));
   };
 
@@ -476,6 +485,7 @@ const BrandConfigurator: React.FC = () => {
               onSelectDrawer={setActiveDrawerIndex}
               isEditingCartItem={editingItemId !== null}
               onLogoChange={handleLogoChange}
+              onLogoTransformChange={handleLogoTransformChange}
             />
           </div>
 

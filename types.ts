@@ -64,8 +64,15 @@ export interface ConfigurationState {
   customDrawers: DrawerConfiguration[]; // Array of drawer objects (Primary product)
   embeddedCabinets?: EmbeddedCabinet[]; // For nested modules like under-bench cabinets
   logoImageUrl?: string; // Custom logo image for Lectrum products
+  logoTransform?: LogoTransform; // Placement controls for Lectrum logo
   notes: string;
   internalReference: string;
+}
+
+export interface LogoTransform {
+  scale: number;   // User scale slider 0..1 (0 hides, 1 = fit)
+  offsetX: number; // Horizontal pan within safe area (-1..1)
+  offsetY: number; // Vertical pan within safe area (-1..1)
 }
 
 export interface CustomerDetails {

@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet, DrawerAccessorySelection } from '../types';
+import { ConfigurationState, ProductDefinition, OptionGroup, DrawerConfiguration, DrawerInteriorType, DrawerInteriorOption, EmbeddedCabinet, DrawerAccessorySelection, LogoTransform } from '../types';
 import { resolvePartitionCode, DRAWER_ACCESSORIES, filterAccessoriesForDrawer, resolveAccessoryCode } from '../data/catalog';
 import { useCatalog } from '../contexts/CatalogContext';
 import { calculateUsedHeight, filterInteriorsForDrawer, normalizeDrawerStack, summarizeDrawers } from '../services/drawerUtils';
@@ -34,6 +34,7 @@ interface ConfiguratorControlsProps {
   isEditingCartItem?: boolean;
   // Logo upload for Lectrum products
   onLogoChange?: (logoUrl: string | undefined) => void;
+  onLogoTransformChange?: (transform: LogoTransform) => void;
 }
 
 const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({ 
@@ -46,7 +47,8 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   onSelectDrawer,
   onEmbeddedCabinetChange,
   isEditingCartItem = false,
-  onLogoChange
+  onLogoChange,
+  onLogoTransformChange
 }) => {
   
   const { interiors, products } = useCatalog();
@@ -711,16 +713,83 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                   />
                   {/* Logo upload for Lectrum products with logo accessories */}
                   {product.id.startsWith('lectrum-') && group.id === 'accessories' && onLogoChange && (
-                    <LogoUploadField
-                      logoImageUrl={config.logoImageUrl}
-                      onLogoChange={onLogoChange}
-                      hasLogoAccessory={(() => {
-                        const logoIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
-                                        'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
-                        const accessories = config.selections[group.id] as Record<string, number> | undefined;
-                        return logoIds.some(id => (accessories?.[id] || 0) > 0);
-                      })()}
-                    />
+                    <>
+                      <LogoUploadField
+                        logoImageUrl={config.logoImageUrl}
+                        onLogoChange={onLogoChange}
+                        hasLogoAccessory={(() => {
+                          const logoIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
+                                          'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
+                          const accessories = config.selections[group.id] as Record<string, number> | undefined;
+                          return logoIds.some(id => (accessories?.[id] || 0) > 0);
+                        })()}
+                      />
+                      {onLogoTransformChange && (
+                        <div className="mt-3 p-3 border border-zinc-700 rounded bg-zinc-900/60 space-y-3">
+                          <div className="text-xs font-semibold text-zinc-200">Logo placement</div>
+                          {(() => {
+                            const t = config.logoTransform || { scale: 1, offsetX: 0, offsetY: 0 };
+                            const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
+                            const updateTransform = (patch: Partial<LogoTransform>) => {
+                              const next = { scale: t.scale, offsetX: t.offsetX, offsetY: t.offsetY, ...patch };
+                              next.scale = clamp(next.scale, 0, 1);       // 0..1 (0 hides, 1 fits)
+                              next.offsetX = clamp(next.offsetX, -2, 2); // allow more travel
+                              next.offsetY = clamp(next.offsetY, -2, 2);
+                              onLogoTransformChange(next);
+                            };
+                            return (
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="flex justify-between text-[11px] text-zinc-400">
+                                    <span>Scale</span>
+                                    <span>{Math.round(t.scale * 100)}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="0"
+                                    max="1"
+                                    step="0.01"
+                                    value={t.scale}
+                                    onChange={(e) => updateTransform({ scale: parseFloat(e.target.value) })}
+                                    className="w-full accent-amber-500"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-[11px] text-zinc-400">
+                                    <span>Offset X</span>
+                                    <span>{(t.offsetX * 50).toFixed(0)}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="-2"
+                                    max="2"
+                                    step="0.01"
+                                    value={t.offsetX}
+                                    onChange={(e) => updateTransform({ offsetX: parseFloat(e.target.value) })}
+                                    className="w-full accent-amber-500"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-[11px] text-zinc-400">
+                                    <span>Offset Y</span>
+                                    <span>{(t.offsetY * 50).toFixed(0)}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="-2"
+                                    max="2"
+                                    step="0.01"
+                                    value={t.offsetY}
+                                    onChange={(e) => updateTransform({ offsetY: parseFloat(e.target.value) })}
+                                    className="w-full accent-amber-500"
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+                    </>
                   )}
                 </>
               )}
