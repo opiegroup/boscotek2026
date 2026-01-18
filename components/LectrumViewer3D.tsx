@@ -7,6 +7,7 @@ import { MTLLoader } from 'three/examples/jsm/loaders/MTLLoader.js';
 import { ConfigurationState, ProductDefinition, LogoTransform } from '../types';
 import { FRAME_COLOURS, PANEL_COLOURS } from '../services/products/lectrumConstants';
 import { getLectrumModelInfo } from '../services/products/lectrumCatalog';
+import SceneControlsOverlay from './SceneControlsOverlay';
 
 type BgMode = 'dark' | 'light' | 'photo';
 
@@ -57,10 +58,10 @@ const MATERIAL_MAPPINGS: Record<string, MaterialMapping> = {
   },
   'L2001-CTL': {
     frame: ['Frame'],  // Metal frame legs only
-    panel: ['Front_panel', 'frontpanel', 'Frontpanel'],  // Front dress panel only
-    silver: ['Silverpins', 'Silver_Screws', 'feet', 'XLR', 'metal'],
-    black: ['Foam', 'Gooseneck', 'Wheel_', 'blackpasic', '_lightneck', 'feet_rubber', 'frame_buttons', 'screen', 'Top_panel', 'topplate', 'lecterntop', 'Toppanelfelt'],
-    logo: ['logo_panel', 'Boarder_Print'],
+    panel: ['Front_panel', 'frontpanel', 'Frontpanel', 'FreontPAnel'],  // Front dress panel (note: FreontPAnel is a typo in the model)
+    silver: ['silver', 'screw', 'xlr', 'steelwheel'],
+    black: ['gooseneck', 'Blackrubber', 'blackrubberfoot', 'controlpanel', 'controlpanel2', '0,0,0_24', 'Top_Panel', 'green'],
+    logo: ['logopanel', 'Whitereitomh'],
   },
   'L20': {
     frame: ['Frame'],  // Metal frame legs only
@@ -153,7 +154,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   const { invalidate } = useThree();
   
   // Default logo transform values
-  const transform = logoTransform || { scale: 1, offsetX: 0, offsetY: 0 };
+  const transform = logoTransform || { scale: 0.3, offsetX: 0, offsetY: 0, offsetZ: 0, tilt: 0 };
   
   // Load logo texture when URL changes
   useEffect(() => {
@@ -672,8 +673,20 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   const logoImgH = logoImg?.height || 1;
   const logoAspect = logoImgW / logoImgH;
   
-  // Show procedural logo plane if we have logo panel info, texture, and accessory selected
-  const showLogoPlane = hasLogoAccessory && logoTexture && logoPanelInfo;
+  // Models with hardcoded logo positions (don't need logoPanelInfo detection)
+  const hasHardcodedLogoPosition = ['L2001C', 'L2001-CTL', 'L2001'].includes(modelId);
+  
+  // Show procedural logo plane if we have texture, accessory selected, AND either:
+  // - logoPanelInfo was detected from the model, OR
+  // - model has hardcoded logo position
+  const showLogoPlane = hasLogoAccessory && logoTexture && (logoPanelInfo || hasHardcodedLogoPosition);
+  
+  console.log('=== SHOW LOGO CHECK ===');
+  console.log('hasLogoAccessory:', hasLogoAccessory);
+  console.log('logoTexture:', !!logoTexture);
+  console.log('logoPanelInfo:', !!logoPanelInfo);
+  console.log('hasHardcodedLogoPosition:', hasHardcodedLogoPosition);
+  console.log('showLogoPlane:', showLogoPlane);
   
   // Calculate logo plane size based on panel size and user scale
   let logoPlaneWidth = 0;
@@ -681,12 +694,12 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   let logoPlanePosition: [number, number, number] = [0, 0, 0];
   let logoPlaneRotation: [number, number, number] = [0, 0, 0];
   
-  if (showLogoPlane && logoPanelInfo) {
-    // Base size: 70% of the smaller panel dimension
-    const baseSize = Math.min(logoPanelInfo.width, logoPanelInfo.height) * 0.7;
+  if (showLogoPlane) {
+    // Base size - smaller for better fit
+    const baseSize = 10;
     
-    // Apply user scale (0-1, where 1 = 70% of panel)
-    const userScale = Math.max(0.05, transform.scale);
+    // Apply user scale (0-1 maps to 0.3x - 1.5x size)
+    const userScale = 0.3 + (transform.scale * 1.2);
     const scaledSize = baseSize * userScale;
     
     // Calculate dimensions maintaining logo aspect ratio
@@ -700,30 +713,68 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       logoPlaneWidth = scaledSize * logoAspect;
     }
     
-    // Manual positioning for the L2001C top logo panel
-    logoPlanePosition = [
-      11.5,                 // X=11.5
-      116,                  // Y=116
-      0,                    // Z=0
-    ];
+    // Model-specific logo positioning
+    const getLogoPosition = (id: string): { position: [number, number, number], rotation: [number, number, number], scale: number } => {
+      switch (id) {
+        case 'L2001C':
+          return {
+            position: [11.5, 116, 0],
+            rotation: [0, Math.PI / 2 - 0.026, 0],  // ~1.5 degrees adjustment
+            scale: 1.2
+          };
+        case 'L2001-CTL':
+          return {
+            position: [5, 30, 5],
+            rotation: [Math.PI / 4, Math.PI, 0],  // -45 degree tilt (opposite direction)
+            scale: 2.0
+          };
+        case 'L2001':
+          return {
+            position: [11.5, 116, 0],
+            rotation: [0, Math.PI / 2 - 0.026, 0],
+            scale: 1.2
+          };
+        default:
+          // Use detected position for other models (if available)
+          if (logoPanelInfo) {
+            return {
+              position: [logoPanelInfo.position.x, logoPanelInfo.position.y, logoPanelInfo.position.z + 1],
+              rotation: [logoPanelInfo.rotation.x, logoPanelInfo.rotation.y, logoPanelInfo.rotation.z],
+              scale: 1.0
+            };
+          }
+          // Fallback default position
+          return {
+            position: [0, 100, 5],
+            rotation: [0, Math.PI / 2, 0],
+            scale: 1.0
+          };
+      }
+    };
     
-    // Rotate to face forward - adjusted to match panel angle
-    logoPlaneRotation = [
-      0,
-      Math.PI / 2 - 0.026,  // ~1.5 degrees
-      0,
-    ];
+    const logoConfig = getLogoPosition(modelId);
+    logoPlanePosition = [...logoConfig.position];
+    logoPlaneRotation = [...logoConfig.rotation];
     
     // Apply user offsets
     logoPlanePosition[0] += transform.offsetX * 5;
     logoPlanePosition[1] += transform.offsetY * 5;
+    logoPlanePosition[2] += (transform.offsetZ || 0) * 10;  // Z offset with larger range
     
-    // Scale up by 20%
-    logoPlaneWidth *= 1.2;
-    logoPlaneHeight *= 1.2;
+    // Apply user tilt (adds to base X rotation)
+    logoPlaneRotation[0] += (transform.tilt || 0) * (Math.PI / 4);  // -45 to +45 degrees
+    
+    // Apply model-specific scale (proportionally to both dimensions)
+    logoPlaneWidth *= logoConfig.scale;
+    logoPlaneHeight *= logoConfig.scale;
 
-    console.log('Logo plane: size=', logoPlaneWidth.toFixed(1), 'x', logoPlaneHeight.toFixed(1),
-                'pos:', logoPlanePosition[0].toFixed(1), logoPlanePosition[1].toFixed(1), logoPlanePosition[2].toFixed(1));
+    console.log('=== LOGO PLANE CONFIG ===');
+    console.log('Model ID:', modelId);
+    console.log('Logo plane size:', logoPlaneWidth.toFixed(1), 'x', logoPlaneHeight.toFixed(1));
+    console.log('Logo plane position:', logoPlanePosition[0].toFixed(1), logoPlanePosition[1].toFixed(1), logoPlanePosition[2].toFixed(1));
+    console.log('Logo plane rotation:', logoPlaneRotation.map(r => r.toFixed(3)).join(', '));
+    console.log('Has hardcoded position:', hasHardcodedLogoPosition);
+    console.log('LogoPanelInfo detected:', !!logoPanelInfo);
   }
   
   return (
@@ -807,11 +858,14 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   const frameColour = config.selections['frame-colour'] || 'black';
   const panelColour = config.selections['panel-colour'] || 'petronas';
   
-  // Check if a logo accessory is selected
+  // Check if a logo accessory is selected OR if there's a logo image uploaded
+  // (show logo whenever user uploads one, don't require accessory selection)
   const accessories = config.selections['accessories'] as Record<string, number> | undefined;
   const logoAccessoryIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
                             'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
-  const hasLogoAccessory = logoAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
+  const hasLogoAccessorySelected = logoAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
+  // Show logo if accessory selected OR if logo image was uploaded
+  const hasLogoAccessory = hasLogoAccessorySelected || !!config.logoImageUrl;
   
   // Check if microphone accessory is selected (shows left/right goosenecks)
   const microphoneAccessoryIds = ['gooseneck-mic-12', 'gooseneck-mic-18'];
@@ -823,17 +877,40 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   
   // Debug logging
   console.log('=== LecternScene ===');
+  console.log('modelId:', modelId);
   console.log('accessories:', accessories);
-  console.log('hasLogoAccessory:', hasLogoAccessory);
-  console.log('logoImageUrl:', logoImageUrl ? 'has URL' : 'none');
+  console.log('hasLogoAccessorySelected:', hasLogoAccessorySelected);
+  console.log('hasLogoAccessory (including image upload):', hasLogoAccessory);
+  console.log('logoImageUrl:', logoImageUrl ? logoImageUrl.substring(0, 50) + '...' : 'none');
   console.log('logoTransform:', logoTransform);
   
   // Scale: models are in cm, height is ~116cm, we want ~2 units tall for good visibility
-  // Scale of 0.018 gives: 116 * 0.018 = ~2.1 units tall
-  const modelScale = 0.018;
+  // Different models may need different scales
+  const getModelScale = (id: string) => {
+    switch (id) {
+      case 'L2001-CTL':
+        return 0.022;  // CTL model is smaller, needs larger scale
+      case 'L20':
+        return 0.065;  // L20 Classic - 30% bigger
+      default:
+        return 0.018;  // Standard scale for most models
+    }
+  };
+  const modelScale = getModelScale(modelId);
+  
+  // Model-specific Y position (to center in viewer)
+  const getModelYOffset = (id: string) => {
+    switch (id) {
+      case 'L20':
+        return -1.4;  // Shadow at base
+      default:
+        return -0.9;
+    }
+  };
+  const modelYOffset = getModelYOffset(modelId);
   
   return (
-    <group position={[0, -0.9, 0]}>
+    <group position={[0, modelYOffset, 0]}>
       {/* Rotate to face front (toward camera) */}
       <group scale={modelScale} rotation={[0, 0.0175, 0]}>
         <Suspense fallback={<LoadingFallback />}>
@@ -934,7 +1011,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
           {/* Controls */}
           <OrbitControls
             ref={controlsRef}
-            enablePan={false}
+            enablePan={true}
             minDistance={2.5}
             maxDistance={8}
             minPolarAngle={Math.PI * 0.2}
@@ -984,6 +1061,9 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
         <div className="absolute bottom-4 left-4 bg-black/50 backdrop-blur-sm rounded-lg px-3 py-2 text-xs text-zinc-400">
           <span className="text-emerald-400">●</span> {product.name}
         </div>
+        
+        {/* Scene Controls Overlay (pan controls) */}
+        <SceneControlsOverlay controlsRef={controlsRef} />
       </div>
     );
   }

@@ -73,6 +73,8 @@ export interface LogoTransform {
   scale: number;   // User scale slider 0..1 (0 hides, 1 = fit)
   offsetX: number; // Horizontal pan within safe area (-1..1)
   offsetY: number; // Vertical pan within safe area (-1..1)
+  offsetZ: number; // Depth pan (-1..1) for positioning toward/away from lectern
+  tilt: number;    // Tilt angle (-1..1) where -1 = -45deg, 1 = +45deg
 }
 
 export interface CustomerDetails {

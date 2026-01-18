@@ -728,13 +728,15 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                         <div className="mt-3 p-3 border border-zinc-700 rounded bg-zinc-900/60 space-y-3">
                           <div className="text-xs font-semibold text-zinc-200">Logo placement</div>
                           {(() => {
-                            const t = config.logoTransform || { scale: 1, offsetX: 0, offsetY: 0 };
+                            const t = config.logoTransform || { scale: 0.3, offsetX: 0, offsetY: 0, offsetZ: 0, tilt: 0 };
                             const clamp = (v: number, min: number, max: number) => Math.min(Math.max(v, min), max);
                             const updateTransform = (patch: Partial<LogoTransform>) => {
-                              const next = { scale: t.scale, offsetX: t.offsetX, offsetY: t.offsetY, ...patch };
+                              const next = { scale: t.scale, offsetX: t.offsetX, offsetY: t.offsetY, offsetZ: t.offsetZ || 0, tilt: t.tilt || 0, ...patch };
                               next.scale = clamp(next.scale, 0, 1);       // 0..1 (0 hides, 1 fits)
                               next.offsetX = clamp(next.offsetX, -2, 2); // allow more travel
                               next.offsetY = clamp(next.offsetY, -2, 2);
+                              next.offsetZ = clamp(next.offsetZ || 0, -2, 2);
+                              next.tilt = clamp(next.tilt || 0, -1, 1);
                               onLogoTransformChange(next);
                             };
                             return (
@@ -781,6 +783,36 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                                     step="0.01"
                                     value={t.offsetY}
                                     onChange={(e) => updateTransform({ offsetY: parseFloat(e.target.value) })}
+                                    className="w-full accent-amber-500"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-[11px] text-zinc-400">
+                                    <span>Offset Z (Depth)</span>
+                                    <span>{((t.offsetZ || 0) * 50).toFixed(0)}%</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="-2"
+                                    max="2"
+                                    step="0.01"
+                                    value={t.offsetZ || 0}
+                                    onChange={(e) => updateTransform({ offsetZ: parseFloat(e.target.value) })}
+                                    className="w-full accent-amber-500"
+                                  />
+                                </div>
+                                <div>
+                                  <div className="flex justify-between text-[11px] text-zinc-400">
+                                    <span>Tilt (Forward/Back)</span>
+                                    <span>{((t.tilt || 0) * 45).toFixed(0)}°</span>
+                                  </div>
+                                  <input
+                                    type="range"
+                                    min="-1"
+                                    max="1"
+                                    step="0.01"
+                                    value={t.tilt || 0}
+                                    onChange={(e) => updateTransform({ tilt: parseFloat(e.target.value) })}
                                     className="w-full accent-amber-500"
                                   />
                                 </div>

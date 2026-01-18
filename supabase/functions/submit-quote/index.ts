@@ -91,12 +91,16 @@ const sendQuoteEmails = async (
 };
 
 export const handler = async (req: Request): Promise<Response> => {
+  console.log("submit-quote: Request received");
+  
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
   }
 
   try {
+    console.log("submit-quote: Parsing request body...");
     const body: QuotePayload = await req.json();
+    console.log("submit-quote: Body parsed, customer:", body?.customer?.email);
 
     if (!body?.customer || !body?.items || !body?.totals) {
       return new Response(JSON.stringify({ error: "Invalid payload" }), {
@@ -106,7 +110,9 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     // Generate reference using DB helper
+    console.log("submit-quote: Generating quote reference...");
     const { data: refData, error: refError } = await supabase.rpc("next_quote_reference");
+    console.log("submit-quote: RPC result - data:", refData, "error:", refError);
     if (refError || !refData) {
       console.error("Reference generation failed:", refError);
       return new Response(JSON.stringify({ error: refError?.message || "Ref generation failed" }), {
@@ -116,6 +122,7 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     const quoteReference = refData as string;
+    console.log("submit-quote: Quote reference generated:", quoteReference);
 
     const newQuote = {
       reference: quoteReference,
@@ -125,7 +132,9 @@ export const handler = async (req: Request): Promise<Response> => {
       totals: body.totals,
     };
 
+    console.log("submit-quote: Inserting quote into database...");
     const { data, error } = await supabase.from("quotes").insert(newQuote).select().single();
+    console.log("submit-quote: Insert result - data:", data?.id, "error:", error);
     if (error) {
       console.error("Quote insert failed:", error);
       return new Response(JSON.stringify({ error: error.message }), {
