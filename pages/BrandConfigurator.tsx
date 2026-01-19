@@ -30,6 +30,22 @@ const BrandConfigurator: React.FC = () => {
   const { brand, theme, brandSlug, isLoading: brandLoading } = useBrand();
   const { isEmbedded } = useEmbedMode();
   const navigate = useNavigate();
+  const logoDefaultsAppliedRef = useRef<Record<string, boolean>>({});
+  
+  const logoPanelClassicDefaults: LogoTransform = {
+    scale: 0.06,
+    offsetX: 0.02,
+    offsetY: 0.28,
+    offsetZ: -0.44,
+    tilt: 0,
+  };
+  const fullDressPanelClassicDefaults: LogoTransform = {
+    scale: 0.16,
+    offsetX: 0.02,
+    offsetY: 1.36,
+    offsetZ: -0.16,
+    tilt: 0,
+  };
   
   const [isAdminMode, setIsAdminMode] = useState(false);
   
@@ -111,10 +127,51 @@ const BrandConfigurator: React.FC = () => {
   };
 
   const handleConfigChange = (groupId: string, value: any) => {
-    setConfig(prev => ({
-      ...prev,
-      selections: { ...prev.selections, [groupId]: value }
-    }));
+    setConfig(prev => {
+      const nextSelections = { ...prev.selections, [groupId]: value };
+      if (groupId === 'accessories') {
+        const prevAccessories = prev.selections['accessories'] as Record<string, number> | undefined;
+        const nextAccessories = value as Record<string, number> | undefined;
+        const prevCrystalite = (prevAccessories?.['crystalite-logo-classic'] || 0) > 0;
+        const nextCrystalite = (nextAccessories?.['crystalite-logo-classic'] || 0) > 0;
+        const prevClassicPanel = (prevAccessories?.['logo-panel-classic-400'] || 0) > 0;
+        const nextClassicPanel = (nextAccessories?.['logo-panel-classic-400'] || 0) > 0;
+        const prevClassicFull = (prevAccessories?.['logo-panel-classic-full'] || 0) > 0;
+        const nextClassicFull = (nextAccessories?.['logo-panel-classic-full'] || 0) > 0;
+        if ((nextCrystalite && !prevCrystalite) || (nextClassicPanel && !prevClassicPanel)) {
+          const shouldApplyDefaults =
+            (nextCrystalite && !logoDefaultsAppliedRef.current['crystalite-logo-classic']) ||
+            (nextClassicPanel && !logoDefaultsAppliedRef.current['logo-panel-classic-400']);
+          if (shouldApplyDefaults) {
+            if (nextCrystalite) {
+              logoDefaultsAppliedRef.current['crystalite-logo-classic'] = true;
+            }
+            if (nextClassicPanel) {
+              logoDefaultsAppliedRef.current['logo-panel-classic-400'] = true;
+            }
+            return {
+              ...prev,
+              selections: nextSelections,
+              logoTransform: { ...logoPanelClassicDefaults },
+            };
+          }
+        }
+        if (nextClassicFull && !prevClassicFull) {
+          if (!logoDefaultsAppliedRef.current['logo-panel-classic-full']) {
+            logoDefaultsAppliedRef.current['logo-panel-classic-full'] = true;
+            return {
+              ...prev,
+              selections: { ...nextSelections, 'panel-colour': 'savoye' },
+              logoTransform: { ...fullDressPanelClassicDefaults },
+            };
+          }
+        }
+      }
+      return {
+        ...prev,
+        selections: nextSelections,
+      };
+    });
   };
 
   const handleLogoChange = (logoUrl: string | undefined) => {

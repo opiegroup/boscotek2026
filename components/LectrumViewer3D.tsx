@@ -133,7 +133,11 @@ interface LecternModelProps {
   panelColour: string;
   logoImageUrl?: string; // Custom logo image URL
   hasLogoAccessory: boolean; // Whether a logo accessory is selected
+  hasLogoAccessorySelected: boolean; // Whether a logo accessory is explicitly selected
   hasMicrophoneAccessory: boolean; // Whether a microphone accessory is selected (shows left/right goosenecks)
+  hasCrystaliteLogo: boolean; // Whether the Crystalite logo accessory is selected
+  hasClassicLogoPanel400: boolean; // Whether Logo Panel 400x300 (Classic) is selected
+  hasClassicLogoPanelFull: boolean; // Whether Full Dress Panel Logo (Classic) is selected
   logoTransform?: LogoTransform; // Logo scale and position controls
 }
 
@@ -145,7 +149,7 @@ interface LogoPanelInfo {
   height: number;
 }
 
-const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, hasMicrophoneAccessory, logoTransform }) => {
+const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, hasLogoAccessorySelected, hasMicrophoneAccessory, hasCrystaliteLogo, hasClassicLogoPanel400, hasClassicLogoPanelFull, logoTransform }) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoTexture, setLogoTexture] = useState<THREE.Texture | null>(null);
@@ -296,7 +300,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                 return staticMaterials.silver;
               }
               // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
-              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam' || matName === 'blackfoam' || matName === 'Blackfoam') {
                 const micMat = staticMaterials.black.clone();
                 micMat.transparent = true;
                 micMat.opacity = hasMicrophoneAccessory ? 1 : 0;
@@ -382,7 +386,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
               child.material = panelMaterial;
             } else if (matchesMaterial(materialName, mapping.silver)) {
               child.material = staticMaterials.silver;
-            } else if (materialName === 'Gooseneck' || materialName === 'gooseneck' || materialName === 'Foam' || materialName === 'foam') {
+            } else if (materialName === 'Gooseneck' || materialName === 'gooseneck' || materialName === 'Foam' || materialName === 'foam' || materialName === 'blackfoam' || materialName === 'Blackfoam') {
               // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
               const micMat = staticMaterials.black.clone();
               micMat.transparent = true;
@@ -487,7 +491,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                 hasLogoMaterial = true;
               }
               // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
-              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+              if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam' || matName === 'blackfoam' || matName === 'Blackfoam') {
                 const micMat = staticMaterials.black.clone();
                 micMat.transparent = true;
                 micMat.opacity = hasMicrophoneAccessoryRef.current ? 1 : 0;
@@ -539,7 +543,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             }
             
             // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
-            if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam') {
+            if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam' || matName === 'blackfoam' || matName === 'Blackfoam') {
               const micMat = staticMaterials.black.clone();
               micMat.transparent = true;
               micMat.opacity = hasMicrophoneAccessoryRef.current ? 1 : 0;
@@ -676,10 +680,13 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   // Models with hardcoded logo positions (don't need logoPanelInfo detection)
   const hasHardcodedLogoPosition = ['L2001C', 'L2001-CTL', 'L2001'].includes(modelId);
   
-  // Show procedural logo plane if we have texture, accessory selected, AND either:
-  // - logoPanelInfo was detected from the model, OR
-  // - model has hardcoded logo position
-  const showLogoPlane = hasLogoAccessory && logoTexture && (logoPanelInfo || hasHardcodedLogoPosition);
+  // Show logo panel group when we have a panel location AND either:
+  // - a logo accessory is selected (with texture), OR
+  // - the Crystalite logo accessory is selected (frosted panel base)
+  const showLogoPlaneBase = (logoPanelInfo || hasHardcodedLogoPosition) && (hasLogoAccessory || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull);
+  const showLogoPlane = showLogoPlaneBase && !!logoTexture && (hasLogoAccessory || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull);
+  const showFrostedLogoPanel = showLogoPlaneBase && hasCrystaliteLogo;
+  const showWhiteLogoPanel = showLogoPlaneBase && hasClassicLogoPanel400;
   
   console.log('=== SHOW LOGO CHECK ===');
   console.log('hasLogoAccessory:', hasLogoAccessory);
@@ -691,10 +698,13 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   // Calculate logo plane size based on panel size and user scale
   let logoPlaneWidth = 0;
   let logoPlaneHeight = 0;
+  let panelPlaneWidth = 0;
+  let panelPlaneHeight = 0;
+  let frameThickness = 0;
   let logoPlanePosition: [number, number, number] = [0, 0, 0];
   let logoPlaneRotation: [number, number, number] = [0, 0, 0];
   
-  if (showLogoPlane) {
+  if (showLogoPlaneBase) {
     // Base size - smaller for better fit
     const baseSize = 10;
     
@@ -702,15 +712,29 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     const userScale = 0.3 + (transform.scale * 1.2);
     const scaledSize = baseSize * userScale;
     
-    // Calculate dimensions maintaining logo aspect ratio
-    if (logoAspect > 1) {
-      // Wide logo
-      logoPlaneWidth = scaledSize;
-      logoPlaneHeight = scaledSize / logoAspect;
+    const panelAspect = (hasCrystaliteLogo || hasClassicLogoPanel400) ? (4 / 3) : logoAspect;
+    // Base panel dimensions (Crystalite panel is fixed 4:3)
+    if (panelAspect > 1) {
+      panelPlaneWidth = scaledSize;
+      panelPlaneHeight = scaledSize / panelAspect;
     } else {
-      // Tall or square logo
-      logoPlaneHeight = scaledSize;
-      logoPlaneWidth = scaledSize * logoAspect;
+      panelPlaneHeight = scaledSize;
+      panelPlaneWidth = scaledSize * panelAspect;
+    }
+
+    if (hasCrystaliteLogo || hasClassicLogoPanel400) {
+      // Keep logo image aspect inside the 4:3 panel (no distortion)
+      const maxLogoWidth = panelPlaneWidth * 0.92;
+      const maxLogoHeight = panelPlaneHeight * 0.92;
+      logoPlaneWidth = maxLogoWidth;
+      logoPlaneHeight = maxLogoWidth / logoAspect;
+      if (logoPlaneHeight > maxLogoHeight) {
+        logoPlaneHeight = maxLogoHeight;
+        logoPlaneWidth = maxLogoHeight * logoAspect;
+      }
+    } else {
+      logoPlaneWidth = panelPlaneWidth;
+      logoPlaneHeight = panelPlaneHeight;
     }
     
     // Model-specific logo positioning
@@ -763,10 +787,27 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     
     // Apply user tilt (adds to base X rotation)
     logoPlaneRotation[0] += (transform.tilt || 0) * (Math.PI / 4);  // -45 to +45 degrees
+
+    // Flip when logo is uploaded without accessory, or for Classic/Crystalite panels
+    if ((hasLogoAccessory && !hasLogoAccessorySelected) || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull) {
+      logoPlaneRotation[1] += Math.PI;
+    }
     
     // Apply model-specific scale (proportionally to both dimensions)
     logoPlaneWidth *= logoConfig.scale;
     logoPlaneHeight *= logoConfig.scale;
+    panelPlaneWidth *= logoConfig.scale;
+    panelPlaneHeight *= logoConfig.scale;
+    frameThickness = Math.max(panelPlaneWidth, panelPlaneHeight) * 0.04;
+
+    // L20S Classic Electronics: Crystalite panel needs to be larger
+    if (modelId === 'L20S' && hasCrystaliteLogo) {
+      logoPlaneWidth *= 1.5;
+      logoPlaneHeight *= 1.5;
+      panelPlaneWidth *= 1.5;
+      panelPlaneHeight *= 1.5;
+      frameThickness = Math.max(panelPlaneWidth, panelPlaneHeight) * 0.04;
+    }
 
     console.log('=== LOGO PLANE CONFIG ===');
     console.log('Model ID:', modelId);
@@ -782,19 +823,85 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       <primitive object={model} />
       
       {/* Procedural logo plane - positioned and rotated to match the logo panel */}
-      {showLogoPlane && (
-        <mesh
-          ref={logoPlaneRef}
-          position={logoPlanePosition}
-          rotation={logoPlaneRotation}
-        >
-          <planeGeometry args={[logoPlaneWidth, logoPlaneHeight]} />
-          <meshBasicMaterial
-            map={logoTexture}
-            transparent={true}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
+      {showLogoPlaneBase && (
+        <group position={logoPlanePosition} rotation={logoPlaneRotation}>
+          {/* Frosted Crystalite backing panel */}
+          {showFrostedLogoPanel && (
+            <mesh position={[0, 0, -0.2]}>
+              <planeGeometry args={[panelPlaneWidth * 1.08, panelPlaneHeight * 1.08]} />
+              <meshStandardMaterial
+                color="#e1e1e1"
+                transparent={true}
+                opacity={0.75}
+                roughness={0.9}
+                metalness={0.05}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
+          {/* White backing panel for Logo Panel 400x300 (Classic) */}
+          {showWhiteLogoPanel && (
+            <mesh position={[0, 0, -0.2]}>
+              <planeGeometry args={[panelPlaneWidth * 1.08, panelPlaneHeight * 1.08]} />
+              <meshStandardMaterial
+                color="#ffffff"
+                transparent={false}
+                roughness={0.4}
+                metalness={0.0}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
+          {/* Frosted/white frame around 400x300 panels */}
+          {(showFrostedLogoPanel || showWhiteLogoPanel) && frameThickness > 0 && (
+            <group position={[0, 0, -0.15]}>
+              {[
+                // Top
+                {
+                  size: [panelPlaneWidth + frameThickness * 2, frameThickness, 1],
+                  position: [0, (panelPlaneHeight / 2) + (frameThickness / 2), 0],
+                },
+                // Bottom
+                {
+                  size: [panelPlaneWidth + frameThickness * 2, frameThickness, 1],
+                  position: [0, -(panelPlaneHeight / 2) - (frameThickness / 2), 0],
+                },
+                // Left
+                {
+                  size: [frameThickness, panelPlaneHeight, 1],
+                  position: [-(panelPlaneWidth / 2) - (frameThickness / 2), 0, 0],
+                },
+                // Right
+                {
+                  size: [frameThickness, panelPlaneHeight, 1],
+                  position: [(panelPlaneWidth / 2) + (frameThickness / 2), 0, 0],
+                },
+              ].map((edge, idx) => (
+                <mesh key={idx} position={edge.position as [number, number, number]}>
+                  <planeGeometry args={[edge.size[0], edge.size[1]]} />
+                  <meshStandardMaterial
+                    color={showFrostedLogoPanel ? '#d9d9d9' : '#ffffff'}
+                    transparent={showFrostedLogoPanel}
+                    opacity={showFrostedLogoPanel ? 0.8 : 1}
+                    roughness={0.8}
+                    metalness={0.05}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              ))}
+            </group>
+          )}
+          {showLogoPlane && (
+            <mesh ref={logoPlaneRef}>
+              <planeGeometry args={[logoPlaneWidth, logoPlaneHeight]} />
+              <meshBasicMaterial
+                map={logoTexture}
+                transparent={true}
+                side={THREE.DoubleSide}
+              />
+            </mesh>
+          )}
+        </group>
       )}
     </group>
   );
@@ -864,12 +971,15 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   const logoAccessoryIds = ['logo-insert-aero-top', 'logo-panel-aero-400', 'logo-panel-aero-full',
                             'logo-panel-classic-400', 'logo-panel-classic-full', 'crystalite-logo-classic'];
   const hasLogoAccessorySelected = logoAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
+  const hasCrystaliteLogo = (accessories?.['crystalite-logo-classic'] || 0) > 0;
+  const hasClassicLogoPanel400 = (accessories?.['logo-panel-classic-400'] || 0) > 0;
+  const hasClassicLogoPanelFull = (accessories?.['logo-panel-classic-full'] || 0) > 0;
   // Show logo if accessory selected OR if logo image was uploaded
   const hasLogoAccessory = hasLogoAccessorySelected || !!config.logoImageUrl;
   
   // Check if microphone accessory is selected (shows left/right goosenecks)
   const microphoneAccessoryIds = ['gooseneck-mic-12', 'gooseneck-mic-18'];
-  const hasMicrophoneAccessory = microphoneAccessoryIds.some(id => (accessories?.[id] || 0) > 0);
+  const hasMicrophoneAccessory = microphoneAccessoryIds.some(id => (accessories?.[id] || 0) > 0) || modelId === 'L20S';
   
   // Get logo image URL and transform from config
   const logoImageUrl = config.logoImageUrl;
@@ -891,7 +1001,7 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
       case 'L2001-CTL':
         return 0.022;  // CTL model is smaller, needs larger scale
       case 'L20':
-        return 0.065;  // L20 Classic - 30% bigger
+        return 0.08;  // L20 Classic - larger in view
       default:
         return 0.018;  // Standard scale for most models
     }
@@ -902,7 +1012,7 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   const getModelYOffset = (id: string) => {
     switch (id) {
       case 'L20':
-        return -1.4;  // Shadow at base
+        return -1.05;  // Center in view while keeping base aligned
       default:
         return -0.9;
     }
@@ -920,7 +1030,11 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
             panelColour={panelColour}
             logoImageUrl={logoImageUrl}
             hasLogoAccessory={hasLogoAccessory}
+            hasLogoAccessorySelected={hasLogoAccessorySelected}
             hasMicrophoneAccessory={hasMicrophoneAccessory}
+            hasCrystaliteLogo={hasCrystaliteLogo}
+            hasClassicLogoPanel400={hasClassicLogoPanel400}
+            hasClassicLogoPanelFull={hasClassicLogoPanelFull}
             logoTransform={logoTransform}
           />
         </Suspense>
@@ -965,6 +1079,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
     // Get model info for display
     const modelId = product.id.replace('lectrum-', '').toUpperCase();
     const modelInfo = getLectrumModelInfo(modelId);
+  const shadowY = modelId === 'L20' ? -1.05 : -0.92;
     
     return (
       <div className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">
@@ -1001,7 +1116,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
           
           {/* Ground Shadow */}
           <ContactShadows
-            position={[0, -0.92, 0]}
+            position={[0, shadowY, 0]}
             opacity={0.4}
             scale={4}
             blur={2}

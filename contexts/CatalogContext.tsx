@@ -4,6 +4,15 @@ import { getProducts, getInteriors } from '../services/mockBackend';
 import { useBrand } from './BrandContext';
 import { getLectrumProducts } from '../services/products/lectrumCatalog';
 
+const BOSCOTEK_PRODUCT_IDS = [
+  'prod-workbench-heavy',
+  'prod-workbench-industrial',
+  'prod-hd-cabinet',
+  'prod-mobile-tool-cart',
+  'prod-storage-cupboard',
+  'prod-hilo-workbench',
+];
+
 interface CatalogContextType {
   products: ProductDefinition[];
   interiors: DrawerInteriorOption[];
@@ -39,7 +48,7 @@ export const CatalogProvider: React.FC<{ children: ReactNode }> = ({ children })
             getProducts(brand?.id),
             getInteriors(brand?.id)
           ]);
-          setProducts(prods);
+          setProducts(prods.filter(product => BOSCOTEK_PRODUCT_IDS.includes(product.id)));
           setInteriors(ints);
           break;
           
