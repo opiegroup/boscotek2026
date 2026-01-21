@@ -24,6 +24,8 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   error: string | null;
+  showPasswordReset: boolean; // True when user needs to set/reset password
+  linkExpiredError: string | null; // Error message for expired invite links
   
   // Role checks
   isAuthenticated: boolean;
@@ -41,6 +43,9 @@ interface AuthContextType {
   signUp: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  clearPasswordReset: () => void;
+  updatePassword: (newPassword: string) => Promise<{ error?: string }>;
+  clearLinkExpiredError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -49,11 +54,66 @@ interface AuthProviderProps {
   children: ReactNode;
 }
 
+// Storage keys
+const PASSWORD_RESET_FLAG = 'boscotek_password_reset_pending';
+const AUTH_TYPE_KEY = 'boscotek_auth_type';
+
+// Check URL hash for recovery/invite tokens on initial load
+// This runs BEFORE Supabase processes the tokens
+const checkUrlForPasswordReset = (): boolean => {
+  const hash = window.location.hash;
+  const search = window.location.search;
+  
+  console.log('🔍 Checking URL for password reset:', { hash: hash.substring(0, 100), search });
+  
+  let needsReset = false;
+  
+  // Check hash for tokens (Supabase default)
+  if (hash.includes('type=recovery') || hash.includes('type=invite')) {
+    console.log('✅ Found recovery/invite in hash');
+    needsReset = true;
+  }
+  
+  // Check query params (some configurations)
+  if (search.includes('type=recovery') || search.includes('type=invite')) {
+    console.log('✅ Found recovery/invite in search params');
+    needsReset = true;
+  }
+  
+  // Also check for access_token with invite/recovery type
+  if (hash.includes('access_token')) {
+    console.log('✅ Found access_token in hash');
+    if (hash.includes('recovery') || hash.includes('invite')) {
+      needsReset = true;
+    }
+  }
+  
+  // If we found recovery tokens, store a flag (persists even after Supabase clears URL)
+  if (needsReset) {
+    sessionStorage.setItem(PASSWORD_RESET_FLAG, 'true');
+    console.log('📝 Set password reset flag');
+    return true;
+  }
+  
+  // Check if we have a pending reset from session storage (set by supabaseClient.ts)
+  const storedFlag = sessionStorage.getItem(PASSWORD_RESET_FLAG);
+  const storedType = sessionStorage.getItem(AUTH_TYPE_KEY);
+  
+  if (storedFlag === 'true') {
+    console.log('✅ Found pending password reset flag, type:', storedType);
+    return true;
+  }
+  
+  return false;
+};
+
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Check URL on initial load for recovery tokens
+  const [showPasswordReset, setShowPasswordReset] = useState(checkUrlForPasswordReset());
 
   // Fetch user role and distributor info from database
   const fetchUserDetails = useCallback(async (supabaseUser: SupabaseUser): Promise<AuthUser> => {
@@ -141,16 +201,93 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setIsLoading(false);
   }, [fetchUserDetails]);
 
+  // State for showing expired link error
+  const [linkExpiredError, setLinkExpiredError] = useState<string | null>(null);
+
   // Initialize auth state
   useEffect(() => {
+    // Check URL hash BEFORE Supabase processes it
+    const hash = window.location.hash;
+    console.log('Initial URL hash:', hash);
+    
+    // Check for error in URL (expired link, etc)
+    if (hash.includes('error=') || hash.includes('error_code=')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const errorCode = params.get('error_code');
+      const errorDesc = params.get('error_description');
+      
+      if (errorCode === 'otp_expired' || errorDesc?.includes('expired')) {
+        setLinkExpiredError('This invite link has expired. Please ask your administrator to send a new invite.');
+      } else {
+        setLinkExpiredError(decodeURIComponent(errorDesc || errorCode || 'Authentication failed'));
+      }
+      
+      // Clear the error from URL
+      window.history.replaceState(null, '', window.location.pathname);
+      return;
+    }
+    
+    if (hash.includes('type=recovery') || hash.includes('type=invite')) {
+      console.log('Recovery/invite detected in URL - will show password form');
+      setShowPasswordReset(true);
+      // Store flag for security - user MUST set password
+      sessionStorage.setItem(PASSWORD_RESET_FLAG, 'true');
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session: initialSession } }) => {
       handleSessionChange(initialSession);
+      
+      // Check if this user needs to change their password (temp password)
+      if (initialSession?.user) {
+        const metadata = initialSession.user.user_metadata;
+        
+        // Check if user must change password (set by invite system)
+        const mustChangePassword = metadata?.must_change_password === true;
+        
+        console.log('User check:', { mustChangePassword, metadata });
+        
+        // Force password change for users with temp passwords
+        if (mustChangePassword) {
+          console.log('User must change password - showing modal');
+          setShowPasswordReset(true);
+        }
+        
+        // If there's a pending reset flag, force the modal
+        if (sessionStorage.getItem(PASSWORD_RESET_FLAG) === 'true') {
+          console.log('Pending password reset flag - showing modal');
+          setShowPasswordReset(true);
+        }
+      }
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
+      async (event, newSession) => {
+        console.log('Auth event:', event);
+        
+        // Handle password recovery event - show password reset form
+        if (event === 'PASSWORD_RECOVERY') {
+          console.log('PASSWORD_RECOVERY event - showing reset form');
+          setShowPasswordReset(true);
+          sessionStorage.setItem(PASSWORD_RESET_FLAG, 'true');
+        }
+        
+        // Handle sign in - check if user needs to change password
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          const mustChangePassword = newSession.user.user_metadata?.must_change_password === true;
+          
+          if (mustChangePassword) {
+            console.log('User signed in with temp password - forcing password change');
+            setShowPasswordReset(true);
+          }
+          
+          // Also check session storage flag
+          if (sessionStorage.getItem(PASSWORD_RESET_FLAG) === 'true') {
+            setShowPasswordReset(true);
+          }
+        }
+        
         handleSessionChange(newSession);
       }
     );
@@ -159,6 +296,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       subscription.unsubscribe();
     };
   }, [handleSessionChange]);
+  
+  // Function to clear the expired link error
+  const clearLinkExpiredError = () => setLinkExpiredError(null);
 
   // Sign in
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
@@ -247,6 +387,49 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  // Clear password reset state
+  const clearPasswordReset = () => {
+    setShowPasswordReset(false);
+    // Clear the session storage flag
+    sessionStorage.removeItem(PASSWORD_RESET_FLAG);
+    // Clear any tokens from URL
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  };
+
+  // Update password (for recovery/invite flows)
+  const updatePassword = async (newPassword: string): Promise<{ error?: string }> => {
+    try {
+      // Update password AND clear the must_change_password flag
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword,
+        data: {
+          must_change_password: false, // Clear the temp password flag
+          password_set: true,
+          password_changed_at: new Date().toISOString(),
+        }
+      });
+
+      if (updateError) {
+        return { error: updateError.message };
+      }
+
+      setShowPasswordReset(false);
+      // Clear the session storage flag
+      sessionStorage.removeItem(PASSWORD_RESET_FLAG);
+      sessionStorage.removeItem(AUTH_TYPE_KEY);
+      // Clear tokens from URL
+      if (window.location.hash) {
+        window.history.replaceState(null, '', window.location.pathname);
+      }
+
+      return {};
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to update password' };
+    }
+  };
+
   // Computed role checks
   const role = user?.role;
   const isAuthenticated = !!user;
@@ -264,6 +447,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     session,
     isLoading,
     error,
+    showPasswordReset,
+    linkExpiredError,
     isAuthenticated,
     isSuperAdmin,
     isAdmin,
@@ -277,6 +462,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signUp,
     signOut,
     refreshUser,
+    clearPasswordReset,
+    updatePassword,
+    clearLinkExpiredError,
   };
 
   return (

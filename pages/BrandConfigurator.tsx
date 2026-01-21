@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useBrand } from '../contexts/BrandContext';
 import BrandLogo, { BrandName } from '../components/BrandLogo';
 import AdminDashboard from '../components/admin/AdminDashboard';
+import { DistributorDashboard } from '../components/distributor';
 import EmbedWrapper from '../components/EmbedWrapper';
 import { useEmbedMode } from '../hooks/useEmbedMode';
 
@@ -76,6 +77,7 @@ const BrandConfigurator: React.FC = () => {
   };
   
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isDistributorMode, setIsDistributorMode] = useState(false);
   
   // Navigation State
   const [viewMode, setViewMode] = useState<'catalog' | 'config' | 'cart' | 'success'>('catalog');
@@ -365,6 +367,10 @@ const BrandConfigurator: React.FC = () => {
     return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
   }
 
+  if (isDistributorMode) {
+    return <DistributorDashboard onExit={() => setIsDistributorMode(false)} />;
+  }
+
   if (isLoading || brandLoading) {
     return (
       <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">
@@ -445,13 +451,26 @@ const BrandConfigurator: React.FC = () => {
               <div className="flex items-center gap-4">
                 {/* User indicator */}
                 {isAuthenticated && user && (
-                  <div className="flex items-center gap-2 text-xs text-zinc-400 bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm">
+                  <div className="flex items-center gap-3 text-xs text-zinc-400 bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm">
                     <span className={`w-2 h-2 rounded-full ${isDistributor ? 'bg-blue-500' : isStaff ? 'bg-green-500' : 'bg-zinc-500'}`} />
                     <span>{user.name}</span>
                     {user.role && <span className="text-zinc-500">({user.role})</span>}
+                    <span className="text-zinc-600">|</span>
+                    {/* My Portal for distributors */}
+                    {(isDistributor || user?.role === 'distributor') && (
+                      <button 
+                        onClick={() => setIsDistributorMode(true)}
+                        className="text-blue-400 hover:text-blue-300 font-medium"
+                      >
+                        My Portal
+                      </button>
+                    )}
+                    {(isDistributor || user?.role === 'distributor') && (
+                      <span className="text-zinc-600">|</span>
+                    )}
                     <button 
                       onClick={signOut}
-                      className="ml-2 text-zinc-500 hover:text-white"
+                      className="text-zinc-500 hover:text-white"
                     >
                       Sign Out
                     </button>

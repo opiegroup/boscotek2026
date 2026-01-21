@@ -139,9 +139,20 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
         {/* Pricing Estimate */}
         <div className="mb-6">
            <h3 className="text-sm font-bold uppercase text-zinc-400 border-b border-zinc-800 pb-1 mb-2">Item Breakdown</h3>
+           
+           {/* Distributor pricing tier badge */}
+           {pricing.tierName && pricing.tierCode !== 'CASH' && (
+             <div className="mb-3 bg-blue-900/20 border border-blue-800/50 rounded px-3 py-2 flex items-center gap-2">
+               <span className="text-blue-400 text-xs">💎</span>
+               <span className="text-blue-300 text-xs font-medium">{pricing.tierName} Pricing</span>
+             </div>
+           )}
+           
            <div className="flex items-baseline justify-between mb-2">
               <span className="text-zinc-500 text-sm">Unit Price (Ex GST)</span>
-              <span className="text-xl font-bold text-white">${pricing.totalPrice.toLocaleString()}</span>
+              <span className="text-xl font-bold text-white">
+                {pricing.currencySymbol || '$'}{pricing.totalPrice.toLocaleString()}
+              </span>
            </div>
            
            {/* Detailed Line Items from Backend */}

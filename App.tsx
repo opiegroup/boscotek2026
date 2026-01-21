@@ -13,28 +13,285 @@ import { BrandProvider, useBrand, DistributorBrandGuard } from './contexts/Brand
 import BrandThemeProvider from './components/BrandThemeProvider';
 import BrandSelector from './components/BrandSelector';
 import AdminDashboard from './components/admin/AdminDashboard';
+import { DistributorDashboard } from './components/distributor';
 import BrandLogo, { BrandName } from './components/BrandLogo';
 import AuthCallback from './components/AuthCallback';
 
-// Check if we're on an auth callback (invite/magic link)
+// Check if we're on an auth callback (invite/magic link/password reset)
+// Only returns true if there's actually something to process
 const isAuthCallback = () => {
   const path = window.location.pathname;
   const hash = window.location.hash;
   
-  // Check for /auth/callback path OR tokens in hash
-  if (path.includes('/auth/callback')) return true;
-  if (hash.includes('access_token') && hash.includes('refresh_token')) return true;
+  // Must have BOTH access_token AND refresh_token to be a valid auth callback
+  // OR have a specific error code we need to handle
+  const hasTokens = hash.includes('access_token') && hash.includes('refresh_token');
+  const hasError = hash.includes('error_code=');
+  
+  // Check for /auth/callback path with tokens
+  if (path.includes('/auth/callback') && (hasTokens || hasError)) return true;
+  
+  // Check for tokens in hash (invite, recovery, magic link) - only if we have both tokens
+  if (hasTokens) return true;
+  
+  // Only show error UI if there's an actual error code
+  if (hasError) return true;
   
   return false;
+};
+
+// Password Reset Modal Component - Non-dismissable for security
+const PasswordResetModal: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const { updatePassword, signOut } = useAuth();
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setSaving(true);
+    const result = await updatePassword(password);
+    setSaving(false);
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      onComplete();
+    }
+  };
+
+  const handleCancel = async () => {
+    // Sign out if they don't want to set a password
+    // This prevents unauthorized access via invite links
+    sessionStorage.removeItem('boscotek_password_reset_pending');
+    await signOut();
+    onComplete();
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/95 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full">
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-3">🔐</div>
+          <h2 className="text-xl font-bold text-white">Change Your Password</h2>
+          <p className="text-zinc-400 text-sm mt-2">
+            You're using a temporary password. Please create a new secure password to continue.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-mono text-zinc-500 mb-2">NEW PASSWORD</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Min 8 characters"
+              required
+              minLength={8}
+              autoFocus
+              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono text-zinc-500 mb-2">CONFIRM PASSWORD</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              required
+              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
+          >
+            {saving ? 'Setting password...' : 'Set Password & Continue'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCancel}
+            className="w-full text-zinc-500 hover:text-zinc-300 text-sm py-2"
+          >
+            Cancel and sign out
+          </button>
+        </form>
+
+        <p className="text-xs text-zinc-600 text-center mt-4">
+          For security, you cannot access the app without setting a password.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// Expired Link Error Modal
+const ExpiredLinkModal: React.FC<{ message: string; onClose: () => void }> = ({ message, onClose }) => {
+  return (
+    <div className="fixed inset-0 bg-black/90 flex items-center justify-center z-50 p-4">
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
+        <div className="text-5xl mb-4">⏰</div>
+        <h2 className="text-xl font-bold text-white mb-2">Link Expired</h2>
+        <p className="text-zinc-400 mb-6">{message}</p>
+        <p className="text-sm text-zinc-500 mb-6">
+          Please contact your administrator to send a new invite link, or sign in if you already have an account.
+        </p>
+        <button
+          onClick={onClose}
+          className="bg-amber-500 text-black font-bold px-6 py-3 rounded hover:bg-amber-400"
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Change Password Modal - for users to change their own password
+const ChangePasswordModal: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const { updatePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (newPassword.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setSaving(true);
+    const result = await updatePassword(newPassword);
+    setSaving(false);
+
+    if (result.error) {
+      setError(result.error);
+    } else {
+      setSuccess(true);
+      setTimeout(onClose, 1500);
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center" onClick={e => e.stopPropagation()}>
+          <div className="text-4xl mb-3">✅</div>
+          <h2 className="text-xl font-bold text-white">Password Changed!</h2>
+          <p className="text-zinc-400 text-sm mt-2">Your new password has been saved.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full" onClick={e => e.stopPropagation()}>
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-3">🔑</div>
+          <h2 className="text-xl font-bold text-white">Change Password</h2>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {error && (
+            <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded text-sm">
+              {error}
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-mono text-zinc-500 mb-2">NEW PASSWORD</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Min 8 characters"
+              required
+              minLength={8}
+              autoFocus
+              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-mono text-zinc-500 mb-2">CONFIRM PASSWORD</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirm password"
+              required
+              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+            />
+          </div>
+
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="flex-1 bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
 };
 
 // Internal App Content (Needs Access to Context)
 const BoscotekApp: React.FC = () => {
   const { products, isLoading } = useCatalog();
-  const { user, isAuthenticated, isAdmin, isStaff, isDistributor, signOut } = useAuth();
+  const { user, isAuthenticated, isAdmin, isStaff, isDistributor, signOut, showPasswordReset, clearPasswordReset, linkExpiredError, clearLinkExpiredError } = useAuth();
   const { brand, theme, isLoading: brandLoading } = useBrand();
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [isDistributorMode, setIsDistributorMode] = useState(false);
   const [showAuthCallback, setShowAuthCallback] = useState(isAuthCallback());
+  const [showChangePassword, setShowChangePassword] = useState(false);
   
   // Navigation State
   const [viewMode, setViewMode] = useState<'catalog' | 'config' | 'cart' | 'success'>('catalog');
@@ -249,56 +506,104 @@ const BoscotekApp: React.FC = () => {
     );
   }
 
+  // Password Reset Modal (shows on top of current view)
+  const passwordResetModal = showPasswordReset ? (
+    <PasswordResetModal onComplete={clearPasswordReset} />
+  ) : null;
+
+  // Expired Link Error Modal
+  const expiredLinkModal = linkExpiredError ? (
+    <ExpiredLinkModal message={linkExpiredError} onClose={clearLinkExpiredError} />
+  ) : null;
+
+  // Change Password Modal
+  const changePasswordModal = showChangePassword ? (
+    <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+  ) : null;
+
   if (isAdminMode) {
-    return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
+    return (
+      <>
+        {passwordResetModal}
+        {expiredLinkModal}
+        {changePasswordModal}
+        <AdminDashboard onExit={() => setIsAdminMode(false)} />
+      </>
+    );
+  }
+
+  if (isDistributorMode) {
+    return (
+      <>
+        {passwordResetModal}
+        {expiredLinkModal}
+        {changePasswordModal}
+        <DistributorDashboard onExit={() => setIsDistributorMode(false)} />
+      </>
+    );
   }
 
   if (isLoading || brandLoading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">
-        <div className="text-center">
-          <div className="animate-spin h-8 w-8 border-2 border-amber-500 border-t-transparent rounded-full mx-auto mb-4" />
-          <p>Loading {brand?.name || 'Configurator'}...</p>
+      <>
+        {passwordResetModal}
+        {expiredLinkModal}
+        {changePasswordModal}
+        <div className="h-screen flex items-center justify-center bg-zinc-950 text-white">
+          <div className="text-center">
+            <div className="animate-spin h-8 w-8 border-2 border-amber-500 border-t-transparent rounded-full mx-auto mb-4" />
+            <p>Loading {brand?.name || 'Configurator'}...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   // 1. SUCCESS VIEW
   if (viewMode === 'success') {
      return (
-        <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-center text-white">
-           <div className="bg-zinc-900 border border-zinc-800 p-12 rounded-2xl shadow-2xl max-w-lg">
-              <div className="text-6xl mb-6">✅</div>
-              <h1 className="text-3xl font-bold mb-4 text-white">Quote Request Received</h1>
-              <p className="text-zinc-400 mb-8">
-                 Thank you. We have received your configuration request. A confirmation email has been sent to you.
-              </p>
-              <div className="bg-zinc-950 border border-zinc-800 p-4 rounded mb-8">
-                 <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Quote Reference</div>
-                 <div className="text-2xl font-mono font-bold text-amber-500">{submittedRef}</div>
-              </div>
-              <button 
-                 onClick={() => setViewMode('catalog')}
-                 className="bg-amber-500 text-black font-bold px-8 py-3 rounded hover:bg-amber-400 transition-colors"
-              >
-                 Start New Quote
-              </button>
-           </div>
-        </div>
+        <>
+          {passwordResetModal}
+          {expiredLinkModal}
+          {changePasswordModal}
+          <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-8 text-center text-white">
+             <div className="bg-zinc-900 border border-zinc-800 p-12 rounded-2xl shadow-2xl max-w-lg">
+                <div className="text-6xl mb-6">✅</div>
+                <h1 className="text-3xl font-bold mb-4 text-white">Quote Request Received</h1>
+                <p className="text-zinc-400 mb-8">
+                   Thank you. We have received your configuration request. A confirmation email has been sent to you.
+                </p>
+                <div className="bg-zinc-950 border border-zinc-800 p-4 rounded mb-8">
+                   <div className="text-xs text-zinc-500 uppercase tracking-widest mb-1">Quote Reference</div>
+                   <div className="text-2xl font-mono font-bold text-amber-500">{submittedRef}</div>
+                </div>
+                <button 
+                   onClick={() => setViewMode('catalog')}
+                   className="bg-amber-500 text-black font-bold px-8 py-3 rounded hover:bg-amber-400 transition-colors"
+                >
+                   Start New Quote
+                </button>
+             </div>
+          </div>
+        </>
      )
   }
 
   // 2. CART VIEW
   if (viewMode === 'cart') {
      return (
-       <QuoteCart 
-          items={quoteItems}
-          onRemoveItem={handleRemoveItem}
-          onEditItem={handleEditItem}
-          onAddMore={() => setViewMode('catalog')}
-          onSubmitQuote={handleSubmitFullQuote}
-       />
+       <>
+         {passwordResetModal}
+         {expiredLinkModal}
+         {changePasswordModal}
+         <QuoteCart 
+            items={quoteItems}
+            onRemoveItem={handleRemoveItem}
+            onEditItem={handleEditItem}
+            onAddMore={() => setViewMode('catalog')}
+            onSubmitQuote={handleSubmitFullQuote}
+         />
+       </>
      );
   }
 
@@ -308,6 +613,10 @@ const BoscotekApp: React.FC = () => {
     const accentColor = theme.accentColor || '#292926';
     
     return (
+      <>
+      {passwordResetModal}
+      {expiredLinkModal}
+      {changePasswordModal}
       <div 
         className="min-h-screen text-white flex flex-col relative" 
         style={{ backgroundColor: accentColor }}
@@ -317,13 +626,33 @@ const BoscotekApp: React.FC = () => {
         <div className="absolute top-6 right-6 z-10 flex items-center gap-4">
            {/* User indicator */}
            {isAuthenticated && user && (
-              <div className="flex items-center gap-2 text-xs text-zinc-400 bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm">
+              <div className="flex items-center gap-3 text-xs text-zinc-400 bg-black/20 px-4 py-2 rounded-full backdrop-blur-sm">
                  <span className={`w-2 h-2 rounded-full ${isDistributor ? 'bg-blue-500' : isStaff ? 'bg-green-500' : 'bg-zinc-500'}`} />
                  <span>{user.name}</span>
                  {user.role && <span className="text-zinc-500">({user.role})</span>}
+                 <span className="text-zinc-600">|</span>
+                 {/* My Portal for distributors - inside user pill for visibility */}
+                 {(isDistributor || user?.role === 'distributor') && (
+                   <button 
+                     onClick={() => setIsDistributorMode(true)}
+                     className="text-blue-400 hover:text-blue-300 font-medium"
+                   >
+                     My Portal
+                   </button>
+                 )}
+                 {(isDistributor || user?.role === 'distributor') && (
+                   <span className="text-zinc-600">|</span>
+                 )}
+                 <button 
+                   onClick={() => setShowChangePassword(true)}
+                   className="text-zinc-500 hover:text-amber-400"
+                   title="Change password"
+                 >
+                   Password
+                 </button>
                  <button 
                    onClick={signOut}
-                   className="ml-2 text-zinc-500 hover:text-white"
+                   className="text-zinc-500 hover:text-white"
                  >
                    Sign Out
                  </button>
@@ -356,6 +685,8 @@ const BoscotekApp: React.FC = () => {
                 {isAdmin ? 'Admin' : 'Staff'} Dashboard
               </button>
            )}
+           
+           {/* Distributor portal button moved inside user pill above */}
            
            {/* Login for non-authenticated users */}
            {!isAuthenticated && (
@@ -453,12 +784,17 @@ const BoscotekApp: React.FC = () => {
            </div>
         </main>
       </div>
+      </>
     );
   }
 
   // 4. CONFIGURATOR VIEW
   if (activeProduct) {
     return (
+      <>
+      {passwordResetModal}
+      {expiredLinkModal}
+      {changePasswordModal}
       <div className="h-screen flex flex-col md:flex-row bg-zinc-950 overflow-hidden relative">
         
         {/* LEFT: Controls */}
@@ -511,6 +847,7 @@ const BoscotekApp: React.FC = () => {
            />
         </div>
       </div>
+      </>
     );
   }
 

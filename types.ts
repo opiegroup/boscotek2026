@@ -97,7 +97,16 @@ export type PricingResult = {
   basePrice: number; // Base price of the unit
   gst: number;
   currency: string;
+  currencySymbol?: string;
   breakdown: LineItem[];
+  // Tier info (returned from Edge Function for logged-in users)
+  tierName?: string;
+  tierCode?: string;
+  markupPercent?: number;
+  // Staff-only fields
+  retailPrice?: number;
+  cost?: number;
+  margin?: number;
 };
 
 // --- QUOTE & CART MODELS ---

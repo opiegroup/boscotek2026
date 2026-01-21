@@ -5,7 +5,8 @@ interface PricingTier {
   id: string;
   name: string;
   code: string;
-  markup_percentage: number;
+  markup_percentage?: number;
+  discount_percentage?: number;
 }
 
 interface UserProfile {
@@ -66,7 +67,7 @@ const DistributorManagement: React.FC = () => {
         .from('distributors')
         .select(`
           *,
-          pricing_tier:pricing_tiers(id, name, code, markup_percentage)
+          pricing_tier:pricing_tiers(id, name, code, markup_percentage, discount_percentage)
         `)
         .order('company_name');
 
@@ -320,7 +321,7 @@ const DistributorManagement: React.FC = () => {
                 <option value="">Select a tier...</option>
                 {pricingTiers.map(tier => (
                   <option key={tier.id} value={tier.id}>
-                    {tier.name} (+{tier.markup_percentage}%)
+                    {tier.name} ({tier.discount_percentage || tier.markup_percentage || 0}% discount)
                   </option>
                 ))}
               </select>
@@ -395,7 +396,7 @@ const DistributorManagement: React.FC = () => {
                       {dist.pricing_tier ? (
                         <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold bg-green-900/30 text-green-400">
                           {dist.pricing_tier.name}
-                          <span className="text-green-600">(+{dist.pricing_tier.markup_percentage}%)</span>
+                          <span className="text-green-600">({dist.pricing_tier.discount_percentage || dist.pricing_tier.markup_percentage || 0}%)</span>
                         </span>
                       ) : (
                         <span className="text-zinc-500 italic">No tier assigned</span>
@@ -501,7 +502,7 @@ const DistributorManagement: React.FC = () => {
                     <option value="">No tier (retail pricing)</option>
                     {pricingTiers.map(tier => (
                       <option key={tier.id} value={tier.id}>
-                        {tier.name} (+{tier.markup_percentage}%)
+                        {tier.name} ({tier.discount_percentage || tier.markup_percentage || 0}% discount)
                       </option>
                     ))}
                   </select>

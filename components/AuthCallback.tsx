@@ -21,6 +21,11 @@ const AuthCallback: React.FC<AuthCallbackProps> = ({ onComplete }) => {
     const errorCode = hashParams.get('error_code');
     const errorDesc = hashParams.get('error_description');
 
+    // Clear the URL hash immediately to prevent loops
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+
     // Handle error in URL (expired link, etc)
     if (errorCode) {
       console.error('Auth error:', errorCode, errorDesc);
@@ -51,7 +56,7 @@ const AuthCallback: React.FC<AuthCallbackProps> = ({ onComplete }) => {
         }
       });
     } else {
-      // No tokens, just redirect to home
+      // No tokens, just redirect to home immediately
       onComplete();
     }
   }, [onComplete]);

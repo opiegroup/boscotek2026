@@ -3,6 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js";
 // Environment variables (set in Supabase Dashboard > Edge Functions > Secrets)
 const supabaseUrl = Deno.env.get("PROJECT_URL");
 const serviceRoleKey = Deno.env.get("SERVICE_ROLE_KEY");
+const brevoApiKey = Deno.env.get("BREVO_API_KEY");
+const senderEmail = Deno.env.get("BREVO_SENDER_EMAIL") || "timm.mcvaigh@opiegroup.com.au";
 
 if (!supabaseUrl || !serviceRoleKey) {
   throw new Error("PROJECT_URL or SERVICE_ROLE_KEY is not set for the function environment.");
@@ -23,16 +25,102 @@ const corsHeaders = {
   "Content-Type": "application/json",
 };
 
+// Generate a random temporary password
+function generateTempPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let password = '';
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
+// Send welcome email with temporary password via Brevo
+async function sendWelcomeEmail(
+  email: string, 
+  tempPassword: string, 
+  fullName: string | null,
+  appUrl: string
+): Promise<{ success: boolean; error?: string }> {
+  // Try Brevo API if available
+  if (brevoApiKey) {
+    try {
+      console.log("Sending welcome email via Brevo to:", email);
+      
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #f59e0b;">Welcome to the Product Configurator</h2>
+          <p>Hi${fullName ? ` ${fullName}` : ''},</p>
+          <p>An account has been created for you. Use the following credentials to sign in:</p>
+          <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Email:</strong> ${email}</p>
+            <p style="margin: 10px 0 0 0;"><strong>Temporary Password:</strong> <code style="background: #e5e5e5; padding: 4px 8px; border-radius: 4px; font-size: 16px;">${tempPassword}</code></p>
+          </div>
+          <p><a href="${appUrl}" style="display: inline-block; background: #f59e0b; color: #000; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Sign In Now</a></p>
+          <p style="color: #666; font-size: 14px;">You will be required to change your password after signing in.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">
+          <p style="color: #999; font-size: 12px;">Opie Manufacturing Group</p>
+        </div>
+      `;
+
+      const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'api-key': brevoApiKey,
+        },
+        body: JSON.stringify({
+          sender: {
+            name: 'Product Configurator',
+            email: senderEmail,
+          },
+          to: [
+            {
+              email: email,
+              name: fullName || email.split('@')[0],
+            }
+          ],
+          subject: 'Your Product Configurator Account',
+          htmlContent: emailHtml,
+        }),
+      });
+
+      const responseText = await response.text();
+      console.log("Brevo response:", response.status, responseText);
+
+      if (!response.ok) {
+        console.error('Brevo API error:', response.status, responseText);
+        return { success: false, error: 'Failed to send email: ' + responseText };
+      }
+
+      console.log("Email sent successfully via Brevo");
+      return { success: true };
+    } catch (err) {
+      console.error('Email send error:', err);
+      return { success: false, error: 'Failed to send email' };
+    }
+  }
+
+  // Fallback: Log the password (for development/testing)
+  console.log(`📧 TEMP PASSWORD for ${email}: ${tempPassword}`);
+  console.log(`   (Set BREVO_API_KEY to send actual emails)`);
+  
+  return { success: false }; // Return false so admin sees the password
+}
+
 type UserRole = 'super_admin' | 'admin' | 'pricing_manager' | 'sales' | 'distributor' | 'viewer';
 
 interface InvitePayload {
+  action?: 'delete'; // Optional action type
   email: string;
-  role: UserRole;
+  role?: UserRole;
+  userId?: string; // For delete action
   fullName?: string;
   brandId?: string;
   brandAccessLevel?: string;
   assignAllBrands?: boolean;
-  resendInvite?: boolean; // If true, just resend invite to existing user
+  resendInvite?: boolean; // If true, reset password for existing user
 }
 
 // Verify the requesting user is an admin
@@ -82,11 +170,14 @@ export const handler = async (req: Request): Promise<Response> => {
   try {
     // Verify the requesting user is an admin
     const authHeader = req.headers.get('Authorization');
+    console.log("invite-user: Auth header present:", !!authHeader);
+    
     const { isAdmin, userId } = await verifyAdminUser(authHeader);
+    console.log("invite-user: isAdmin:", isAdmin, "userId:", userId);
 
     if (!isAdmin) {
       console.log("invite-user: Unauthorized - user is not admin");
-      return new Response(JSON.stringify({ error: "Unauthorized. Only admins can invite users." }), {
+      return new Response(JSON.stringify({ error: "Unauthorized. Only admins can manage users." }), {
         status: 403,
         headers: corsHeaders,
       });
@@ -94,7 +185,48 @@ export const handler = async (req: Request): Promise<Response> => {
 
     // Parse request body
     const body: InvitePayload = await req.json();
-    console.log("invite-user: Inviting user:", body.email, "with role:", body.role);
+    console.log("invite-user: Body:", JSON.stringify(body));
+    
+    // ============================================
+    // DELETE USER ACTION
+    // ============================================
+    if (body.action === 'delete') {
+      console.log("invite-user: Deleting user:", body.email);
+      
+      if (!body.userId) {
+        return new Response(JSON.stringify({ error: "userId is required for delete" }), {
+          status: 400,
+          headers: corsHeaders,
+        });
+      }
+
+      // Delete the user from Supabase Auth
+      const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(body.userId);
+      
+      if (deleteError) {
+        console.error("Delete failed:", deleteError);
+        return new Response(JSON.stringify({ error: "Failed to delete user: " + deleteError.message }), {
+          status: 500,
+          headers: corsHeaders,
+        });
+      }
+
+      console.log("invite-user: User deleted:", body.email);
+      
+      return new Response(JSON.stringify({
+        success: true,
+        message: "User deleted",
+        email: body.email,
+      }), {
+        status: 200,
+        headers: corsHeaders,
+      });
+    }
+
+    // ============================================
+    // INVITE/CREATE USER ACTION
+    // ============================================
+    console.log("invite-user: Processing user:", body.email, "with role:", body.role);
 
     if (!body.email || !body.role) {
       return new Response(JSON.stringify({ error: "Email and role are required" }), {
@@ -121,7 +253,7 @@ export const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // App URL for redirect
+    // App URL for login
     const appUrl = Deno.env.get("APP_URL") || "https://configurator.boscotek.com.au";
 
     // Check if user already exists
@@ -129,82 +261,66 @@ export const handler = async (req: Request): Promise<Response> => {
     const existingUser = existingUsers?.users?.find(u => u.email?.toLowerCase() === body.email.toLowerCase());
 
     if (existingUser) {
-      // RESEND INVITE - Send login email to existing user
+      // RESEND - Generate new temp password for existing user
       if (body.resendInvite) {
-        console.log("invite-user: Resending invite to existing user:", body.email);
-        console.log("  - User confirmed:", existingUser.email_confirmed_at ? 'Yes' : 'No');
+        console.log("invite-user: Resending credentials to existing user:", body.email);
         
-        let emailSent = false;
-        let errorMessage = '';
+        // Generate new temporary password
+        const tempPassword = generateTempPassword();
+        
+        // Update user's password
+        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
+          password: tempPassword,
+          user_metadata: {
+            ...existingUser.user_metadata,
+            must_change_password: true,
+            temp_password_set_at: new Date().toISOString(),
+          },
+        });
 
-        // For unconfirmed users, re-invite them
-        if (!existingUser.email_confirmed_at) {
-          console.log("  - User not confirmed, sending invite...");
-          const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(body.email, {
-            data: {
-              full_name: existingUser.user_metadata?.full_name || null,
-              reinvited_by: userId,
-            },
-            redirectTo: `${appUrl}/auth/callback`,
-          });
-
-          if (inviteError) {
-            console.error("Invite failed:", inviteError);
-            errorMessage = inviteError.message;
-          } else {
-            emailSent = true;
-          }
-        } else {
-          // For confirmed users, send a password reset email
-          console.log("  - User confirmed, sending password reset...");
-          
-          // Create a regular Supabase client to call resetPasswordForEmail
-          // (This method sends the actual email)
-          const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(body.email, {
-            redirectTo: `${appUrl}/auth/callback`,
-          });
-
-          if (resetError) {
-            console.error("Password reset failed:", resetError);
-            errorMessage = resetError.message;
-          } else {
-            emailSent = true;
-          }
-        }
-
-        if (!emailSent) {
-          return new Response(JSON.stringify({ 
-            error: "Failed to send email: " + errorMessage 
-          }), {
+        if (updateError) {
+          console.error("Failed to update password:", updateError);
+          return new Response(JSON.stringify({ error: "Failed to reset password: " + updateError.message }), {
             status: 500,
             headers: corsHeaders,
           });
         }
 
+        // Send email with new credentials
+        const emailResult = await sendWelcomeEmail(
+          body.email, 
+          tempPassword, 
+          existingUser.user_metadata?.full_name || body.fullName || null,
+          appUrl
+        );
+
         return new Response(JSON.stringify({
           success: true,
-          message: existingUser.email_confirmed_at 
-            ? "Password reset email sent" 
-            : "Invite email resent",
+          message: emailResult.success 
+            ? "New credentials sent to " + body.email
+            : "Password reset - share the temp password manually",
           userId: existingUser.id,
           email: body.email,
           isResend: true,
+          emailSent: emailResult.success,
+          // Include temp password if email wasn't sent so admin can share manually
+          tempPassword: emailResult.success ? undefined : tempPassword,
         }), {
           status: 200,
           headers: corsHeaders,
         });
       }
 
-      // User exists and not resending - just assign role if they don't have one
+      // User exists and not resending - check if they have a role
       const { data: existingRole } = await supabaseAdmin
         .from('user_roles')
         .select('id')
         .eq('user_id', existingUser.id)
         .single();
 
-      if (existingRole && !body.resendInvite) {
+      if (existingRole) {
         return new Response(JSON.stringify({ 
-          error: "User already exists with a role assigned. Use 'Resend Invite' to send them a new login link.",
+          error: "User already exists with a role assigned. Use 'Resend' to send them new credentials.",
           existingUserId: existingUser.id 
         }), {
           status: 409,
@@ -212,13 +328,13 @@ export const handler = async (req: Request): Promise<Response> => {
         });
       }
 
-      // Assign role to existing user
+      // Assign role to existing user (they exist but no role yet)
       const { error: roleError } = await supabaseAdmin
         .from('user_roles')
         .insert({ user_id: existingUser.id, role: body.role });
 
       if (roleError) {
-        console.error("Failed to assign role to existing user:", roleError);
+        console.error("Failed to assign role:", roleError);
         return new Response(JSON.stringify({ error: "Failed to assign role: " + roleError.message }), {
           status: 500,
           headers: corsHeaders,
@@ -229,10 +345,7 @@ export const handler = async (req: Request): Promise<Response> => {
       if (body.fullName) {
         await supabaseAdmin
           .from('user_profiles')
-          .upsert({ 
-            id: existingUser.id, 
-            full_name: body.fullName 
-          });
+          .upsert({ id: existingUser.id, full_name: body.fullName });
       }
 
       return new Response(JSON.stringify({
@@ -248,34 +361,46 @@ export const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Invite new user via Supabase Admin API
-    // This sends them an email with a magic link to set their password
-    const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(body.email, {
-      data: {
+    // ============================================
+    // CREATE NEW USER WITH TEMPORARY PASSWORD
+    // ============================================
+    
+    const tempPassword = generateTempPassword();
+    console.log("invite-user: Creating new user with temp password:", body.email);
+
+    // Create user with temporary password
+    const { data: createData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email: body.email,
+      password: tempPassword,
+      email_confirm: true, // Auto-confirm email
+      user_metadata: {
         full_name: body.fullName || null,
         invited_by: userId,
-        initial_role: body.role,
+        must_change_password: true,
+        temp_password_set_at: new Date().toISOString(),
       },
-      redirectTo: `${appUrl}/auth/callback`,
     });
 
-    if (inviteError) {
-      console.error("Invite failed:", inviteError);
-      return new Response(JSON.stringify({ error: "Failed to send invite: " + inviteError.message }), {
+    if (createError) {
+      console.error("User creation failed:", createError);
+      return new Response(JSON.stringify({ error: "Failed to create user: " + createError.message }), {
         status: 500,
         headers: corsHeaders,
       });
     }
 
-    if (!inviteData?.user) {
-      return new Response(JSON.stringify({ error: "Invite sent but no user data returned" }), {
+    if (!createData?.user) {
+      return new Response(JSON.stringify({ error: "User created but no data returned" }), {
         status: 500,
         headers: corsHeaders,
       });
     }
 
-    const newUserId = inviteData.user.id;
+    const newUserId = createData.user.id;
     console.log("invite-user: User created with ID:", newUserId);
+
+    // Send welcome email with credentials
+    const emailResult = await sendWelcomeEmail(body.email, tempPassword, body.fullName || null, appUrl);
 
     // Assign role to the new user
     const { error: roleError } = await supabaseAdmin
@@ -349,15 +474,20 @@ export const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    console.log("invite-user: Success - invite sent to", body.email);
+    console.log("invite-user: Success - user created:", body.email);
 
     return new Response(JSON.stringify({
       success: true,
-      message: "Invite sent successfully",
+      message: emailResult.success 
+        ? "User created and credentials sent to " + body.email
+        : "User created - share the temp password manually",
       userId: newUserId,
       email: body.email,
       role: body.role,
       isNewUser: true,
+      emailSent: emailResult.success,
+      // Include temp password if email wasn't sent so admin can share manually
+      tempPassword: emailResult.success ? undefined : tempPassword,
     }), {
       status: 200,
       headers: corsHeaders,

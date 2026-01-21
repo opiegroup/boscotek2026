@@ -15,6 +15,8 @@ import PricingTierManagement from './PricingTierManagement';
 import CurrencyManagement from './CurrencyManagement';
 import PricingCSV from './PricingCSV';
 import BrandSettings from './BrandSettings';
+import DistributorManagement from './DistributorManagement';
+import CustomerManagement from './CustomerManagement';
 
 // --- Helper Components for NetSuite Reference Fields ---
 
@@ -129,6 +131,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [authLoading, setAuthLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showChangePassword, setShowChangePassword] = useState(false);
   
   // Data State
   const [interiors, setInteriors] = useState<DrawerInteriorOption[]>([]);
@@ -139,7 +142,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   const [activeStep, setActiveStep] = useState<number>(0);
   
   // Get auth context for role checks
-  const { isAdmin, canManagePricing } = useAuth();
+  const { isAdmin, canManagePricing, updatePassword, isStaff, isDistributor, user } = useAuth();
   
   // Get brand context
   const { brand, brandSlug } = useBrand(); 
@@ -337,6 +340,31 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
 
   if (authLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">Checking session...</div>;
 
+  // --- RENDER: ACCESS DENIED FOR DISTRIBUTORS ---
+  // Distributors should use the Distributor Portal, not Admin Dashboard
+  if (isAuthenticated && isDistributor && !isStaff) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md bg-zinc-900 border border-zinc-800 p-8 rounded-xl shadow-2xl text-center">
+          <div className="text-5xl mb-4">🔒</div>
+          <h1 className="text-xl font-bold text-white mb-2">Access Restricted</h1>
+          <p className="text-zinc-400 mb-6">
+            As a distributor, please use the Distributor Portal to access your account.
+          </p>
+          <button
+            onClick={onExit}
+            className="w-full bg-blue-500 text-white font-bold py-3 rounded hover:bg-blue-400 transition-colors"
+          >
+            Go to Configurator
+          </button>
+          <p className="text-xs text-zinc-500 mt-4">
+            Look for the "My Portal" button on the main page.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // --- RENDER: LOGIN ---
   if (!isAuthenticated) {
     return (
@@ -378,8 +406,119 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     );
   }
 
+  // Change Password Modal Component
+  const ChangePasswordModal = () => {
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState(false);
+    const [saving, setSaving] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setError(null);
+
+      if (newPassword.length < 8) {
+        setError('Password must be at least 8 characters');
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        setError('Passwords do not match');
+        return;
+      }
+
+      setSaving(true);
+      const result = await updatePassword(newPassword);
+      setSaving(false);
+
+      if (result.error) {
+        setError(result.error);
+      } else {
+        setSuccess(true);
+        setTimeout(() => setShowChangePassword(false), 1500);
+      }
+    };
+
+    if (success) {
+      return (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowChangePassword(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full text-center">
+            <div className="text-4xl mb-3">✅</div>
+            <h2 className="text-xl font-bold text-white">Password Changed!</h2>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4" onClick={() => setShowChangePassword(false)}>
+        <div className="bg-zinc-900 border border-zinc-700 rounded-xl p-8 max-w-md w-full" onClick={e => e.stopPropagation()}>
+          <div className="text-center mb-6">
+            <div className="text-4xl mb-3">🔑</div>
+            <h2 className="text-xl font-bold text-white">Change Password</h2>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="bg-red-900/20 border border-red-900/50 text-red-400 p-3 rounded text-sm">
+                {error}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">NEW PASSWORD</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Min 8 characters"
+                required
+                minLength={8}
+                autoFocus
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-mono text-zinc-500 mb-2">CONFIRM PASSWORD</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm password"
+                required
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowChangePassword(false)}
+                className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={saving}
+                className="flex-1 bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-zinc-950 text-white flex">
+      {/* Change Password Modal */}
+      {showChangePassword && <ChangePasswordModal />}
+      
       {/* Sidebar */}
       <aside className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col z-20">
         <div className="p-6 border-b border-zinc-800 flex flex-col items-start gap-3">
@@ -402,6 +541,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           <button onClick={() => setActiveStep(6)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 6 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>Quotes / Orders</button>
           <button onClick={() => setActiveStep(7)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 7 ? 'bg-amber-500 text-black' : 'text-zinc-400 hover:text-white'}`}>🔥 BIM Leads</button>
           <button onClick={() => setActiveStep(10)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 10 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>🏢 Companies</button>
+          <button onClick={() => setActiveStep(15)} className={`w-full text-left p-3 rounded text-sm font-medium transition-colors ${activeStep === 15 ? 'bg-zinc-800 text-white' : 'text-zinc-400 hover:text-white'}`}>👥 Customers</button>
           
           {/* Catalogue Section */}
           <div className="pt-4 pb-2">
@@ -425,7 +565,10 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
           )}
         </nav>
         <div className="p-4 border-t border-zinc-800 space-y-2">
-           <button onClick={handleLogout} className="w-full text-xs text-zinc-500 hover:text-white text-left p-2">Sign Out</button>
+           <div className="flex gap-2">
+             <button onClick={handleLogout} className="flex-1 text-xs text-zinc-500 hover:text-white text-left p-2">Sign Out</button>
+             <button onClick={() => setShowChangePassword(true)} className="text-xs text-zinc-500 hover:text-amber-400 p-2" title="Change Password">🔑</button>
+           </div>
            <button onClick={onExit} className="w-full flex items-center justify-center gap-2 bg-zinc-800 text-zinc-300 py-3 rounded hover:bg-zinc-700 hover:text-white transition-all text-sm font-bold border border-zinc-700 hover:border-amber-500/50">
               <span>←</span> Exit to Configurator
            </button>
@@ -1025,6 +1168,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         {/* CURRENCIES */}
         {activeStep === 12 && (
           <CurrencyManagement />
+        )}
+
+        {/* CUSTOMERS */}
+        {activeStep === 15 && (
+          <CustomerManagement />
         )}
 
         {/* PRICING CSV */}

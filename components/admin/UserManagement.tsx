@@ -291,10 +291,12 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  // Resend invite to existing user
+  // Resend credentials to existing user
   const handleResendInvite = async (email: string) => {
     const user = users.find(u => u.email === email);
     if (!user) return;
+    
+    if (!confirm(`Send new login credentials to ${email}?`)) return;
     
     setResending(user.id);
 
@@ -302,7 +304,7 @@ const UserManagement: React.FC = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (!session?.access_token) {
-        alert('You must be logged in to resend invites');
+        alert('You must be logged in');
         return;
       }
 
@@ -315,21 +317,79 @@ const UserManagement: React.FC = () => {
       });
 
       if (response.error) {
-        throw new Error(response.error.message || 'Failed to resend invite');
+        throw new Error(response.error.message || 'Failed to send credentials');
       }
 
       const data = response.data;
 
       if (data.success) {
-        alert(`Invite resent to ${email}! They'll receive an email with a login link.`);
+        if (data.tempPassword) {
+          // Always show temp password so admin can copy it
+          const copyPassword = confirm(
+            `${data.emailSent ? 'Email sent!' : 'Password reset for'} ${email}\n\nTemporary password: ${data.tempPassword}\n\nClick OK to copy password to clipboard.`
+          );
+          if (copyPassword) {
+            navigator.clipboard.writeText(data.tempPassword);
+            alert('Password copied to clipboard!');
+          }
+        } else if (data.emailSent) {
+          alert(`New credentials sent to ${email}!`);
+        } else {
+          alert(`Password reset for ${email}.`);
+        }
       } else {
         throw new Error(data.error || 'Unknown error');
       }
     } catch (err: any) {
-      console.error('Resend invite error:', err);
-      alert(`Failed to resend invite: ${err.message}`);
+      console.error('Send credentials error:', err);
+      alert(`Failed: ${err.message}`);
     } finally {
       setResending(null);
+    }
+  };
+
+  // Delete user
+  const handleDeleteUser = async (userId: string, email: string) => {
+    if (!confirm(`Are you sure you want to delete ${email}?\n\nThis will permanently remove their account and all access.`)) {
+      return;
+    }
+    
+    setSaving(userId);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        alert('You must be logged in');
+        return;
+      }
+
+      // Call edge function to delete user
+      const response = await supabase.functions.invoke('invite-user', {
+        body: {
+          action: 'delete',
+          userId: userId,
+          email: email,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to delete user');
+      }
+
+      const data = response.data;
+
+      if (data.success) {
+        alert(`User ${email} deleted.`);
+        await loadUsers();
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (err: any) {
+      console.error('Delete user error:', err);
+      alert(`Failed to delete user: ${err.message}`);
+    } finally {
+      setSaving(null);
     }
   };
 
@@ -404,6 +464,7 @@ const UserManagement: React.FC = () => {
   const [inviteBrandAccess, setInviteBrandAccess] = useState<string>('viewer');
   const [inviting, setInviting] = useState(false);
   const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteTempPassword, setInviteTempPassword] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   const handleInvite = async (e: React.FormEvent) => {
@@ -443,7 +504,15 @@ const UserManagement: React.FC = () => {
 
       if (data.success) {
         if (data.isNewUser) {
-          setInviteSuccess(`Invite sent to ${inviteEmail}! They'll receive an email to set their password.`);
+          setInviteSuccess(
+            data.emailSent 
+              ? `Account created! Credentials sent to ${inviteEmail}.`
+              : `Account created for ${inviteEmail}. Share the credentials below:`
+          );
+          // Store temp password if email wasn't sent
+          if (!data.emailSent && data.tempPassword) {
+            setInviteTempPassword(data.tempPassword);
+          }
         } else {
           setInviteSuccess(`Role "${inviteRole}" assigned to existing user ${inviteEmail}.`);
         }
@@ -637,15 +706,23 @@ const UserManagement: React.FC = () => {
                           onClick={() => handleResendInvite(user.email)}
                           disabled={resending === user.id}
                           className="text-xs text-zinc-400 hover:text-amber-400 px-2 py-1 bg-zinc-700 rounded disabled:opacity-50"
-                          title="Resend login invite email"
+                          title="Send new login credentials"
                         >
-                          {resending === user.id ? '...' : '📧 Resend'}
+                          {resending === user.id ? '...' : '📧 Send Credentials'}
                         </button>
                         <button
                           onClick={() => setEditingUser(user)}
                           className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
                         >
                           Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteUser(user.id, user.email)}
+                          disabled={saving === user.id}
+                          className="text-xs text-zinc-400 hover:text-red-400 px-2 py-1 bg-zinc-700 rounded disabled:opacity-50"
+                          title="Delete user"
+                        >
+                          🗑️
                         </button>
                       </div>
                     </td>
@@ -663,19 +740,44 @@ const UserManagement: React.FC = () => {
         
         {/* Success Message */}
         {inviteSuccess && (
-          <div className="mb-4 bg-green-900/20 border border-green-900/50 text-green-400 p-4 rounded-lg flex items-start gap-3">
-            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-            </svg>
-            <div>
-              <p className="font-medium">{inviteSuccess}</p>
+          <div className="mb-4 bg-green-900/20 border border-green-900/50 text-green-400 p-4 rounded-lg">
+            <div className="flex items-start gap-3">
+              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+              <div className="flex-1">
+                <p className="font-medium">{inviteSuccess}</p>
+              </div>
+              <button 
+                onClick={() => { setInviteSuccess(null); setInviteTempPassword(null); }}
+                className="text-green-400 hover:text-green-300"
+              >
+                ×
+              </button>
             </div>
-            <button 
-              onClick={() => setInviteSuccess(null)}
-              className="ml-auto text-green-400 hover:text-green-300"
-            >
-              ×
-            </button>
+            {/* Show temp password if email wasn't sent */}
+            {inviteTempPassword && (
+              <div className="mt-3 p-3 bg-zinc-800 rounded border border-zinc-700">
+                <p className="text-xs text-zinc-400 mb-2">TEMPORARY PASSWORD (copy and share with user):</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-amber-400 font-mono text-lg bg-zinc-900 px-3 py-2 rounded">
+                    {inviteTempPassword}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(inviteTempPassword);
+                      alert('Password copied!');
+                    }}
+                    className="bg-amber-500 text-black px-3 py-2 rounded font-bold text-sm hover:bg-amber-400"
+                  >
+                    Copy
+                  </button>
+                </div>
+                <p className="text-xs text-zinc-500 mt-2">
+                  User will be asked to change this password on first login.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
