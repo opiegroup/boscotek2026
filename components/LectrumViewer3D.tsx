@@ -138,6 +138,9 @@ interface LecternModelProps {
   hasCrystaliteLogo: boolean; // Whether the Crystalite logo accessory is selected
   hasClassicLogoPanel400: boolean; // Whether Logo Panel 400x300 (Classic) is selected
   hasClassicLogoPanelFull: boolean; // Whether Full Dress Panel Logo (Classic) is selected
+  hasAeroLogoPanel400: boolean; // Whether Logo Panel 400x300 (Aero) is selected
+  hasAeroLogoPanelFull: boolean; // Whether Full Dress Panel Logo (Aero) is selected
+  hasAeroTopLogoInsert: boolean; // Whether Logo Insert - Top Panel (Aero) is selected
   logoTransform?: LogoTransform; // Logo scale and position controls
 }
 
@@ -149,11 +152,12 @@ interface LogoPanelInfo {
   height: number;
 }
 
-const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, hasLogoAccessorySelected, hasMicrophoneAccessory, hasCrystaliteLogo, hasClassicLogoPanel400, hasClassicLogoPanelFull, logoTransform }) => {
+const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panelColour, logoImageUrl, hasLogoAccessory, hasLogoAccessorySelected, hasMicrophoneAccessory, hasCrystaliteLogo, hasClassicLogoPanel400, hasClassicLogoPanelFull, hasAeroLogoPanel400, hasAeroLogoPanelFull, hasAeroTopLogoInsert, logoTransform }) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [logoTexture, setLogoTexture] = useState<THREE.Texture | null>(null);
   const [logoPanelInfo, setLogoPanelInfo] = useState<LogoPanelInfo | null>(null); // Position of logo panel for procedural logo
+  const [panelInfo, setPanelInfo] = useState<LogoPanelInfo | null>(null); // Position of main panel for full dress logos
   const logoPlaneRef = useRef<THREE.Mesh | null>(null);
   const { invalidate } = useThree();
   
@@ -274,6 +278,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       console.log('Looking for logo materials:', mapping.logo);
       
       let foundLogoPanelInfo: LogoPanelInfo | null = null;
+      let foundPanelInfo: LogoPanelInfo | null = null;
       
       model.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -281,6 +286,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
           if (Array.isArray(child.material) && child.userData.originalMaterialNames) {
             const originalNames = child.userData.originalMaterialNames as string[];
             let hasLogoMaterial = false;
+            let hasPanelMaterial = false;
             
             child.material = child.material.map((mat, index) => {
               const matName = originalNames[index] || '';
@@ -294,6 +300,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                 return frameMaterial;
               }
               if (matchesMaterial(matName, mapping.panel)) {
+                hasPanelMaterial = true;
                 return panelMaterial;
               }
               if (matchesMaterial(matName, mapping.silver)) {
@@ -337,6 +344,33 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                 const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
                 foundLogoPanelInfo = { position: localCenter, rotation, width, height };
                 console.log('  Logo panel from multi-mat mesh:', width.toFixed(1), 'x', height.toFixed(1));
+              }
+            }
+            
+            // If this mesh has panel material, get its bounds for full panel logos
+            if (hasPanelMaterial && !foundPanelInfo) {
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                const worldPos = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                foundPanelInfo = { position: localCenter, rotation, width, height };
+                console.log('  Panel from multi-mat mesh:', width.toFixed(1), 'x', height.toFixed(1));
               }
             }
           } else {
@@ -383,6 +417,30 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             } else if (matchesMaterial(materialName, mapping.frame)) {
               child.material = frameMaterial;
             } else if (matchesMaterial(materialName, mapping.panel)) {
+              if (!foundPanelInfo) {
+                child.geometry.computeBoundingBox();
+                const bbox = child.geometry.boundingBox;
+                if (bbox) {
+                  const width = bbox.max.x - bbox.min.x;
+                  const height = bbox.max.y - bbox.min.y;
+                  
+                  child.updateMatrixWorld(true);
+                  const worldQuat = new THREE.Quaternion();
+                  const worldScale = new THREE.Vector3();
+                  const worldPos = new THREE.Vector3();
+                  child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                  
+                  const localCenter = new THREE.Vector3(
+                    (bbox.min.x + bbox.max.x) / 2,
+                    (bbox.min.y + bbox.max.y) / 2,
+                    bbox.max.z + 0.5
+                  );
+                  localCenter.applyMatrix4(child.matrixWorld);
+                  
+                  const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                  foundPanelInfo = { position: localCenter, rotation, width, height };
+                }
+              }
               child.material = panelMaterial;
             } else if (matchesMaterial(materialName, mapping.silver)) {
               child.material = staticMaterials.silver;
@@ -400,9 +458,12 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
         }
       });
       
-      // Store logo panel info for procedural logo rendering
+      // Store logo/panel info for procedural logo rendering
       if (foundLogoPanelInfo) {
         setLogoPanelInfo(foundLogoPanelInfo);
+      }
+      if (foundPanelInfo) {
+        setPanelInfo(foundPanelInfo);
       }
       
       invalidate();
@@ -469,6 +530,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       };
       
       let detectedLogoPanelInfo: LogoPanelInfo | null = null;
+      let detectedPanelInfo: LogoPanelInfo | null = null;
       
       obj.traverse((child) => {
         if (child instanceof THREE.Mesh) {
@@ -481,6 +543,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
             // Store original material names for later updates
             const originalNames: string[] = [];
             let hasLogoMaterial = false;
+            let hasPanelMaterial = false;
             
             // Process each material in the array
             const newMaterials = child.material.map((mat, index) => {
@@ -489,6 +552,9 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
               if (matchesMaterial(matName, mapping.logo)) {
                 console.log('  >>> Logo material in multi-mat mesh:', matName);
                 hasLogoMaterial = true;
+              }
+              if (matchesMaterial(matName, mapping.panel)) {
+                hasPanelMaterial = true;
               }
               // Special handling for gooseneck and foam (mic heads) - make transparent if no mic accessory
               if (matName === 'Gooseneck' || matName === 'gooseneck' || matName === 'Foam' || matName === 'foam' || matName === 'blackfoam' || matName === 'Blackfoam') {
@@ -529,6 +595,32 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                 const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
                 detectedLogoPanelInfo = { position: localCenter, rotation, width, height };
                 console.log('  Logo panel from multi-mat:', width.toFixed(1), 'x', height.toFixed(1));
+              }
+            }
+            
+            // If this mesh has panel material, get its bounds and transform
+            if (hasPanelMaterial && !detectedPanelInfo) {
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                const worldPos = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                detectedPanelInfo = { position: localCenter, rotation, width, height };
               }
             }
           } else {
@@ -590,6 +682,31 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
                             'rot:', (rotation.x * 180/Math.PI).toFixed(1), (rotation.y * 180/Math.PI).toFixed(1), (rotation.z * 180/Math.PI).toFixed(1));
               }
             }
+            
+            if (matchesMaterial(matName, mapping.panel) && !detectedPanelInfo) {
+              child.geometry.computeBoundingBox();
+              const bbox = child.geometry.boundingBox;
+              if (bbox) {
+                const width = bbox.max.x - bbox.min.x;
+                const height = bbox.max.y - bbox.min.y;
+                
+                child.updateMatrixWorld(true);
+                const worldPos = new THREE.Vector3();
+                const worldQuat = new THREE.Quaternion();
+                const worldScale = new THREE.Vector3();
+                child.matrixWorld.decompose(worldPos, worldQuat, worldScale);
+                
+                const localCenter = new THREE.Vector3(
+                  (bbox.min.x + bbox.max.x) / 2,
+                  (bbox.min.y + bbox.max.y) / 2,
+                  bbox.max.z + 0.5
+                );
+                localCenter.applyMatrix4(child.matrixWorld);
+                
+                const rotation = new THREE.Euler().setFromQuaternion(worldQuat);
+                detectedPanelInfo = { position: localCenter, rotation, width, height };
+              }
+            }
           }
           
           // Enable shadows
@@ -598,9 +715,12 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
         }
       });
       
-      // Store detected logo panel info
+      // Store detected logo/panel info
       if (detectedLogoPanelInfo) {
         setLogoPanelInfo(detectedLogoPanelInfo);
+      }
+      if (detectedPanelInfo) {
+        setPanelInfo(detectedPanelInfo);
       }
       
       console.log('=== DONE ===');
@@ -683,7 +803,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
   // Show logo panel group when we have a panel location AND either:
   // - a logo accessory is selected (with texture), OR
   // - the Crystalite logo accessory is selected (frosted panel base)
-  const showLogoPlaneBase = (logoPanelInfo || hasHardcodedLogoPosition) && (hasLogoAccessory || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull);
+  const showLogoPlaneBase = (logoPanelInfo || panelInfo || hasHardcodedLogoPosition) && (hasLogoAccessory || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull || hasAeroLogoPanel400 || hasAeroLogoPanelFull);
   const showLogoPlane = showLogoPlaneBase && !!logoTexture && (hasLogoAccessory || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull);
   const showFrostedLogoPanel = showLogoPlaneBase && hasCrystaliteLogo;
   const showWhiteLogoPanel = showLogoPlaneBase && hasClassicLogoPanel400;
@@ -712,7 +832,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     const userScale = 0.3 + (transform.scale * 1.2);
     const scaledSize = baseSize * userScale;
     
-    const panelAspect = (hasCrystaliteLogo || hasClassicLogoPanel400) ? (4 / 3) : logoAspect;
+    const panelAspect = (hasCrystaliteLogo || hasClassicLogoPanel400 || hasAeroLogoPanel400) ? (4 / 3) : logoAspect;
     // Base panel dimensions (Crystalite panel is fixed 4:3)
     if (panelAspect > 1) {
       panelPlaneWidth = scaledSize;
@@ -722,7 +842,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
       panelPlaneWidth = scaledSize * panelAspect;
     }
 
-    if (hasCrystaliteLogo || hasClassicLogoPanel400) {
+    if (hasCrystaliteLogo || hasClassicLogoPanel400 || hasAeroLogoPanel400) {
       // Keep logo image aspect inside the 4:3 panel (no distortion)
       const maxLogoWidth = panelPlaneWidth * 0.92;
       const maxLogoHeight = panelPlaneHeight * 0.92;
@@ -739,6 +859,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     
     // Model-specific logo positioning
     const getLogoPosition = (id: string): { position: [number, number, number], rotation: [number, number, number], scale: number } => {
+      const isAeroModel = ['L2001', 'L2001C', 'L2001-CTL'].includes(id);
       switch (id) {
         case 'L2001C':
           return {
@@ -760,6 +881,13 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
           };
         default:
           // Use detected position for other models (if available)
+          if (isAeroModel && (hasAeroLogoPanel400 || hasAeroLogoPanelFull) && panelInfo) {
+            return {
+              position: [panelInfo.position.x, panelInfo.position.y, panelInfo.position.z + 1],
+              rotation: [panelInfo.rotation.x, panelInfo.rotation.y, panelInfo.rotation.z],
+              scale: 1.0
+            };
+          }
           if (logoPanelInfo) {
             return {
               position: [logoPanelInfo.position.x, logoPanelInfo.position.y, logoPanelInfo.position.z + 1],
@@ -789,7 +917,7 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     logoPlaneRotation[0] += (transform.tilt || 0) * (Math.PI / 4);  // -45 to +45 degrees
 
     // Flip when logo is uploaded without accessory, or for Classic/Crystalite panels
-    if ((hasLogoAccessory && !hasLogoAccessorySelected) || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull) {
+    if ((hasLogoAccessory && !hasLogoAccessorySelected) || hasCrystaliteLogo || hasClassicLogoPanel400 || hasClassicLogoPanelFull || hasAeroLogoPanel400) {
       logoPlaneRotation[1] += Math.PI;
     }
     
@@ -800,13 +928,14 @@ const LecternModel: React.FC<LecternModelProps> = ({ modelId, frameColour, panel
     panelPlaneHeight *= logoConfig.scale;
     frameThickness = Math.max(panelPlaneWidth, panelPlaneHeight) * 0.04;
 
-    // L20S Classic Electronics: Crystalite panel needs to be larger
-    if (modelId === 'L20S' && hasCrystaliteLogo) {
-      logoPlaneWidth *= 1.5;
-      logoPlaneHeight *= 1.5;
-      panelPlaneWidth *= 1.5;
-      panelPlaneHeight *= 1.5;
+    // L20S Classic Electronics: 400x300 panels need to be larger and higher
+    if (modelId === 'L20S' && (hasCrystaliteLogo || hasClassicLogoPanel400)) {
+      logoPlaneWidth *= 1.4;
+      logoPlaneHeight *= 1.4;
+      panelPlaneWidth *= 1.4;
+      panelPlaneHeight *= 1.4;
       frameThickness = Math.max(panelPlaneWidth, panelPlaneHeight) * 0.04;
+      logoPlanePosition[1] += panelPlaneHeight * 0.2;
     }
 
     console.log('=== LOGO PLANE CONFIG ===');
@@ -974,6 +1103,9 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
   const hasCrystaliteLogo = (accessories?.['crystalite-logo-classic'] || 0) > 0;
   const hasClassicLogoPanel400 = (accessories?.['logo-panel-classic-400'] || 0) > 0;
   const hasClassicLogoPanelFull = (accessories?.['logo-panel-classic-full'] || 0) > 0;
+  const hasAeroLogoPanel400 = (accessories?.['logo-panel-aero-400'] || 0) > 0;
+  const hasAeroLogoPanelFull = (accessories?.['logo-panel-aero-full'] || 0) > 0;
+  const hasAeroTopLogoInsert = (accessories?.['logo-insert-aero-top'] || 0) > 0;
   // Show logo if accessory selected OR if logo image was uploaded
   const hasLogoAccessory = hasLogoAccessorySelected || !!config.logoImageUrl;
   
@@ -1013,6 +1145,8 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
     switch (id) {
       case 'L20':
         return -1.05;  // Center in view while keeping base aligned
+      case 'L20S':
+        return -0.45;  // Move up by 50% from default
       default:
         return -0.9;
     }
@@ -1035,6 +1169,9 @@ const LecternScene: React.FC<LecternSceneProps> = ({ config, product }) => {
             hasCrystaliteLogo={hasCrystaliteLogo}
             hasClassicLogoPanel400={hasClassicLogoPanel400}
             hasClassicLogoPanelFull={hasClassicLogoPanelFull}
+            hasAeroLogoPanel400={hasAeroLogoPanel400}
+            hasAeroLogoPanelFull={hasAeroLogoPanelFull}
+            hasAeroTopLogoInsert={hasAeroTopLogoInsert}
             logoTransform={logoTransform}
           />
         </Suspense>
@@ -1079,7 +1216,7 @@ const LectrumViewer3D = forwardRef<LectrumViewer3DRef, LectrumViewer3DProps>(
     // Get model info for display
     const modelId = product.id.replace('lectrum-', '').toUpperCase();
     const modelInfo = getLectrumModelInfo(modelId);
-  const shadowY = modelId === 'L20' ? -1.05 : -0.92;
+  const shadowY = modelId === 'L20' ? -1.05 : (modelId === 'L20S' ? -0.45 : -0.92);
     
     return (
       <div className="w-full h-full bg-zinc-900 rounded-lg overflow-hidden border border-zinc-800 shadow-inner relative group">

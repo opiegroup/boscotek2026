@@ -49,6 +49,7 @@ const UserManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
   const [viewAllBrands, setViewAllBrands] = useState(false);
 
   // Load users with brand access
@@ -189,12 +190,22 @@ const UserManagement: React.FC = () => {
     setSaving(userId);
     
     try {
-      const { error } = await supabase.rpc('assign_user_to_brand', {
-        p_user_id: userId,
-        p_brand_id: brandId,
-        p_access_level: accessLevel,
-        p_scopes: [],
-      });
+      // Get current user for granted_by
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      // Direct upsert instead of RPC to avoid type casting issues
+      const { error } = await supabase
+        .from('user_brand_access')
+        .upsert({
+          user_id: userId,
+          brand_id: brandId,
+          access_level: accessLevel,
+          granted_by: currentUser?.id || null,
+          is_active: true,
+        }, { 
+          onConflict: 'user_id,brand_id',
+          ignoreDuplicates: false 
+        });
       
       if (error) throw error;
       
@@ -228,11 +239,105 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // Assign user to ALL brands
+  const handleAssignToAllBrands = async (userId: string, accessLevel: string) => {
+    setSaving(userId);
+    
+    try {
+      // Get current user for granted_by
+      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      
+      // Get all active brands
+      const { data: allBrands, error: brandsError } = await supabase
+        .from('brands')
+        .select('id, name')
+        .eq('status', 'active');
+      
+      if (brandsError) throw brandsError;
+      if (!allBrands || allBrands.length === 0) {
+        alert('No active brands found');
+        return;
+      }
+
+      // Build records for upsert
+      const brandAccessRecords = allBrands.map(b => ({
+        user_id: userId,
+        brand_id: b.id,
+        access_level: accessLevel,
+        granted_by: currentUser?.id || null,
+        is_active: true,
+      }));
+
+      // Use upsert to insert or update all at once
+      const { error: upsertError } = await supabase
+        .from('user_brand_access')
+        .upsert(brandAccessRecords, { 
+          onConflict: 'user_id,brand_id',
+          ignoreDuplicates: false 
+        });
+      
+      if (upsertError) {
+        console.error('Upsert error:', upsertError);
+        throw upsertError;
+      }
+      
+      alert(`Assigned ${accessLevel} access to ${allBrands.length} brands`);
+      await loadUsers();
+    } catch (err: any) {
+      console.error('Error assigning to all brands:', err);
+      alert(`Failed to assign to all brands: ${err.message}`);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  // Resend invite to existing user
+  const handleResendInvite = async (email: string) => {
+    const user = users.find(u => u.email === email);
+    if (!user) return;
+    
+    setResending(user.id);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        alert('You must be logged in to resend invites');
+        return;
+      }
+
+      const response = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: email,
+          role: user.role || 'viewer',
+          resendInvite: true,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to resend invite');
+      }
+
+      const data = response.data;
+
+      if (data.success) {
+        alert(`Invite resent to ${email}! They'll receive an email with a login link.`);
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (err: any) {
+      console.error('Resend invite error:', err);
+      alert(`Failed to resend invite: ${err.message}`);
+    } finally {
+      setResending(null);
+    }
+  };
+
   // Modal states
   const [editingUser, setEditingUser] = useState<UserWithRole | null>(null);
   const [editForm, setEditForm] = useState({ full_name: '', phone: '', company: '' });
   const [showBrandAssign, setShowBrandAssign] = useState<{ userId: string; userName: string } | null>(null);
-  const [newBrandAssign, setNewBrandAssign] = useState({ brandId: '', accessLevel: 'viewer' });
+  const [newBrandAssign, setNewBrandAssign] = useState({ brandId: '', accessLevel: 'viewer', allBrands: false });
 
   useEffect(() => {
     if (editingUser) {
@@ -294,23 +399,64 @@ const UserManagement: React.FC = () => {
   // Invite user
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<UserRole>('viewer');
+  const [inviteFullName, setInviteFullName] = useState('');
+  const [inviteAllBrands, setInviteAllBrands] = useState(false);
+  const [inviteBrandAccess, setInviteBrandAccess] = useState<string>('viewer');
   const [inviting, setInviting] = useState(false);
+  const [inviteSuccess, setInviteSuccess] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail) return;
 
     setInviting(true);
+    setInviteSuccess(null);
+    setInviteError(null);
+
     try {
-      alert(
-        `To add a new user:\n\n` +
-        `1. Have them sign up at the configurator\n` +
-        `2. Find their User ID in Supabase Dashboard > Authentication > Users\n` +
-        `3. Run this SQL:\n\n` +
-        `INSERT INTO user_roles (user_id, role)\n` +
-        `VALUES ('<user-id>', '${inviteRole}');`
-      );
-      setInviteEmail('');
+      // Get the current user's session token
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session?.access_token) {
+        setInviteError('You must be logged in to invite users');
+        return;
+      }
+
+      // Call the invite-user edge function
+      const response = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: inviteEmail,
+          role: inviteRole,
+          fullName: inviteFullName || undefined,
+          brandId: inviteAllBrands ? undefined : brand?.id,
+          brandAccessLevel: inviteBrandAccess,
+          assignAllBrands: inviteAllBrands,
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || 'Failed to invite user');
+      }
+
+      const data = response.data;
+
+      if (data.success) {
+        if (data.isNewUser) {
+          setInviteSuccess(`Invite sent to ${inviteEmail}! They'll receive an email to set their password.`);
+        } else {
+          setInviteSuccess(`Role "${inviteRole}" assigned to existing user ${inviteEmail}.`);
+        }
+        setInviteEmail('');
+        setInviteFullName('');
+        // Refresh the user list
+        await loadUsers();
+      } else {
+        throw new Error(data.error || 'Unknown error');
+      }
+    } catch (err: any) {
+      console.error('Invite error:', err);
+      setInviteError(err.message || 'Failed to invite user');
     } finally {
       setInviting(false);
     }
@@ -477,7 +623,7 @@ const UserManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         {saving === user.id && (
                           <span className="text-amber-500 text-xs">Saving...</span>
                         )}
@@ -486,6 +632,14 @@ const UserManagement: React.FC = () => {
                           className="text-xs text-zinc-400 hover:text-white px-2 py-1 bg-zinc-700 rounded"
                         >
                           + Brand
+                        </button>
+                        <button
+                          onClick={() => handleResendInvite(user.email)}
+                          disabled={resending === user.id}
+                          className="text-xs text-zinc-400 hover:text-amber-400 px-2 py-1 bg-zinc-700 rounded disabled:opacity-50"
+                          title="Resend login invite email"
+                        >
+                          {resending === user.id ? '...' : '📧 Resend'}
                         </button>
                         <button
                           onClick={() => setEditingUser(user)}
@@ -503,45 +657,144 @@ const UserManagement: React.FC = () => {
         )}
       </div>
 
-      {/* Add User Section */}
+      {/* Invite User Section */}
       <div className="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
-        <h3 className="font-bold text-white mb-4">Add New User</h3>
-        <form onSubmit={handleInvite} className="flex gap-4 items-end flex-wrap">
-          <div className="flex-1 min-w-[200px]">
-            <label className="block text-xs font-mono text-zinc-500 mb-2">EMAIL ADDRESS</label>
-            <input
-              type="email"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="user@company.com"
-              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
-            />
-          </div>
-          <div className="w-48">
-            <label className="block text-xs font-mono text-zinc-500 mb-2">INITIAL ROLE</label>
-            <select
-              value={inviteRole}
-              onChange={(e) => setInviteRole(e.target.value as UserRole)}
-              className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+        <h3 className="font-bold text-white mb-4">Invite New User</h3>
+        
+        {/* Success Message */}
+        {inviteSuccess && (
+          <div className="mb-4 bg-green-900/20 border border-green-900/50 text-green-400 p-4 rounded-lg flex items-start gap-3">
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="font-medium">{inviteSuccess}</p>
+            </div>
+            <button 
+              onClick={() => setInviteSuccess(null)}
+              className="ml-auto text-green-400 hover:text-green-300"
             >
-              <option value="viewer">Viewer</option>
-              <option value="distributor">Distributor</option>
-              <option value="sales">Sales</option>
-              <option value="pricing_manager">Pricing Manager</option>
-              <option value="admin">Admin</option>
-              {isSuperAdmin && <option value="super_admin">Super Admin</option>}
-            </select>
+              ×
+            </button>
           </div>
-          <button
-            type="submit"
-            disabled={inviting || !inviteEmail}
-            className="bg-amber-500 text-black font-bold px-6 py-3 rounded hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {inviting ? 'Adding...' : 'Add User'}
-          </button>
+        )}
+
+        {/* Error Message */}
+        {inviteError && (
+          <div className="mb-4 bg-red-900/20 border border-red-900/50 text-red-400 p-4 rounded-lg flex items-start gap-3">
+            <svg className="w-5 h-5 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <div>
+              <p className="font-medium">{inviteError}</p>
+            </div>
+            <button 
+              onClick={() => setInviteError(null)}
+              className="ml-auto text-red-400 hover:text-red-300"
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        <form onSubmit={handleInvite} className="space-y-4">
+          <div className="flex gap-4 items-end flex-wrap">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-xs font-mono text-zinc-500 mb-2">EMAIL ADDRESS *</label>
+              <input
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="user@company.com"
+                required
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              />
+            </div>
+            <div className="w-48">
+              <label className="block text-xs font-mono text-zinc-500 mb-2">FULL NAME</label>
+              <input
+                type="text"
+                value={inviteFullName}
+                onChange={(e) => setInviteFullName(e.target.value)}
+                placeholder="John Smith"
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              />
+            </div>
+            <div className="w-48">
+              <label className="block text-xs font-mono text-zinc-500 mb-2">GLOBAL ROLE</label>
+              <select
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as UserRole)}
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              >
+                <option value="viewer">Viewer</option>
+                <option value="distributor">Distributor</option>
+                <option value="sales">Sales</option>
+                <option value="pricing_manager">Pricing Manager</option>
+                <option value="admin">Admin</option>
+                {isSuperAdmin && <option value="super_admin">Super Admin</option>}
+              </select>
+            </div>
+          </div>
+
+          {/* Brand Access Options */}
+          <div className="flex gap-4 items-end flex-wrap border-t border-zinc-800 pt-4">
+            <div className="w-48">
+              <label className="block text-xs font-mono text-zinc-500 mb-2">BRAND ACCESS LEVEL</label>
+              <select
+                value={inviteBrandAccess}
+                onChange={(e) => setInviteBrandAccess(e.target.value)}
+                className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+              >
+                <option value="viewer">Viewer</option>
+                <option value="sales">Sales</option>
+                <option value="pricing">Pricing</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            
+            {isSuperAdmin && (
+              <label className="flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded px-4 py-3 cursor-pointer hover:border-amber-500/50 transition-colors">
+                <input
+                  type="checkbox"
+                  checked={inviteAllBrands}
+                  onChange={(e) => setInviteAllBrands(e.target.checked)}
+                  className="w-5 h-5 rounded border-zinc-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-900"
+                />
+                <div>
+                  <span className="text-white font-medium">Assign to ALL Brands</span>
+                  <p className="text-xs text-zinc-500">Grant access to every active brand</p>
+                </div>
+              </label>
+            )}
+
+            <button
+              type="submit"
+              disabled={inviting || !inviteEmail}
+              className="bg-amber-500 text-black font-bold px-6 py-3 rounded hover:bg-amber-400 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 ml-auto"
+            >
+              {inviting ? (
+                <>
+                  <span className="animate-spin h-4 w-4 border-2 border-black border-t-transparent rounded-full" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  Send Invite
+                </>
+              )}
+            </button>
+          </div>
         </form>
         <p className="text-xs text-zinc-500 mt-3">
-          Note: Users must first create an account via the configurator sign-up flow.
+          The user will receive an email invitation to set up their account and password.
+          {inviteAllBrands 
+            ? ' They will be granted access to all active brands.'
+            : brand && ` They will also be granted ${inviteBrandAccess} access to ${brand.name}.`
+          }
         </p>
       </div>
 
@@ -563,19 +816,38 @@ const UserManagement: React.FC = () => {
             </div>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-mono text-zinc-500 mb-2">SELECT BRAND</label>
-                <select
-                  value={newBrandAssign.brandId}
-                  onChange={(e) => setNewBrandAssign({ ...newBrandAssign, brandId: e.target.value })}
-                  className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
-                >
-                  <option value="">Select a brand...</option>
-                  {availableBrands.map(b => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* All Brands Toggle - Super Admin Only */}
+              {isSuperAdmin && (
+                <label className="flex items-center gap-3 bg-zinc-800 border border-zinc-700 rounded px-4 py-3 cursor-pointer hover:border-amber-500/50 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={newBrandAssign.allBrands}
+                    onChange={(e) => setNewBrandAssign({ ...newBrandAssign, allBrands: e.target.checked, brandId: '' })}
+                    className="w-5 h-5 rounded border-zinc-600 text-amber-500 focus:ring-amber-500 focus:ring-offset-zinc-900"
+                  />
+                  <div>
+                    <span className="text-white font-medium">Assign to ALL Brands</span>
+                    <p className="text-xs text-zinc-500">Grant access to every active brand at once</p>
+                  </div>
+                </label>
+              )}
+
+              {/* Brand Selector - Hidden when All Brands is checked */}
+              {!newBrandAssign.allBrands && (
+                <div>
+                  <label className="block text-xs font-mono text-zinc-500 mb-2">SELECT BRAND</label>
+                  <select
+                    value={newBrandAssign.brandId}
+                    onChange={(e) => setNewBrandAssign({ ...newBrandAssign, brandId: e.target.value })}
+                    className="w-full bg-zinc-800 border border-zinc-700 text-white p-3 rounded focus:border-amber-500 outline-none"
+                  >
+                    <option value="">Select a brand...</option>
+                    {availableBrands.map(b => (
+                      <option key={b.id} value={b.id}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-mono text-zinc-500 mb-2">ACCESS LEVEL</label>
@@ -601,23 +873,30 @@ const UserManagement: React.FC = () => {
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => setShowBrandAssign(null)}
+                onClick={() => {
+                  setShowBrandAssign(null);
+                  setNewBrandAssign({ brandId: '', accessLevel: 'viewer', allBrands: false });
+                }}
                 className="flex-1 bg-zinc-700 text-white font-bold py-3 rounded hover:bg-zinc-600"
               >
                 Cancel
               </button>
               <button
                 onClick={async () => {
-                  if (newBrandAssign.brandId) {
+                  if (newBrandAssign.allBrands) {
+                    await handleAssignToAllBrands(showBrandAssign.userId, newBrandAssign.accessLevel);
+                    setShowBrandAssign(null);
+                    setNewBrandAssign({ brandId: '', accessLevel: 'viewer', allBrands: false });
+                  } else if (newBrandAssign.brandId) {
                     await handleAssignToBrand(showBrandAssign.userId, newBrandAssign.brandId, newBrandAssign.accessLevel);
                     setShowBrandAssign(null);
-                    setNewBrandAssign({ brandId: '', accessLevel: 'viewer' });
+                    setNewBrandAssign({ brandId: '', accessLevel: 'viewer', allBrands: false });
                   }
                 }}
-                disabled={!newBrandAssign.brandId || saving === showBrandAssign.userId}
+                disabled={(!newBrandAssign.allBrands && !newBrandAssign.brandId) || saving === showBrandAssign.userId}
                 className="flex-1 bg-amber-500 text-black font-bold py-3 rounded hover:bg-amber-400 disabled:opacity-50"
               >
-                {saving === showBrandAssign.userId ? 'Assigning...' : 'Assign Access'}
+                {saving === showBrandAssign.userId ? 'Assigning...' : (newBrandAssign.allBrands ? 'Assign to All Brands' : 'Assign Access')}
               </button>
             </div>
           </div>

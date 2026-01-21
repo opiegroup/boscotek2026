@@ -31,6 +31,7 @@ const BrandConfigurator: React.FC = () => {
   const { isEmbedded } = useEmbedMode();
   const navigate = useNavigate();
   const logoDefaultsAppliedRef = useRef<Record<string, boolean>>({});
+  const [logoTransformsByModel, setLogoTransformsByModel] = useState<Record<string, Record<string, LogoTransform>>>({});
   
   const logoPanelClassicDefaults: LogoTransform = {
     scale: 0.06,
@@ -45,6 +46,33 @@ const BrandConfigurator: React.FC = () => {
     offsetY: 1.36,
     offsetZ: -0.16,
     tilt: 0,
+  };
+  const logoDefaultsByModel: Record<string, Record<string, { transform: LogoTransform; panelColour?: string }>> = {
+    L20: {
+      'crystalite-logo-classic': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-400': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-full': { transform: fullDressPanelClassicDefaults, panelColour: 'savoye' },
+    },
+    L20S: {
+      'crystalite-logo-classic': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-400': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-full': { transform: fullDressPanelClassicDefaults, panelColour: 'savoye' },
+    },
+    'L20S-NCTL': {
+      'crystalite-logo-classic': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-400': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-full': { transform: fullDressPanelClassicDefaults, panelColour: 'savoye' },
+    },
+    L900: {
+      'crystalite-logo-classic': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-400': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-full': { transform: fullDressPanelClassicDefaults, panelColour: 'savoye' },
+    },
+    L101: {
+      'crystalite-logo-classic': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-400': { transform: logoPanelClassicDefaults },
+      'logo-panel-classic-full': { transform: fullDressPanelClassicDefaults, panelColour: 'savoye' },
+    },
   };
   
   const [isAdminMode, setIsAdminMode] = useState(false);
@@ -101,6 +129,24 @@ const BrandConfigurator: React.FC = () => {
   const accentColor = theme.accentColor || '#292926';
   const isLectrum = brandSlug === 'lectrum';
 
+  const getActiveLogoAccessoryId = (accessories: Record<string, number> | undefined): string | null => {
+    if (!accessories) return null;
+    const logoIds = [
+      'crystalite-logo-classic',
+      'logo-panel-classic-400',
+      'logo-panel-classic-full',
+      'logo-panel-aero-400',
+      'logo-panel-aero-full',
+      'logo-insert-aero-top',
+    ];
+    return logoIds.find(id => (accessories[id] || 0) > 0) || null;
+  };
+
+  const getActiveModelId = (product: ProductDefinition | null): string | null => {
+    if (!product?.id) return null;
+    return product.id.replace('lectrum-', '').toUpperCase();
+  };
+
   // Handlers
   const handleSelectProduct = (product: ProductDefinition) => {
     const initialSelections: Record<string, any> = {};
@@ -130,39 +176,28 @@ const BrandConfigurator: React.FC = () => {
     setConfig(prev => {
       const nextSelections = { ...prev.selections, [groupId]: value };
       if (groupId === 'accessories') {
-        const prevAccessories = prev.selections['accessories'] as Record<string, number> | undefined;
+        const modelId = getActiveModelId(activeProduct);
         const nextAccessories = value as Record<string, number> | undefined;
-        const prevCrystalite = (prevAccessories?.['crystalite-logo-classic'] || 0) > 0;
-        const nextCrystalite = (nextAccessories?.['crystalite-logo-classic'] || 0) > 0;
-        const prevClassicPanel = (prevAccessories?.['logo-panel-classic-400'] || 0) > 0;
-        const nextClassicPanel = (nextAccessories?.['logo-panel-classic-400'] || 0) > 0;
-        const prevClassicFull = (prevAccessories?.['logo-panel-classic-full'] || 0) > 0;
-        const nextClassicFull = (nextAccessories?.['logo-panel-classic-full'] || 0) > 0;
-        if ((nextCrystalite && !prevCrystalite) || (nextClassicPanel && !prevClassicPanel)) {
-          const shouldApplyDefaults =
-            (nextCrystalite && !logoDefaultsAppliedRef.current['crystalite-logo-classic']) ||
-            (nextClassicPanel && !logoDefaultsAppliedRef.current['logo-panel-classic-400']);
-          if (shouldApplyDefaults) {
-            if (nextCrystalite) {
-              logoDefaultsAppliedRef.current['crystalite-logo-classic'] = true;
-            }
-            if (nextClassicPanel) {
-              logoDefaultsAppliedRef.current['logo-panel-classic-400'] = true;
-            }
+        const activeLogoAccessoryId = getActiveLogoAccessoryId(nextAccessories);
+        if (modelId && activeLogoAccessoryId) {
+          const defaultConfig = logoDefaultsByModel[modelId]?.[activeLogoAccessoryId];
+          const savedTransform = logoTransformsByModel[modelId]?.[activeLogoAccessoryId];
+          const applyKey = `${modelId}:${activeLogoAccessoryId}`;
+          if (!logoDefaultsAppliedRef.current[applyKey] && defaultConfig) {
+            logoDefaultsAppliedRef.current[applyKey] = true;
+            return {
+              ...prev,
+              selections: defaultConfig.panelColour
+                ? { ...nextSelections, 'panel-colour': defaultConfig.panelColour }
+                : nextSelections,
+              logoTransform: { ...defaultConfig.transform },
+            };
+          }
+          if (savedTransform) {
             return {
               ...prev,
               selections: nextSelections,
-              logoTransform: { ...logoPanelClassicDefaults },
-            };
-          }
-        }
-        if (nextClassicFull && !prevClassicFull) {
-          if (!logoDefaultsAppliedRef.current['logo-panel-classic-full']) {
-            logoDefaultsAppliedRef.current['logo-panel-classic-full'] = true;
-            return {
-              ...prev,
-              selections: { ...nextSelections, 'panel-colour': 'savoye' },
-              logoTransform: { ...fullDressPanelClassicDefaults },
+              logoTransform: { ...savedTransform },
             };
           }
         }
@@ -182,6 +217,18 @@ const BrandConfigurator: React.FC = () => {
   };
 
   const handleLogoTransformChange = (transform: LogoTransform) => {
+    const modelId = getActiveModelId(activeProduct);
+    const accessories = config.selections['accessories'] as Record<string, number> | undefined;
+    const activeLogoAccessoryId = getActiveLogoAccessoryId(accessories);
+    if (modelId && activeLogoAccessoryId) {
+      setLogoTransformsByModel(prev => ({
+        ...prev,
+        [modelId]: {
+          ...(prev[modelId] || {}),
+          [activeLogoAccessoryId]: transform,
+        },
+      }));
+    }
     setConfig(prev => ({
       ...prev,
       logoTransform: transform

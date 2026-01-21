@@ -14,6 +14,19 @@ import BrandThemeProvider from './components/BrandThemeProvider';
 import BrandSelector from './components/BrandSelector';
 import AdminDashboard from './components/admin/AdminDashboard';
 import BrandLogo, { BrandName } from './components/BrandLogo';
+import AuthCallback from './components/AuthCallback';
+
+// Check if we're on an auth callback (invite/magic link)
+const isAuthCallback = () => {
+  const path = window.location.pathname;
+  const hash = window.location.hash;
+  
+  // Check for /auth/callback path OR tokens in hash
+  if (path.includes('/auth/callback')) return true;
+  if (hash.includes('access_token') && hash.includes('refresh_token')) return true;
+  
+  return false;
+};
 
 // Internal App Content (Needs Access to Context)
 const BoscotekApp: React.FC = () => {
@@ -21,6 +34,7 @@ const BoscotekApp: React.FC = () => {
   const { user, isAuthenticated, isAdmin, isStaff, isDistributor, signOut } = useAuth();
   const { brand, theme, isLoading: brandLoading } = useBrand();
   const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showAuthCallback, setShowAuthCallback] = useState(isAuthCallback());
   
   // Navigation State
   const [viewMode, setViewMode] = useState<'catalog' | 'config' | 'cart' | 'success'>('catalog');
@@ -221,6 +235,19 @@ const BoscotekApp: React.FC = () => {
   };
 
   // --- VIEWS ---
+
+  // Auth Callback (invite/magic link handling)
+  if (showAuthCallback) {
+    return (
+      <AuthCallback 
+        onComplete={() => {
+          // Clear the hash/tokens from URL
+          window.history.replaceState(null, '', window.location.pathname);
+          setShowAuthCallback(false);
+        }} 
+      />
+    );
+  }
 
   if (isAdminMode) {
     return <AdminDashboard onExit={() => setIsAdminMode(false)} />;
