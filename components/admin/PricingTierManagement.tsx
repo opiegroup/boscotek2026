@@ -140,21 +140,71 @@ const PricingTierManagement: React.FC = () => {
 
   // Quick markup update
   const handleQuickMarkupChange = async (tierId: string, newMarkup: number) => {
+    console.log('Updating tier:', tierId, 'to markup:', newMarkup);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('pricing_tiers')
         .update({ markup_percentage: newMarkup })
-        .eq('id', tierId);
+        .eq('id', tierId)
+        .select();
+
+      console.log('Update result:', { data, error });
 
       if (error) throw error;
 
-      // Update local state immediately
+      if (!data || data.length === 0) {
+        throw new Error('No rows updated - RLS policy may be blocking the update');
+      }
+
+      // Update local state with actual returned data
       setTiers(tiers.map(t => 
-        t.id === tierId ? { ...t, markup_percentage: newMarkup } : t
+        t.id === tierId ? { ...t, markup_percentage: data[0].markup_percentage } : t
       ));
     } catch (err: any) {
       console.error('Error updating markup:', err);
-      alert(`Failed to update: ${err.message}`);
+      alert(`Failed to update pricing tier: ${err.message}`);
+      // Reload to get actual values
+      loadTiers();
+    }
+  };
+
+  // Reorder tiers
+  const handleReorder = async (tierId: string, direction: 'up' | 'down') => {
+    const currentIndex = tiers.findIndex(t => t.id === tierId);
+    if (currentIndex === -1) return;
+    
+    const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
+    if (swapIndex < 0 || swapIndex >= tiers.length) return;
+
+    const currentTier = tiers[currentIndex];
+    const swapTier = tiers[swapIndex];
+
+    try {
+      // Swap sort_order values
+      const { error: error1 } = await supabase
+        .from('pricing_tiers')
+        .update({ sort_order: swapTier.sort_order })
+        .eq('id', currentTier.id);
+
+      if (error1) throw error1;
+
+      const { error: error2 } = await supabase
+        .from('pricing_tiers')
+        .update({ sort_order: currentTier.sort_order })
+        .eq('id', swapTier.id);
+
+      if (error2) throw error2;
+
+      // Update local state
+      const newTiers = [...tiers];
+      newTiers[currentIndex] = { ...swapTier, sort_order: currentTier.sort_order };
+      newTiers[swapIndex] = { ...currentTier, sort_order: swapTier.sort_order };
+      newTiers.sort((a, b) => a.sort_order - b.sort_order);
+      setTiers(newTiers);
+    } catch (err: any) {
+      console.error('Error reordering:', err);
+      alert(`Failed to reorder: ${err.message}`);
+      loadTiers();
     }
   };
 
@@ -283,6 +333,7 @@ const PricingTierManagement: React.FC = () => {
         <table className="w-full">
           <thead className="bg-zinc-950 text-xs text-zinc-500 uppercase">
             <tr>
+              <th className="text-center px-3 py-3 w-20">Order</th>
               <th className="text-left px-6 py-3">Tier</th>
               <th className="text-left px-6 py-3">Code</th>
               <th className="text-left px-6 py-3">Markup %</th>
@@ -293,8 +344,29 @@ const PricingTierManagement: React.FC = () => {
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-800">
-            {tiers.map(tier => (
+            {tiers.map((tier, index) => (
               <tr key={tier.id} className={`hover:bg-zinc-800/50 ${!tier.is_active ? 'opacity-50' : ''}`}>
+                <td className="px-3 py-4">
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      onClick={() => handleReorder(tier.id, 'up')}
+                      disabled={index === 0}
+                      className="text-zinc-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed p-1"
+                      title="Move up"
+                    >
+                      ▲
+                    </button>
+                    <span className="text-zinc-600 text-xs">{index + 1}</span>
+                    <button
+                      onClick={() => handleReorder(tier.id, 'down')}
+                      disabled={index === tiers.length - 1}
+                      className="text-zinc-500 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed p-1"
+                      title="Move down"
+                    >
+                      ▼
+                    </button>
+                  </div>
+                </td>
                 <td className="px-6 py-4">
                   <div className="font-medium text-white">{tier.name}</div>
                   {tier.description && (

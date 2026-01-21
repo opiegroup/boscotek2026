@@ -190,12 +190,28 @@ const DistributorProfile: React.FC = () => {
 
     try {
       // Upload to Supabase Storage
-      const fileExt = file.name.split('.').pop();
+      const fileExt = file.name.split('.').pop()?.toLowerCase();
       const fileName = `${distributor.id}/logo.${fileExt}`;
 
-      const { error: uploadError } = await supabase.storage
+      console.log('Uploading file:', {
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        fileName: fileName
+      });
+
+      // Read file as ArrayBuffer to ensure binary upload
+      const arrayBuffer = await file.arrayBuffer();
+      const uint8Array = new Uint8Array(arrayBuffer);
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
         .from('distributor-logos')
-        .upload(fileName, file, { upsert: true });
+        .upload(fileName, uint8Array, { 
+          upsert: true,
+          contentType: file.type  // Explicitly set MIME type
+        });
+
+      console.log('Upload result:', { uploadData, uploadError });
 
       if (uploadError) throw uploadError;
 

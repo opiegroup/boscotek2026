@@ -140,16 +140,54 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
         <div className="mb-6">
            <h3 className="text-sm font-bold uppercase text-zinc-400 border-b border-zinc-800 pb-1 mb-2">Item Breakdown</h3>
            
-           {/* Distributor pricing tier badge */}
-           {pricing.tierName && pricing.tierCode !== 'CASH' && (
-             <div className="mb-3 bg-blue-900/20 border border-blue-800/50 rounded px-3 py-2 flex items-center gap-2">
-               <span className="text-blue-400 text-xs">💎</span>
-               <span className="text-blue-300 text-xs font-medium">{pricing.tierName} Pricing</span>
-             </div>
+           {/* Distributor pricing tier badge with savings */}
+           {pricing.tierName && pricing.tierCode !== 'CASH' && pricing.markupPercent !== undefined && (
+             (() => {
+               // Calculate retail price (25% markup) from user's price
+               const RETAIL_MARKUP = 25;
+               const userMarkup = pricing.markupPercent;
+               const retailPrice = userMarkup < RETAIL_MARKUP 
+                 ? pricing.totalPrice * ((100 + RETAIL_MARKUP) / (100 + userMarkup))
+                 : null;
+               const savings = retailPrice ? retailPrice - pricing.totalPrice : 0;
+               const savingsPercent = retailPrice ? ((savings / retailPrice) * 100).toFixed(0) : 0;
+               
+               return (
+                 <div className="mb-3 bg-gradient-to-r from-green-900/30 to-blue-900/20 border border-green-700/50 rounded-lg p-3">
+                   <div className="flex items-center justify-between mb-2">
+                     <div className="flex items-center gap-2">
+                       <span className="text-green-400">💎</span>
+                       <div>
+                         <span className="text-green-300 text-sm font-medium">{pricing.tierName}</span>
+                         <span className="text-green-400/60 text-xs ml-1">({userMarkup}% markup)</span>
+                       </div>
+                     </div>
+                     {savings > 0 && (
+                       <span className="bg-green-500 text-black text-xs font-bold px-2 py-1 rounded">
+                         SAVE {savingsPercent}%
+                       </span>
+                     )}
+                   </div>
+                   <div className="text-green-400/60 text-[10px] uppercase tracking-wide mb-2">
+                     vs Standard Retail Price
+                   </div>
+                   {retailPrice && savings > 0 && (
+                     <div className="flex items-center gap-2 text-sm bg-black/20 rounded p-2">
+                       <span className="text-zinc-500 line-through">${retailPrice.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</span>
+                       <span className="text-zinc-500">→</span>
+                       <span className="text-green-400 font-bold">${pricing.totalPrice.toLocaleString()}</span>
+                       <span className="text-green-400/80 text-xs ml-auto">
+                         Save ${savings.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                       </span>
+                     </div>
+                   )}
+                 </div>
+               );
+             })()
            )}
            
            <div className="flex items-baseline justify-between mb-2">
-              <span className="text-zinc-500 text-sm">Unit Price (Ex GST)</span>
+              <span className="text-zinc-500 text-sm">Your Price (Ex GST)</span>
               <span className="text-xl font-bold text-white">
                 {pricing.currencySymbol || '$'}{pricing.totalPrice.toLocaleString()}
               </span>
@@ -202,6 +240,19 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
                >+</button>
             </div>
             <div className="flex-1 text-right">
+               {/* Show total savings for non-retail tiers */}
+               {pricing.tierCode !== 'CASH' && pricing.markupPercent !== undefined && pricing.markupPercent < 25 && (
+                 (() => {
+                   const RETAIL_MARKUP = 25;
+                   const retailUnitPrice = pricing.totalPrice * ((100 + RETAIL_MARKUP) / (100 + pricing.markupPercent));
+                   const totalSavings = (retailUnitPrice - pricing.totalPrice) * quantity;
+                   return totalSavings > 0 ? (
+                     <div className="text-green-400 text-xs font-medium mb-1">
+                       💰 Total savings: ${totalSavings.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                     </div>
+                   ) : null;
+                 })()
+               )}
                <div className="flex justify-end gap-4 text-xs text-zinc-400 mb-1">
                   <span>Ex GST: ${grandTotal.toLocaleString()}</span>
                   <span>GST: ${(pricing.gst * quantity).toLocaleString()}</span>
