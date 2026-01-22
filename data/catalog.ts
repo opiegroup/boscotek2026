@@ -406,6 +406,7 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Bench Top Material',
         type: 'radio',
         step: 2,
+        defaultValue: 'top-mild2',
         description: 'Select worktop material and finish',
         options: [
           { id: 'top-lam', label: 'Laminated Timber (42mm HDF)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 42, description: '42mm grey laminated compressed (HDF) timber. Durable and strong, resists most acids and oil.' } },
@@ -544,6 +545,7 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Frame & Carcass Colour',
         type: 'color',
         step: 7,
+        defaultValue: 'col-mg', // Monument Grey default
         options: COLORS
       },
       {
@@ -592,6 +594,7 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Bench Top Material',
         type: 'select',
         step: 2,
+        defaultValue: 'iw-top-mild',
         description: 'Select worktop material and finish',
         options: [
           { id: 'iw-top-lam', label: 'Laminated Timber (42mm HDF)', value: 'lam', code: 'L', priceDelta: 0, meta: { color: '#78716c', thickness: 42, description: '42mm grey laminated compressed (HDF) timber. Durable and strong, resists most acids and oil.' } },
@@ -681,6 +684,7 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Frame Colour',
         type: 'color',
         step: 7,
+        defaultValue: 'col-mg', // Monument Grey default
         options: COLORS
       },
       {
@@ -688,7 +692,7 @@ export const CATALOG: ProductDefinition[] = [
         label: 'Drawer Facia Colour',
         type: 'color',
         step: 7,
-        defaultValue: 'col-sg',
+        defaultValue: 'col-sg', // Surfmist default
         options: COLORS
       }
     ]

@@ -1773,7 +1773,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     
     // UPDATED: bayWidth calculation to close gaps. width - 0.06 aligns panels to edges of posts roughly (20mm offset on each side for post half-width + margin)
     const bayWidth = (width - 0.06) / 2; // Width of one bay
-    const shelfWidth = width - 0.1;
+    const shelfWidth = width - 0.06; // 40mm wider - shelves extend halfway into posts
     
     // Y-Levels (from bottom of posts = benchtop)
     const yTop = 1.05;
@@ -1840,7 +1840,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
 
             {/* FULL WIDTH SHELVES */}
             {shelves.map((y, i) => (
-               <group key={`s-${i}`} position={[0, y, -depth/2 + 0.15]}>
+               <group key={`s-${i}`} position={[0, y, -depth/2 + 0.165]}>
                   <ShelfTray width={shelfWidth} />
                </group>
             ))}
