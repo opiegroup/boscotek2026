@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { CustomerDetails, QuoteLineItem } from '../types';
-import BoscotekLogo from './BoscotekLogo';
+import BrandLogo from './BrandLogo';
 
 interface QuoteCartProps {
   items: QuoteLineItem[];
@@ -33,7 +33,7 @@ const QuoteCart: React.FC<QuoteCartProps> = ({ items, onRemoveItem, onEditItem, 
     <div className="min-h-screen text-white flex flex-col items-center p-6" style={{ backgroundColor: '#3e3e3e' }}>
       <div className="w-full max-w-5xl">
         <div className="flex justify-between items-center mb-8">
-           <BoscotekLogo className="h-10" showText={true} />
+           <BrandLogo className="h-10" showText={true} />
            <h1 className="text-2xl font-bold uppercase tracking-wide">Quote Request</h1>
         </div>
 

@@ -779,7 +779,7 @@ const ArgentViewer3D = React.forwardRef<ArgentViewer3DRef, ArgentViewer3DProps>(
   ({ product, config }, ref) => {
     const controlsRef = useRef<any>(null);
     const captureRef = useRef<(() => string | null) | null>(null);
-    const [bgMode, setBgMode] = useState<'dark' | 'light' | 'photo'>('dark');
+    const [bgMode, setBgMode] = useState<'dark' | 'light' | 'photo'>('photo');
     const [isSpacePressed, setIsSpacePressed] = useState(false);
     const [doorsOpen, setDoorsOpen] = useState(false);
     
