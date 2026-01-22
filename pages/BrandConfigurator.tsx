@@ -348,7 +348,7 @@ const BrandConfigurator: React.FC = () => {
 
   const handleSubmitFullQuote = async (customer: CustomerDetails) => {
     try {
-      const quote = await submitQuote(customer, quoteItems);
+      const quote = await submitQuote(customer, quoteItems, brand?.id);
       setSubmittedRef(quote.reference);
       setQuoteItems([]);
       setViewMode('success');

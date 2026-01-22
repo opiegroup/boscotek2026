@@ -53,6 +53,7 @@ type QuotePayload = {
   items: QuoteItem[];
   totals: Totals;
   emailSettings?: EmailSettings;
+  brand_id?: string;
 };
 
 // Send confirmation and notification emails via the email function
@@ -124,13 +125,18 @@ export const handler = async (req: Request): Promise<Response> => {
     const quoteReference = refData as string;
     console.log("submit-quote: Quote reference generated:", quoteReference);
 
-    const newQuote = {
+    const newQuote: Record<string, any> = {
       reference: quoteReference,
       status: "new",
       customer_data: body.customer,
       items_data: body.items,
       totals: body.totals,
     };
+    
+    // Include brand_id if provided
+    if (body.brand_id) {
+      newQuote.brand_id = body.brand_id;
+    }
 
     console.log("submit-quote: Inserting quote into database...");
     const { data, error } = await supabase.from("quotes").insert(newQuote).select().single();

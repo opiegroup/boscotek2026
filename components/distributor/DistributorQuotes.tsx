@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../services/supabaseClient';
+import { useBrand } from '../../contexts/BrandContext';
 
 interface CustomerData {
   name?: string;
@@ -63,6 +64,8 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [pricingTier, setPricingTier] = useState<PricingTier | null>(null);
   const [distributorInfo, setDistributorInfo] = useState<DistributorInfo | null>(null);
+  const [distributorAccountNumber, setDistributorAccountNumber] = useState<string>('');
+  const { brand, brandSlug } = useBrand();
 
   useEffect(() => {
     loadQuotes();
@@ -76,7 +79,7 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
       // Get distributor's current info and pricing tier
       const { data: distributor } = await supabase
         .from('distributors')
-        .select('company_name, contact_name, contact_email, pricing_tier_id, pricing_tiers(*)')
+        .select('company_name, contact_name, contact_email, account_number, pricing_tier_id, pricing_tiers(*)')
         .eq('id', distributorId)
         .single();
       
@@ -86,6 +89,7 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
           contact_name: distributor.contact_name,
           contact_email: distributor.contact_email,
         });
+        setDistributorAccountNumber(distributor.account_number || '');
         if (distributor.pricing_tiers) {
           setPricingTier(distributor.pricing_tiers as PricingTier);
         }
@@ -109,6 +113,314 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
     const savingsPercent = (savings / retailTotal) * 100;
     
     return { retailTotal, savings, savingsPercent };
+  };
+
+  // Print quote function - same format as admin
+  const handlePrintQuote = (quote: Quote) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups for this site to print quotes.');
+      return;
+    }
+
+    // Brand-specific footer mapping
+    const brandFooters: Record<string, string> = {
+      'boscotek': '/boscotek-footer.png',
+      'lectrum': '/lectrum-footer.png',
+      'gilkon': '/gilkon-footer.png',
+      'argent': '/argent-footer.png',
+      'bosco-office': '/bos-footer.png',
+      'default': '/opiegroup-footer.png'
+    };
+
+    // Brand-specific logo mapping
+    const brandLogos: Record<string, string> = {
+      'boscotek': '/boscotek-logo.svg',
+      'lectrum': '/lectrum-logo.png',
+      'gilkon': '/gilkon-logo.jpg',
+      'argent': '/argent-logo.png',
+      'bosco-office': '/bos-logo.png',
+      'opie-infrastructure': '/opiegroup-logo.png',
+      'default': '/boscotek-logo.svg'
+    };
+
+    const brandLogo = brandLogos[brandSlug || ''] || brandLogos['default'];
+    const brandName = brand?.name || 'Boscotek';
+    const footerImage = brandFooters[brandSlug || ''] || brandFooters['default'];
+
+    const quoteDate = new Date(quote.created_at);
+    const expiryDate = new Date(quoteDate);
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    
+    const formatPrintDate = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'numeric', year: 'numeric' });
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Quote ${quote.reference}</title>
+        <style>
+          @page { margin: 15mm; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #333; line-height: 1.4; }
+          
+          .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+          .hello-title img { height: 90px; width: auto; }
+          .brand-logo { text-align: right; }
+          .brand-logo img { height: 72px; width: auto; }
+          
+          .quote-info { display: flex; gap: 40px; margin-bottom: 25px; }
+          .quote-info .quote-num h2 { font-size: 16px; font-weight: bold; }
+          .quote-info .quote-num p { font-size: 11px; color: #666; }
+          .quote-info .abn { font-size: 11px; color: #333; }
+          
+          .address-section { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #C9A227; }
+          .address-block label { font-size: 10px; font-weight: bold; color: #C9A227; display: block; margin-bottom: 5px; }
+          .address-block p { font-size: 12px; line-height: 1.5; }
+          .address-block .company-name { font-weight: bold; font-size: 13px; }
+          .project-block .project-code { font-size: 18px; font-weight: bold; color: #333; }
+          .project-block .customer-no { margin-top: 10px; }
+          .project-block .customer-no label { font-size: 10px; color: #666; }
+          .project-block .customer-no p { font-size: 20px; font-weight: bold; }
+          
+          .meta-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e5e5; font-size: 9px; }
+          .meta-row label { display: block; color: #999; text-transform: uppercase; font-weight: bold; }
+          .meta-row p { color: #333; margin-top: 2px; }
+          
+          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; page-break-inside: auto; }
+          .items-table thead th { background: #C9A227; color: #fff; font-weight: bold; text-transform: uppercase; font-size: 10px; padding: 10px 8px; text-align: left; }
+          .items-table thead th.qty { text-align: center; width: 60px; }
+          .items-table thead th.price { text-align: right; width: 100px; }
+          .items-table thead th.amount { text-align: right; width: 100px; }
+          .items-table tbody td { padding: 12px 8px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+          .items-table tbody td.qty { text-align: center; font-weight: bold; }
+          .items-table tbody td.price { text-align: right; }
+          .items-table tbody td.amount { text-align: right; font-weight: bold; }
+          .items-table tr { page-break-inside: avoid; }
+          
+          .item-code { font-weight: bold; color: #333; margin-bottom: 2px; }
+          .item-name { font-weight: bold; margin-bottom: 8px; }
+          .item-specs { color: #666; font-size: 10px; line-height: 1.6; }
+          .item-image { margin: 10px 0; }
+          .item-image img { max-height: 150px; max-width: 250px; }
+          .item-line-num { margin-top: 10px; font-size: 10px; color: #999; }
+          
+          .page-footer { margin-top: 40px; }
+          .page-footer img { width: 100%; height: auto; display: block; }
+          
+          .page-break { page-break-before: always; }
+          
+          .page2-wrapper { min-height: calc(100vh - 30mm); display: flex; flex-direction: column; }
+          .page2-wrapper .page-footer { margin-top: auto; padding-top: 10mm; }
+          
+          .page2-top { display: flex; justify-content: space-between; margin-top: 80px; gap: 40px; }
+          .page2-notes { flex: 1; }
+          .page2-totals { width: 280px; }
+          
+          .additional-notes h3 { font-weight: bold; font-size: 13px; margin-bottom: 8px; }
+          .additional-notes .notes-text { font-style: italic; font-size: 11px; line-height: 1.8; }
+          .additional-notes .dimensions { font-style: italic; font-size: 11px; margin-top: 15px; line-height: 1.6; }
+          
+          .totals-box-page2 { border: 1px solid #e5e5e5; }
+          .totals-box-page2 .totals-row { display: flex; justify-content: space-between; padding: 12px 15px; font-size: 13px; border-bottom: 1px solid #e5e5e5; }
+          .totals-box-page2 .totals-row:last-child { border-bottom: none; }
+          .totals-box-page2 .totals-row.final { background: #333; color: #fff; font-weight: bold; font-size: 15px; }
+          .totals-box-page2 .totals-row .label { font-weight: 600; }
+          .totals-box-page2 .totals-row .amount { font-family: 'Courier New', monospace; text-align: right; min-width: 100px; }
+          
+          .page2-bottom { display: flex; gap: 30px; margin-top: 40px; }
+          .page2-card { width: 220px; }
+          .page2-terms { flex: 1; }
+          
+          .card-payment h3 { font-weight: bold; font-size: 13px; margin-bottom: 4px; }
+          .card-payment a { color: #333; font-size: 11px; text-decoration: underline; }
+          .card-payment .payment-icons { width: 180px; margin: 15px 0; display: block; }
+          .card-payment .thank-you { font-size: 20px; font-weight: bold; color: #C9A227; margin-top: 25px; }
+          
+          .terms-section h3 { font-size: 11px; font-weight: bold; font-style: italic; margin-bottom: 10px; }
+          .terms-section h3 a { color: #C9A227; text-decoration: underline; }
+          .terms-section ul { list-style: disc; padding-left: 18px; font-size: 9px; line-height: 1.5; font-style: italic; color: #333; }
+          .terms-section li { margin-bottom: 3px; }
+          .terms-section li strong { font-style: italic; }
+          
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page-header">
+          <div class="hello-title">
+            <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
+          </div>
+          <div class="brand-logo">
+            <img src="${brandLogo}" alt="${brandName}">
+          </div>
+        </div>
+        
+        <div class="quote-info">
+          <div class="quote-num">
+            <h2>Quote # ${quote.reference}</h2>
+            <p>Date: ${formatPrintDate(quoteDate)}</p>
+          </div>
+          <div class="abn">
+            ABN 31 003 951 004<br>
+            Net 30
+          </div>
+        </div>
+        
+        <div class="address-section">
+          <div class="address-block">
+            <label>Bill to:</label>
+            <p class="company-name">${distributorInfo?.company_name || ''}</p>
+            <p>Attn: ${distributorInfo?.contact_name || quote.customer_data?.name || ''}</p>
+          </div>
+          <div class="address-block">
+            <label>Ship to:</label>
+            <p>Attn: ${distributorInfo?.contact_name || quote.customer_data?.name || ''}</p>
+          </div>
+          <div class="address-block project-block">
+            <label>Project:</label>
+            <p class="project-code">${quote.items_data?.[0]?.configurationCode || quote.reference}</p>
+            <p>${quote.items_data?.[0]?.productName || ''}</p>
+            <div class="customer-no">
+              <label>Customer No:</label>
+              <p>${distributorAccountNumber || 'WALK-IN'}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="meta-row">
+          <div><label>Pricing Expires:</label><p>${formatPrintDate(expiryDate)}</p></div>
+          <div><label>Sales Contact:</label><p>Sales Team</p></div>
+          <div><label>Shipping Method:</label><p>TBA</p></div>
+          <div><label>Shipping INCOTERM Code:</label><p></p></div>
+          <div><label>Payment Terms:</label><p>Net 30</p></div>
+        </div>
+        
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="qty">QTY</th>
+              <th class="price">Unit Price</th>
+              <th class="amount">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quote.items_data?.map((item: any, idx: number) => `
+              <tr>
+                <td>
+                  <div class="item-code">${item.configurationCode || ''}</div>
+                  <div class="item-name">${item.productName}</div>
+                  ${item.thumbnail ? `<div class="item-image"><img src="${item.thumbnail}" alt="${item.productName}"></div>` : ''}
+                  <div class="item-specs">
+                    ${item.specsSummary ? item.specsSummary.join('<br>') : ''}
+                  </div>
+                  <div class="item-line-num">${idx + 1}</div>
+                </td>
+                <td class="qty">${item.quantity}</td>
+                <td class="price">$${item.unitPrice?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}</td>
+                <td class="amount">$${item.totalPrice?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00'}</td>
+              </tr>
+            `).join('') || ''}
+          </tbody>
+        </table>
+
+        <!-- PAGE 2 - T&C and Totals -->
+        <div class="page-break"></div>
+        
+        <div class="page2-wrapper">
+          <div class="page-header">
+            <div class="hello-title">
+              <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
+            </div>
+            <div class="brand-logo">
+              <img src="${brandLogo}" alt="${brandName}">
+            </div>
+          </div>
+          
+          <div class="quote-info">
+            <div class="quote-num">
+              <h2>Quote # ${quote.reference}</h2>
+              <p>Date: ${formatPrintDate(quoteDate)}</p>
+            </div>
+            <div class="abn">
+              ABN 31 003 951 004<br>
+              Net 30
+            </div>
+          </div>
+          
+          <div class="page2-top">
+            <div class="page2-notes">
+              <div class="additional-notes">
+                <h3>Additional Notes:</h3>
+                <p class="notes-text"><em>Note: This Product is manufactured to order.</em></p>
+                <p class="dimensions"><em>Approximate Weight & Dimensions below:</em><br>
+                ${quote.items_data?.[0]?.dimensions || '2300H x 1350W x 1050D @ 350kg.'}</p>
+              </div>
+            </div>
+            
+            <div class="page2-totals">
+              <div class="totals-box-page2">
+                <div class="totals-row">
+                  <span class="label">Total (ex GST)</span>
+                  <span class="amount">$${(quote.totals?.subtotal || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                </div>
+                <div class="totals-row">
+                  <span class="label">Freight</span>
+                  <span class="amount">$0.00</span>
+                </div>
+                <div class="totals-row">
+                  <span class="label">GST</span>
+                  <span class="amount">$${(quote.totals?.gst || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                </div>
+                <div class="totals-row final">
+                  <span class="label">Total (inc GST)</span>
+                  <span class="amount">$${(quote.totals?.total || 0).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="page2-bottom">
+            <div class="page2-card">
+              <div class="card-payment">
+                <h3>Card Payment</h3>
+                <p><a href="https://www.opiegroup.com.au/payments/">www.opiegroup.com.au/payments/</a></p>
+                <img src="/payment-cards.png" alt="Payment Methods" class="payment-icons">
+                <p class="thank-you">Thank you for your business</p>
+              </div>
+            </div>
+            
+            <div class="page2-terms">
+              <div class="terms-section">
+                <h3>For full terms and conditions see website: <a href="https://www.opiegroup.com.au/terms-of-sale/">www.opiegroup.com.au/terms-of-sale/</a></h3>
+                <ul>
+                  <li>All quoted prices remain subject to rise and fall without notice.</li>
+                  <li>Material availability remains subject to confirmation at time of order placement with our suppliers.</li>
+                  <li>We maintain the right to adjust delivery time or cancel the order without notice or penalty if material cannot be sourced due to availability or within the budgeted price with our existing suppliers.</li>
+                  <li>All lead times are provided in good faith and should be treated as an estimation only.</li>
+                  <li>Please allow 1–2 days after estimated completion date for Sydney Metro delivery.</li>
+                  <li>Unless expressly agreed to in writing, all thermal cutting tolerances are to ISO9013:2017-5.</li>
+                  <li>All CAD files provided by the customer are treated as 1:1 scale and orientated to suit required grain direction.</li>
+                  <li>Shipping is in compliance with Incoterms® 2020, or International Commercial Terms, of the globally-recognised international trade rules for the sale of goods.</li>
+                  <li><strong>Delivery charges are provided as estimates only and will be adjusted to reflect the actual carrier invoice upon receipt, unless otherwise stated.</strong></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          
+          <div class="page-footer">
+            <img src="${footerImage}" alt="${brandName} Footer">
+          </div>
+        </div>
+
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   const loadQuotes = async () => {
@@ -314,12 +626,20 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
                   Created {formatDate(selectedQuote.created_at)}
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedQuote(null)}
-                className="text-zinc-400 hover:text-white text-2xl"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => handlePrintQuote(selectedQuote)}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-zinc-700 text-white text-sm rounded hover:bg-zinc-600"
+                >
+                  🖨️ Print
+                </button>
+                <button
+                  onClick={() => setSelectedQuote(null)}
+                  className="text-zinc-400 hover:text-white text-2xl"
+                >
+                  ×
+                </button>
+              </div>
             </div>
 
             <div className="p-6 space-y-6">
@@ -476,7 +796,13 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
               </div>
             </div>
 
-            <div className="bg-zinc-800 px-6 py-4 border-t border-zinc-700 flex justify-end gap-3 sticky bottom-0">
+            <div className="bg-zinc-800 px-6 py-4 border-t border-zinc-700 flex justify-between sticky bottom-0">
+              <button
+                onClick={() => handlePrintQuote(selectedQuote)}
+                className="flex items-center gap-2 px-4 py-2 bg-amber-500 text-black font-medium rounded hover:bg-amber-400"
+              >
+                🖨️ Print Quote
+              </button>
               <button
                 onClick={() => setSelectedQuote(null)}
                 className="px-4 py-2 text-zinc-400 hover:text-white"

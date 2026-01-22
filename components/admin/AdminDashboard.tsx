@@ -275,14 +275,12 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   }
 
   const loadQuotes = async () => {
-    // For Boscotek: load all quotes (legacy data)
-    // For other brands: empty (no data yet)
-    if (brandSlug === 'boscotek') {
-      const data = await getQuotes();
-      setQuotes(data);
-    } else {
-      setQuotes([]);
-    }
+    // Load quotes for the current brand
+    // Pass brand ID to filter quotes by brand
+    // For Boscotek (legacy): also load quotes without brand_id
+    const includeLegacy = brandSlug === 'boscotek';
+    const data = await getQuotes(brand?.id, includeLegacy);
+    setQuotes(data);
   }
 
   // --- AUTH HANDLERS ---
@@ -462,13 +460,43 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
     printWindow.document.close();
   };
 
-  // Print individual quote - Boscotek style
+  // Print individual quote - Brand-specific styling
   const handlePrintQuote = (quote: Quote) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
       alert('Please allow popups for this site to print quotes.');
       return;
     }
+
+    // Brand-specific footer mapping
+    const brandFooters: Record<string, string> = {
+      'boscotek': '/boscotek-footer.png',
+      'lectrum': '/lectrum-footer.png',
+      'gilkon': '/gilkon-footer.png',
+      'argent': '/argent-footer.png',
+      'bosco-office': '/bos-footer.png',
+      'smc-stainless': '/opiegroup-footer.png',
+      'bonwick': '/opiegroup-footer.png',
+      'opie-infrastructure': '/opiegroup-footer.png',
+      'default': '/opiegroup-footer.png'
+    };
+
+    // Brand-specific logo mapping (fallback if not set in admin)
+    const brandLogos: Record<string, string> = {
+      'boscotek': '/boscotek-logo.svg',
+      'lectrum': '/lectrum-logo.png',
+      'gilkon': '/gilkon-logo.jpg',
+      'argent': '/argent-logo.png',
+      'bosco-office': '/bos-logo.png',
+      'opie-infrastructure': '/opiegroup-logo.png',
+      'default': '/boscotek-logo.svg'
+    };
+
+    // For printing, use static logo files (designed for light backgrounds)
+    // Database logos are often white/transparent (for dark UI backgrounds)
+    const brandLogo = brandLogos[brandSlug || ''] || brandLogos['default'];
+    const brandName = brand?.name || 'Boscotek';
+    const footerImage = brandFooters[brandSlug || ''] || brandFooters['default'];
 
     const quoteDate = new Date(quote.createdAt);
     const expiryDate = new Date(quoteDate);
@@ -607,7 +635,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
             <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
           </div>
           <div class="brand-logo">
-            <img src="/boscotek-logo.svg" alt="Boscotek">
+            <img src="${brandLogo}" alt="${brandName}">
           </div>
         </div>
         
@@ -695,7 +723,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
               <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
             </div>
             <div class="brand-logo">
-              <img src="/boscotek-logo.svg" alt="Boscotek">
+              <img src="${brandLogo}" alt="${brandName}">
             </div>
           </div>
           
@@ -773,7 +801,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
         </div>
         
           <div class="page-footer">
-            <img src="/boscotek-footer.png" alt="Boscotek Footer">
+            <img src="${footerImage}" alt="${brandName} Footer">
           </div>
         </div>
 

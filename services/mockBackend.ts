@@ -475,13 +475,14 @@ const generateQuoteRef = (count: number) => {
 
 export const submitQuote = async (
   customer: CustomerDetails, 
-  items: QuoteLineItem[]
+  items: QuoteLineItem[],
+  brandId?: string
 ): Promise<Quote> => {
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
   const gst = subtotal * 0.1;
   const total = subtotal + gst;
 
-  const { data, error } = await submitQuoteFunction(customer, items, { subtotal, gst, total });
+  const { data, error } = await submitQuoteFunction(customer, items, { subtotal, gst, total }, brandId);
 
   if (error) {
     console.error("Quote Submit Error", error);
@@ -528,7 +529,7 @@ export const submitQuote = async (
   };
 };
 
-export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
+export const getQuotes = async (brandId?: string, includeLegacy: boolean = false): Promise<Quote[]> => {
   let query = supabase
     .from('quotes')
     .select('*, distributors(id, company_name, account_number)')
@@ -536,7 +537,12 @@ export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
   
   // Filter by brand_id if provided
   if (brandId) {
-    query = query.eq('brand_id', brandId);
+    if (includeLegacy) {
+      // For Boscotek: include quotes with this brand_id OR quotes with null brand_id (legacy)
+      query = query.or(`brand_id.eq.${brandId},brand_id.is.null`);
+    } else {
+      query = query.eq('brand_id', brandId);
+    }
   }
   
   const { data, error } = await query;
