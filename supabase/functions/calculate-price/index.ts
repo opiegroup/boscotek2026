@@ -240,13 +240,39 @@ async function calculatePricing(
   }
 
   const breakdown: LineItem[] = [];
-  let total = product.basePrice;
+  const isArgent = typeof product.id === 'string' && product.id.startsWith('argent-');
+  const argentDimensions = isArgent ? (product as any).argentDimensions as Array<any> | undefined : undefined;
+  const parseDimensionValue = (value: unknown, prefix: string): number | null => {
+    if (!value) return null;
+    const match = String(value).match(new RegExp(`${prefix}-(\\d+)`));
+    return match ? parseInt(match[1], 10) : null;
+  };
+  const resolveArgentDimension = () => {
+    if (!argentDimensions || argentDimensions.length === 0) return null;
+    const ruHeight = parseDimensionValue(request.selections['ru-height'], 'ru') ?? argentDimensions[0]?.ruHeight ?? 0;
+    const widthMm = parseDimensionValue(request.selections['width'], 'width') ?? argentDimensions[0]?.widthMm ?? 0;
+    const depthMm = parseDimensionValue(request.selections['depth'], 'depth') ?? argentDimensions[0]?.depthMm ?? 0;
+
+    const directMatch = argentDimensions.find(d => d.ruHeight === ruHeight && d.widthMm === widthMm && d.depthMm === depthMm);
+    if (directMatch) return directMatch;
+
+    // Fallback for 2-post open frame (depth not selected)
+    const depthFallback = argentDimensions.find(d => d.ruHeight === ruHeight && d.widthMm === widthMm && d.depthMm === 0);
+    return depthFallback || null;
+  };
+
+  const argentDimensionConfig = resolveArgentDimension();
+  const basePrice = argentDimensionConfig?.basePrice ?? product.basePrice;
+  let total = basePrice;
 
   // Base product
+  const argentDimensionLabel = argentDimensionConfig
+    ? `${argentDimensionConfig.ruHeight}RU • ${argentDimensionConfig.widthMm}mm • ${argentDimensionConfig.depthMm}mm`
+    : null;
   breakdown.push({
     code: product.id,
-    label: `${product.name} (Base)`,
-    price: product.basePrice,
+    label: argentDimensionLabel ? `${product.name} (${argentDimensionLabel})` : `${product.name} (Base)`,
+    price: basePrice,
   });
 
   // Process standard options
@@ -489,7 +515,7 @@ async function calculatePricing(
   }
 
   return {
-    basePrice: product.basePrice,
+    basePrice,
     totalPrice: total,
     breakdown,
   };

@@ -4,9 +4,10 @@ import { supabase } from "./supabaseClient";
 import { ImportBatch, ImportItem, User, ImportStatus, ProductDefinition, DrawerInteriorOption, DrawerAccessory, QuoteRequest, PricingResult, Quote, QuoteLineItem, CustomerDetails, QuoteStatus } from "../types";
 import { CATALOG as SEED_CATALOG, INTERIOR_OPTIONS as SEED_INTERIORS, DRAWER_ACCESSORIES as SEED_ACCESSORIES, resolvePartitionCode, resolveAccessoryCode } from '../data/catalog';
 import { getLectrumProducts } from './products/lectrumCatalog';
+import { getArgentProducts, calculateArgentPrice } from './products/argentCatalog';
 
-// Merge Boscotek and Lectrum products
-const ALL_PRODUCTS = [...SEED_CATALOG, ...getLectrumProducts()];
+// Merge Boscotek, Lectrum, and Argent products
+const ALL_PRODUCTS = [...SEED_CATALOG, ...getLectrumProducts(), ...getArgentProducts()];
 import { seedCatalog } from "./catalogApi";
 import { submitQuoteFunction } from "./quotesApi";
 
@@ -80,7 +81,7 @@ export const checkSession = async (): Promise<User | null> => {
 
 export const seedDatabase = async () => {
   console.log("Starting DB Seed via Edge Function...");
-  const { error } = await seedCatalog(SEED_CATALOG, SEED_INTERIORS);
+  const { error } = await seedCatalog(ALL_PRODUCTS, SEED_INTERIORS);
 
   if (error) {
     console.error("Seed function error:", error);
@@ -213,13 +214,19 @@ export const calculateQuote = async (request: QuoteRequest): Promise<PricingResu
   }
 
   const breakdown: { code: string, label: string, price: number }[] = [];
-  let total = product.basePrice;
+  const isArgent = product.id.startsWith('argent-');
+  const argentPricing = isArgent ? calculateArgentPrice(product.id, request.selections) : null;
+  const basePrice = argentPricing?.basePrice ?? product.basePrice;
+  let total = basePrice;
 
   // 2. Base Product Line Item
+  const argentDimensionLabel = argentPricing?.dimensionConfig
+    ? `${argentPricing.dimensionConfig.ruHeight}RU • ${argentPricing.dimensionConfig.widthMm}mm • ${argentPricing.dimensionConfig.depthMm}mm`
+    : null;
   breakdown.push({
     code: product.id,
-    label: `${product.name} (Base)`,
-    price: product.basePrice
+    label: argentDimensionLabel ? `${product.name} (${argentDimensionLabel})` : `${product.name} (Base)`,
+    price: basePrice
   });
 
   // 3. Process Standard Options

@@ -1475,8 +1475,8 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
   const shelfHeight = 0.22; 
   const shelfThick = 0.02;
   const drawerUnitWidth = 0.56;
-  const hasPower = aboveBenchId.includes('power') || aboveBenchId === 'P' || aboveBenchId === 'SP';
-  const isIndustrialAbove = aboveBenchId.startsWith('iw-');
+  const hasPower = aboveBenchId?.includes?.('power') || aboveBenchId === 'P' || aboveBenchId === 'SP';
+  const isIndustrialAbove = aboveBenchId?.startsWith?.('iw-') || false;
   
   // COMPONENTS
   const Undershelf = ({ w, x }: { w?: number, x?: number }) => <mesh position={[x || 0, shelfHeight, 0]} receiveShadow><boxGeometry args={[w || width - 0.15, shelfThick, depth - 0.2]} /><meshStandardMaterial color="#a1a1aa" /></mesh>;
@@ -1637,7 +1637,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     const singlePlacement: 'left' | 'right' = (position === 'left' || position === 'pos-left') ? 'left' : 'right';
     if (position === 'center' || position === 'pos-center') singlePos = 0;
 
-    if (underBenchId.startsWith('B') && underBenchId !== 'B0') {
+    if (underBenchId?.startsWith?.('B') && underBenchId !== 'B0') {
         const OneDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={1} suspended />;
         const TwoDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={2} suspended />;
         const ThreeDrw = ({x}:any) => <DrawerUnit x={x} drawerCount={3} suspended />;
@@ -1671,7 +1671,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     }
     
     // Industrial logic - uses embeddedCabinets for HD Cabinet configurations
-    if (underBenchId.startsWith('iw-')) {
+    if (underBenchId?.startsWith?.('iw-')) {
        const US = () => <Undershelf />;
        const HUS = () => <Undershelf w={width/2 - 0.05} x={-width/4} />; // Approximate Half Shelf on Left
        
@@ -1736,7 +1736,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
              <mesh position={[0, postH - 0.02, -depth/2 + 0.03]}><boxGeometry args={[width, 0.04, 0.04]} />{postMat}</mesh>
              
              <group position={[0, 0, -depth/2 + 0.15]}>
-                {aboveBenchId.includes('shelf') && <mesh position={[0, postH, 0]}><boxGeometry args={[width - 0.1, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
+                {aboveBenchId?.includes?.('shelf') && <mesh position={[0, postH, 0]}><boxGeometry args={[width - 0.1, 0.02, 0.25]} /><meshStandardMaterial color="#e4e4e7" /></mesh>}
                 {hasPower && (
                    <group position={[0, 0.15, -0.12]}>
                       <mesh><boxGeometry args={[width - 0.12, 0.10, 0.04]} /><meshStandardMaterial color="#111" /></mesh>
@@ -1749,7 +1749,7 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
     }
 
     // HEAVY DUTY T-SERIES (3-POST SYSTEM for T1-T8)
-    const isTSeries = aboveBenchId.startsWith('T') && aboveBenchId !== 'T9' && aboveBenchId !== 'T10';
+    const isTSeries = aboveBenchId?.startsWith?.('T') && aboveBenchId !== 'T9' && aboveBenchId !== 'T10';
     
     // Special T9/T10 Logic
     if (aboveBenchId === 'T9' || aboveBenchId === 'T10') {

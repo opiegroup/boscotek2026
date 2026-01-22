@@ -10,6 +10,7 @@ import { EmbedBlocker } from './components/EmbedWrapper';
 import OpieGroupLanding from './pages/OpieGroupLanding';
 import BrandLanding from './pages/BrandLanding';
 import BrandConfigurator from './pages/BrandConfigurator';
+import ArgentLanding from './pages/ArgentLanding';
 
 /**
  * BrandLayout
@@ -43,6 +44,24 @@ const BrandLayout: React.FC = () => {
 };
 
 /**
+ * BrandLandingSelector
+ * 
+ * Selects the appropriate landing page component based on the brand.
+ * Some brands (like Argent) have custom landing pages.
+ */
+const BrandLandingSelector: React.FC = () => {
+  const { brand } = useParams<{ brand: string }>();
+  
+  // Brands with custom landing pages
+  switch (brand) {
+    case 'argent':
+      return <ArgentLanding />;
+    default:
+      return <BrandLanding />;
+  }
+};
+
+/**
  * Router Configuration
  * 
  * Public routes:
@@ -66,10 +85,10 @@ const router = createBrowserRouter([
     path: '/:brand',
     element: <BrandLayout />,
     children: [
-      // Brand Landing Page
+      // Brand Landing Page (uses custom landing for specific brands)
       {
         index: true,
-        element: <BrandLanding />,
+        element: <BrandLandingSelector />,
       },
       // Brand Configurator
       {

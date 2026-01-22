@@ -3,6 +3,7 @@ import { ProductDefinition, DrawerInteriorOption } from '../types';
 import { getProducts, getInteriors } from '../services/mockBackend';
 import { useBrand } from './BrandContext';
 import { getLectrumProducts } from '../services/products/lectrumCatalog';
+import { getArgentProducts } from '../services/products/argentCatalog';
 
 const BOSCOTEK_PRODUCT_IDS = [
   'prod-workbench-heavy',
@@ -57,6 +58,13 @@ export const CatalogProvider: React.FC<{ children: ReactNode }> = ({ children })
           const lectrumProducts = getLectrumProducts();
           setProducts(lectrumProducts);
           setInteriors([]); // Lectrum doesn't use drawer interiors
+          break;
+          
+        case 'argent':
+          // Argent has its own product catalog (server racks and security enclosures)
+          const argentProducts = getArgentProducts();
+          setProducts(argentProducts);
+          setInteriors([]); // Argent doesn't use drawer interiors
           break;
           
         default:

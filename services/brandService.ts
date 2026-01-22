@@ -27,17 +27,25 @@ const FALLBACK_BRANDS: Brand[] = [
     code: 'AR',
     primaryDomain: 'configurator.argent.com.au',
     allowedDomains: [],
-    status: 'draft',
-    themeJson: { primaryColor: '#8b5cf6', accentColor: '#2e1065' },
-    featuresJson: { enableBimExport: true, enableQuoteCart: true },
-    logoUrl: null,
-    contactEmail: null,
-    salesEmail: null,
-    supportEmail: null,
-    phone: null,
+    status: 'active',
+    themeJson: { 
+      primaryColor: '#3b82f6', // Blue - security/trust
+      accentColor: '#0f172a', // Dark slate - professional
+      fontFamily: 'Inter',
+    },
+    featuresJson: { 
+      enableBimExport: true, 
+      enableQuoteCart: true,
+      enableDistributorPricing: true,
+    },
+    logoUrl: '/argent-logo.png',
+    contactEmail: 'sales@argent.com.au',
+    salesEmail: 'sales@argent.com.au',
+    supportEmail: 'support@argent.com.au',
+    phone: '(02) 9914 0900',
     addressJson: null,
-    metaTitle: 'Argent Configurator',
-    metaDescription: 'Precision-engineered fabrication solutions built for specialised industrial and infrastructure applications.',
+    metaTitle: 'Argent Server Racks & Data Infrastructure',
+    metaDescription: 'Australian-designed secure server racks, data infrastructure enclosures, and SCEC-approved security systems for government, defence, and enterprise data centres.',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -422,7 +430,7 @@ export interface PublicBrand {
 const BRAND_DESCRIPTIONS: Record<string, string> = {
   'bosco-office': 'Smart office storage systems designed for modern workplaces, combining functionality, durability, and clean design.',
   'boscotek': 'Heavy-duty industrial workbenches and storage systems engineered for performance, strength, and flexibility.',
-  'argent': 'Precision-engineered fabrication solutions built for specialised industrial and infrastructure applications.',
+  'argent': 'Australian-designed secure server racks, data infrastructure enclosures, and SCEC-approved security systems for government, defence, and enterprise data centres.',
   'gilkon': 'Integrated AV, display, and mounting solutions designed for commercial and technical environments.',
   'lectrum': 'Premium lecterns and presentation furniture crafted for professional, education, and corporate spaces.',
 };
@@ -431,6 +439,7 @@ const BRAND_DESCRIPTIONS: Record<string, string> = {
  * Brands that should be shown as active (overrides database status)
  */
 const ACTIVE_BRAND_OVERRIDES: Set<string> = new Set([
+  'argent',
   'bosco-office',
   'boscotek',
   'lectrum',

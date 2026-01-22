@@ -4,12 +4,15 @@ import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResu
 import ConfiguratorControls from '../components/ConfiguratorControls';
 import { Viewer3D, Viewer3DRef } from '../components/Viewer3D';
 import LectrumViewer3D, { LectrumViewer3DRef } from '../components/LectrumViewer3D';
+import ArgentViewer3D, { ArgentViewer3DRef } from '../components/ArgentViewer3D';
 import SummaryPanel from '../components/SummaryPanel';
 import QuoteCart from '../components/QuoteCart';
 import { getQuote } from '../services/pricingService';
 import { submitQuote } from '../services/mockBackend';
 import { generateReferenceCode } from '../services/referenceService';
 import { generateLectrumReferenceCode } from '../services/products/lectrumCatalog';
+import { generateArgentReferenceCode, checkArgentCommercialRules } from '../services/products/argentCatalog';
+import { ArgentCommercialAlert, ArgentSecurityBadge, ArgentFeatureSummary } from '../components/ArgentCommercialAlert';
 import { useCatalog } from '../contexts/CatalogContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useBrand } from '../contexts/BrandContext';
@@ -125,11 +128,19 @@ const BrandConfigurator: React.FC = () => {
   const referenceCode = activeProduct 
     ? (brandSlug === 'lectrum' 
         ? generateLectrumReferenceCode(activeProduct.id, config.selections)
-        : generateReferenceCode(config, activeProduct))
+        : brandSlug === 'argent'
+          ? generateArgentReferenceCode(activeProduct.id, config.selections)
+          : generateReferenceCode(config, activeProduct))
     : '';
   const primaryColor = theme.primaryColor || '#f59e0b';
   const accentColor = theme.accentColor || '#292926';
   const isLectrum = brandSlug === 'lectrum';
+  const isArgent = brandSlug === 'argent';
+  
+  // Argent commercial rules check
+  const argentCommercialRules = isArgent && activeProduct 
+    ? checkArgentCommercialRules(activeProduct.id, config.selections)
+    : null;
 
   const getActiveLogoAccessoryId = (accessories: Record<string, number> | undefined): string | null => {
     if (!accessories) return null;
@@ -627,6 +638,12 @@ const BrandConfigurator: React.FC = () => {
 
             {isLectrum ? (
               <LectrumViewer3D 
+                ref={viewer3DRef}
+                config={config} 
+                product={activeProduct} 
+              />
+            ) : isArgent ? (
+              <ArgentViewer3D 
                 ref={viewer3DRef}
                 config={config} 
                 product={activeProduct} 
