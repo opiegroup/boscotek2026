@@ -43,14 +43,20 @@ export const RadioField: React.FC<RadioFieldProps> = ({ group, value, options, o
             ? 'bg-zinc-800 border-amber-500' 
             : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'}
         `}
+        onClick={(e) => {
+          // Prevent any scroll behavior
+          e.preventDefault();
+          onChange(opt.id);
+        }}
       >
         <input
           type="radio"
           name={group.id}
           value={opt.id}
           checked={value === opt.id}
-          onChange={() => onChange(opt.id)}
+          onChange={() => {}}
           className="sr-only"
+          tabIndex={-1}
         />
         <div className="flex-1">
            <div className="flex justify-between items-center">

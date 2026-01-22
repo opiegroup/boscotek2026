@@ -1828,6 +1828,9 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
        return null;
     };
 
+    // Calculate shelf incline angle (15° or 30°) - inclineAngle is string like 'inc-15' or 'inc-30'
+    const shelfAngle = inclineAngle === 'inc-30' ? -Math.PI/6 : inclineAngle === 'inc-15' ? -Math.PI/12 : 0;
+
     return (
         <group position={[0, height, 0]}>
             {/* 3 POSTS */}
@@ -1838,10 +1841,10 @@ const WorkbenchAccessories = ({ width, depth, height, underBenchId, aboveBenchId
             {/* Top Crossbar */}
             <mesh position={[0, postH - 0.02, -depth/2 + 0.03]}><boxGeometry args={[width, 0.04, 0.04]} />{postMat}</mesh>
 
-            {/* FULL WIDTH SHELVES */}
+            {/* FULL WIDTH SHELVES - with optional incline */}
             {shelves.map((y, i) => (
-               <group key={`s-${i}`} position={[0, y, -depth/2 + 0.165]}>
-                  <ShelfTray width={shelfWidth} />
+               <group key={`s-${i}`} position={[0, y, -depth/2 + 0.165]} rotation={[shelfAngle, 0, 0]}>
+                  <ShelfTray width={shelfWidth} color={frameColor} />
                </group>
             ))}
 
@@ -2537,6 +2540,7 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const controlsRef = useRef<any>(null);
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const captureRef = useRef<(() => string | null) | null>(null);
+    const lastProductIdRef = useRef<string | null>(null); // Track product changes for camera reset
     
     // Expose the capture function via ref
     useImperativeHandle(ref, () => ({
@@ -2631,8 +2635,17 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
     const accSelection = config.selections['individual_accessories'];
 
     const isHiLo = product.id === 'prod-hilo-workbench';
-    const targetY = isHiLo ? hiloHeightM / 2 : height / 2;
     const isIndustrial = product.id === 'prod-workbench-industrial';
+    
+    // Calculate target Y for camera - only update when product changes
+    const targetY = isHiLo ? hiloHeightM / 2 : height / 2;
+    
+    // Store stable target - only update when product changes
+    const stableTargetRef = useRef<[number, number, number]>([0, targetY, 0]);
+    if (lastProductIdRef.current !== product.id) {
+      stableTargetRef.current = [0, targetY, 0];
+      lastProductIdRef.current = product.id;
+    }
     
     // Reset HiLo height when lift model changes
     useEffect(() => {
@@ -2668,17 +2681,15 @@ export const Viewer3D = forwardRef<Viewer3DRef, Viewer3DProps>(({ config, produc
               ) : product.id === 'prod-hilo-workbench' ? (
                  <HiLoWorkbenchGroup config={config} product={product} frameColor={frameColor} hiloHeightM={hiloHeightM} />
               ) : (
-                 <Center bottom>
-                    <group>
-                       <WorkbenchFrame width={width} height={height} depth={depth} castors={castors} colorHex={frameColor} variant={isIndustrial ? 'industrial' : 'heavy'} />
-                       {worktopId && <WorkbenchWorktop width={width} depth={depth} height={height} materialId={worktopId} />}
-                       <WorkbenchAccessories width={width} depth={depth} height={height} underBenchId={underBenchId} aboveBenchId={aboveBenchId} frameColor={frameColor} faciaColor={faciaColor} position={position} inclineAngle={inclineAngle} kitSelection={kitSelection} accSelection={accSelection} embeddedCabinets={config.embeddedCabinets} product={product} activeDrawerIndex={activeDrawerIndex} />
-                    </group>
-                 </Center>
+                 <group position={[0, 0, 0]}>
+                    <WorkbenchFrame width={width} height={height} depth={depth} castors={castors} colorHex={frameColor} variant={isIndustrial ? 'industrial' : 'heavy'} />
+                    {worktopId && <WorkbenchWorktop width={width} depth={depth} height={height} materialId={worktopId} />}
+                    <WorkbenchAccessories width={width} depth={depth} height={height} underBenchId={underBenchId} aboveBenchId={aboveBenchId} frameColor={frameColor} faciaColor={faciaColor} position={position} inclineAngle={inclineAngle} kitSelection={kitSelection} accSelection={accSelection} embeddedCabinets={config.embeddedCabinets} product={product} activeDrawerIndex={activeDrawerIndex} />
+                 </group>
               )}
            </group>
            <ContactShadows position={[0, -0.001, 0]} opacity={0.4} scale={10} blur={2.5} far={4} />
-           <OrbitControls ref={controlsRef} makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 1.9} target={[0, targetY, 0]} />
+           <OrbitControls ref={controlsRef} makeDefault minPolarAngle={0} maxPolarAngle={Math.PI / 1.9} target={stableTargetRef.current} />
          </Canvas>
          <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded border border-zinc-700 text-xs text-zinc-300 font-mono pointer-events-none select-none z-10"><span className="text-amber-500 font-bold">LIVE PREVIEW</span> <span className="mx-2">|</span> {product.name}</div>
          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 flex bg-black/50 backdrop-blur-md rounded border border-zinc-700 p-1 gap-1 z-10 shadow-lg">
