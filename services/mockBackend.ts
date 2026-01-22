@@ -529,7 +529,10 @@ export const submitQuote = async (
 };
 
 export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
-  let query = supabase.from('quotes').select('*').order('created_at', { ascending: false });
+  let query = supabase
+    .from('quotes')
+    .select('*, distributors(id, company_name, account_number)')
+    .order('created_at', { ascending: false });
   
   // Filter by brand_id if provided
   if (brandId) {
@@ -550,7 +553,13 @@ export const getQuotes = async (brandId?: string): Promise<Quote[]> => {
     totals: d.totals,
     internalNotes: d.internal_notes,
     brandId: d.brand_id,
-    salesOrderNumber: d.sales_order_number
+    salesOrderNumber: d.sales_order_number,
+    distributorId: d.distributor_id,
+    distributor: d.distributors ? {
+      id: d.distributors.id,
+      companyName: d.distributors.company_name,
+      accountNumber: d.distributors.account_number
+    } : null
   }));
 };
 

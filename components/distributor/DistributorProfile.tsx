@@ -136,6 +136,7 @@ const DistributorProfile: React.FC = () => {
     setSuccess(null);
 
     try {
+      // Update distributors table
       const { error: updateError } = await supabase
         .from('distributors')
         .update({
@@ -159,6 +160,30 @@ const DistributorProfile: React.FC = () => {
         .eq('id', distributor.id);
 
       if (updateError) throw updateError;
+
+      // Also sync to companies table (for admin customer management)
+      if (distributor.account_number) {
+        const { error: companyError } = await supabase
+          .from('companies')
+          .update({
+            company_name: formData.company_name,
+            trading_name: formData.trading_name || null,
+            abn: formData.abn || null,
+            address_line1: formData.address_line1 || null,
+            address_line2: formData.address_line2 || null,
+            suburb: formData.suburb || null,
+            state: formData.state || null,
+            postcode: formData.postcode || null,
+            country: formData.country || null,
+          })
+          .eq('account_number', distributor.account_number);
+        
+        if (companyError) {
+          console.error('Failed to sync to companies:', companyError);
+        } else {
+          console.log('Synced to companies table');
+        }
+      }
 
       setSuccess('Profile updated successfully!');
       setTimeout(() => setSuccess(null), 3000);
@@ -200,15 +225,12 @@ const DistributorProfile: React.FC = () => {
         fileName: fileName
       });
 
-      // Read file as ArrayBuffer to ensure binary upload
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-
+      // Use the file directly - Supabase handles File objects
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('distributor-logos')
-        .upload(fileName, uint8Array, { 
+        .upload(fileName, file, { 
           upsert: true,
-          contentType: file.type  // Explicitly set MIME type
+          cacheControl: '3600'
         });
 
       console.log('Upload result:', { uploadData, uploadError });
@@ -229,6 +251,9 @@ const DistributorProfile: React.FC = () => {
         .eq('id', distributor.id);
 
       if (updateError) throw updateError;
+
+      // Note: companies table doesn't have logo_url column yet
+      // Logo only stored in distributors table for now
 
       // Update local state
       setDistributor(prev => prev ? { ...prev, logo_url: logoUrl } : null);

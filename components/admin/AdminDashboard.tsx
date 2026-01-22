@@ -147,6 +147,7 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
   // Get brand context
   const { brand, brandSlug } = useBrand(); 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
+  const [quotesCustomerFilter, setQuotesCustomerFilter] = useState<string>('');
   
   // Email Settings State
   const [emailSettings, setEmailSettings] = useState({
@@ -336,6 +337,451 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
      if (selectedQuote && selectedQuote.id === quoteId) {
         setSelectedQuote({ ...selectedQuote, status });
      }
+  };
+
+  // Print quotes list report
+  const handlePrintQuoteList = () => {
+    const filteredQuotes = quotes.filter(q => {
+      if (!quotesCustomerFilter) return true;
+      if (quotesCustomerFilter === 'no-account') return !q.distributor;
+      return q.distributor?.id === quotesCustomerFilter;
+    });
+
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups for this site to print.');
+      return;
+    }
+
+    const brandLogo = brand?.logo_url || '/boscotek-logo.png';
+    const brandName = brand?.name || 'Boscotek';
+    const totalValue = filteredQuotes.reduce((sum, q) => sum + (q.totals?.total || 0), 0);
+    const customerName = quotesCustomerFilter 
+      ? (quotesCustomerFilter === 'no-account' 
+        ? 'Walk-in / No Account' 
+        : filteredQuotes[0]?.distributor?.companyName || 'Unknown')
+      : 'All Customers';
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Quotes Report - ${brandName}</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 30px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #e5e5e5; }
+          .logo { max-height: 50px; }
+          .report-title { text-align: right; }
+          .report-title h1 { font-size: 20px; color: #333; }
+          .report-title p { color: #666; font-size: 12px; margin-top: 4px; }
+          .summary { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 30px; }
+          .summary-item { }
+          .summary-item label { font-size: 10px; color: #999; text-transform: uppercase; display: block; }
+          .summary-item p { font-size: 18px; font-weight: bold; color: #333; }
+          .summary-item p.highlight { color: #d97706; }
+          table { width: 100%; border-collapse: collapse; font-size: 12px; }
+          th { background: #f5f5f5; text-align: left; padding: 10px 8px; font-size: 10px; text-transform: uppercase; color: #666; border-bottom: 2px solid #e5e5e5; }
+          td { padding: 10px 8px; border-bottom: 1px solid #eee; vertical-align: top; }
+          tr:hover { background: #fafafa; }
+          .ref { font-family: monospace; color: #d97706; font-weight: bold; }
+          .customer { font-weight: 500; }
+          .company { font-size: 11px; color: #16a34a; }
+          .status { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+          .status-new { background: #dcfce7; color: #16a34a; }
+          .status-viewed { background: #e0f2fe; color: #0284c7; }
+          .status-contacted { background: #fef3c7; color: #d97706; }
+          .status-accepted { background: #dcfce7; color: #16a34a; }
+          .status-lost { background: #fee2e2; color: #dc2626; }
+          .amount { text-align: right; font-family: monospace; font-weight: bold; }
+          .items { font-size: 11px; color: #666; }
+          .footer { margin-top: 30px; padding-top: 15px; border-top: 1px solid #e5e5e5; text-align: center; font-size: 10px; color: #999; }
+          @media print { body { padding: 15px; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <img src="${brandLogo}" alt="${brandName}" class="logo" onerror="this.style.display='none'">
+          <div class="report-title">
+            <h1>Quotes Report</h1>
+            <p>Generated: ${new Date().toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+          </div>
+        </div>
+
+        <div class="summary">
+          <div class="summary-item">
+            <label>Customer</label>
+            <p>${customerName}</p>
+          </div>
+          <div class="summary-item">
+            <label>Total Quotes</label>
+            <p>${filteredQuotes.length}</p>
+          </div>
+          <div class="summary-item">
+            <label>Total Value</label>
+            <p class="highlight">$${totalValue.toLocaleString()}</p>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Reference</th>
+              <th>Customer</th>
+              <th>Date</th>
+              <th>Status</th>
+              <th>Items</th>
+              <th style="text-align: right;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${filteredQuotes.map(q => `
+              <tr>
+                <td class="ref">${q.reference}</td>
+                <td>
+                  <div class="customer">${q.customer.name}</div>
+                  ${q.distributor ? `<div class="company">🏢 ${q.distributor.companyName}</div>` : ''}
+                </td>
+                <td>${new Date(q.createdAt).toLocaleDateString('en-AU')}</td>
+                <td><span class="status status-${q.status}">${q.status.replace('_', ' ')}</span></td>
+                <td class="items">${q.items.length} item${q.items.length !== 1 ? 's' : ''}</td>
+                <td class="amount">$${q.totals.total.toLocaleString()}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <div class="footer">
+          <p>${brandName} • Opie Manufacturing Group • Quotes Report</p>
+        </div>
+
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
+  // Print individual quote - Boscotek style
+  const handlePrintQuote = (quote: Quote) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      alert('Please allow popups for this site to print quotes.');
+      return;
+    }
+
+    const quoteDate = new Date(quote.createdAt);
+    const expiryDate = new Date(quoteDate);
+    expiryDate.setDate(expiryDate.getDate() + 30);
+    
+    const formatDate = (d: Date) => d.toLocaleDateString('en-AU', { day: 'numeric', month: 'numeric', year: 'numeric' });
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Quote ${quote.reference}</title>
+        <style>
+          @page { margin: 15mm; }
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #333; line-height: 1.4; }
+          
+          /* Header */
+          .page-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
+          .hello-title img { height: 90px; width: auto; }
+          .brand-logo { text-align: right; }
+          .brand-logo img { height: 72px; width: auto; }
+          
+          /* Quote info row */
+          .quote-info { display: flex; gap: 40px; margin-bottom: 25px; }
+          .quote-info .quote-num { }
+          .quote-info .quote-num h2 { font-size: 16px; font-weight: bold; }
+          .quote-info .quote-num p { font-size: 11px; color: #666; }
+          .quote-info .abn { font-size: 11px; color: #333; }
+          
+          /* Address section */
+          .address-section { display: grid; grid-template-columns: 1fr 1fr 1.2fr; gap: 20px; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #C9A227; }
+          .address-block label { font-size: 10px; font-weight: bold; color: #C9A227; display: block; margin-bottom: 5px; }
+          .address-block p { font-size: 12px; line-height: 1.5; }
+          .address-block .company-name { font-weight: bold; font-size: 13px; }
+          .project-block .project-code { font-size: 18px; font-weight: bold; color: #333; }
+          .project-block .customer-no { margin-top: 10px; }
+          .project-block .customer-no label { font-size: 10px; color: #666; }
+          .project-block .customer-no p { font-size: 20px; font-weight: bold; }
+          
+          /* Meta row */
+          .meta-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px solid #e5e5e5; font-size: 9px; }
+          .meta-row label { display: block; color: #999; text-transform: uppercase; font-weight: bold; }
+          .meta-row p { color: #333; margin-top: 2px; }
+          
+          /* Line items table */
+          .items-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+          .items-table thead th { background: #C9A227; color: #fff; font-weight: bold; text-transform: uppercase; font-size: 10px; padding: 10px 8px; text-align: left; }
+          .items-table thead th.qty { text-align: center; width: 60px; }
+          .items-table thead th.price { text-align: right; width: 100px; }
+          .items-table thead th.amount { text-align: right; width: 100px; }
+          .items-table tbody td { padding: 12px 8px; border-bottom: 1px solid #e5e5e5; vertical-align: top; }
+          .items-table tbody td.qty { text-align: center; font-weight: bold; }
+          .items-table tbody td.price { text-align: right; }
+          .items-table tbody td.amount { text-align: right; font-weight: bold; }
+          
+          .item-og { font-weight: bold; font-size: 12px; margin-bottom: 4px; }
+          .item-code { font-weight: bold; color: #333; margin-bottom: 2px; }
+          .item-name { font-weight: bold; margin-bottom: 8px; }
+          .item-specs { color: #666; font-size: 10px; line-height: 1.6; }
+          .item-image { margin: 10px 0; }
+          .item-image img { max-height: 150px; max-width: 250px; }
+          .item-line-num { margin-top: 10px; font-size: 10px; color: #999; }
+          
+          /* Totals */
+          .totals-section { display: flex; justify-content: flex-end; margin-top: 20px; }
+          .totals-box { width: 250px; }
+          .totals-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 12px; border-bottom: 1px solid #eee; }
+          .totals-row.final { border-bottom: none; border-top: 2px solid #C9A227; margin-top: 5px; padding-top: 12px; font-size: 16px; font-weight: bold; }
+          .totals-row .amount { font-family: monospace; }
+          
+          /* Footer - positioned at bottom of last page only */
+          .page-footer { margin-top: 40px; }
+          .page-footer img { width: 100%; height: auto; display: block; }
+          .page-num { text-align: right; padding: 5px 0; font-size: 10px; color: #666; }
+          
+          /* Page break - allow natural flow */
+          .page-break { page-break-before: always; }
+          
+          /* Allow items table to break across pages */
+          .items-table { page-break-inside: auto; }
+          .items-table tr { page-break-inside: avoid; page-break-after: auto; }
+          
+          /* Page 2 wrapper - positions footer at bottom */
+          .page2-wrapper { 
+            min-height: calc(100vh - 30mm); 
+            display: flex; 
+            flex-direction: column; 
+          }
+          .page2-wrapper .page-footer { 
+            margin-top: auto; 
+            padding-top: 10mm;
+          }
+          
+          /* Page 2 - Top row: Notes left, Totals right */
+          .page2-top { display: flex; justify-content: space-between; margin-top: 80px; gap: 40px; }
+          .page2-notes { flex: 1; }
+          .page2-totals { width: 280px; }
+          
+          .additional-notes h3 { font-weight: bold; font-size: 13px; margin-bottom: 8px; }
+          .additional-notes .notes-text { font-style: italic; font-size: 11px; line-height: 1.8; }
+          .additional-notes .dimensions { font-style: italic; font-size: 11px; margin-top: 15px; line-height: 1.6; }
+          
+          .totals-box-page2 { border: 1px solid #e5e5e5; }
+          .totals-box-page2 .totals-row { display: flex; justify-content: space-between; padding: 12px 15px; font-size: 13px; border-bottom: 1px solid #e5e5e5; }
+          .totals-box-page2 .totals-row:last-child { border-bottom: none; }
+          .totals-box-page2 .totals-row.final { background: #333; color: #fff; font-weight: bold; font-size: 15px; }
+          .totals-box-page2 .totals-row .label { font-weight: 600; }
+          .totals-box-page2 .totals-row .amount { font-family: 'Courier New', monospace; text-align: right; min-width: 100px; }
+          
+          /* Page 2 - Bottom row: Card Payment left, Terms right */
+          .page2-bottom { display: flex; gap: 30px; margin-top: 40px; }
+          .page2-card { width: 220px; }
+          .page2-terms { flex: 1; }
+          
+          .card-payment h3 { font-weight: bold; font-size: 13px; margin-bottom: 4px; }
+          .card-payment a { color: #333; font-size: 11px; text-decoration: underline; }
+          .card-payment .payment-icons { width: 180px; margin: 15px 0; display: block; }
+          .card-payment .thank-you { font-size: 20px; font-weight: bold; color: #C9A227; margin-top: 25px; }
+          
+          .terms-section { }
+          .terms-section h3 { font-size: 11px; font-weight: bold; font-style: italic; margin-bottom: 10px; }
+          .terms-section h3 a { color: #C9A227; text-decoration: underline; }
+          .terms-section ul { list-style: disc; padding-left: 18px; font-size: 9px; line-height: 1.5; font-style: italic; color: #333; }
+          .terms-section li { margin-bottom: 3px; }
+          .terms-section li strong { font-style: italic; }
+          
+          @media print {
+            body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="page-header">
+          <div class="hello-title">
+            <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
+          </div>
+          <div class="brand-logo">
+            <img src="/boscotek-logo.svg" alt="Boscotek">
+          </div>
+        </div>
+        
+        <div class="quote-info">
+          <div class="quote-num">
+            <h2>Quote # ${quote.reference}</h2>
+            <p>Date: ${formatDate(quoteDate)}</p>
+          </div>
+          <div class="abn">
+            ABN 31 003 951 004<br>
+            Net 30
+          </div>
+        </div>
+        
+        <div class="address-section">
+          <div class="address-block">
+            <label>Bill to:</label>
+            ${quote.distributor ? `
+              <p class="company-name">${quote.distributor.companyName}</p>
+              <p>${quote.customer.company || ''}</p>
+            ` : `
+              <p class="company-name">${quote.customer.company || quote.customer.name}</p>
+            `}
+            <p>Attn: ${quote.customer.name}</p>
+          </div>
+          <div class="address-block">
+            <label>Ship to:</label>
+            <p>Attn: ${quote.customer.name}</p>
+          </div>
+          <div class="address-block project-block">
+            <label>Project:</label>
+            <p class="project-code">${quote.items[0]?.configurationCode || quote.reference}</p>
+            <p>${quote.items[0]?.productName || ''}</p>
+            <div class="customer-no">
+              <label>Customer No:</label>
+              <p>${quote.distributor?.accountNumber || 'WALK-IN'}</p>
+            </div>
+          </div>
+        </div>
+        
+        <div class="meta-row">
+          <div><label>Pricing Expires:</label><p>${formatDate(expiryDate)}</p></div>
+          <div><label>Sales Contact:</label><p>Sales Team</p></div>
+          <div><label>Shipping Method:</label><p>TBA</p></div>
+          <div><label>Shipping INCOTERM Code:</label><p></p></div>
+          <div><label>Payment Terms:</label><p>Net 30</p></div>
+        </div>
+        
+        <table class="items-table">
+          <thead>
+            <tr>
+              <th>Description</th>
+              <th class="qty">QTY</th>
+              <th class="price">Unit Price</th>
+              <th class="amount">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${quote.items.map((item, idx) => `
+              <tr>
+                <td>
+                  ${item.ogNumber ? `<div class="item-og">${item.ogNumber}</div>` : ''}
+                  <div class="item-code">${item.configurationCode || ''}</div>
+                  <div class="item-name">${item.productName}</div>
+                  ${item.thumbnail ? `<div class="item-image"><img src="${item.thumbnail}" alt="${item.productName}"></div>` : ''}
+                  <div class="item-specs">
+                    ${item.specsSummary ? item.specsSummary.join('<br>') : ''}
+                  </div>
+                  <div class="item-line-num">${idx + 1}</div>
+                </td>
+                <td class="qty">${item.quantity}</td>
+                <td class="price">$${item.unitPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+                <td class="amount">$${item.totalPrice.toLocaleString(undefined, {minimumFractionDigits: 2})}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+
+        <!-- PAGE 2 - T&C and Totals -->
+        <div class="page-break"></div>
+        
+        <div class="page2-wrapper">
+          <div class="page-header">
+            <div class="hello-title">
+              <img src="/hello-quotation.png" alt="Hello, here is your QUOTATION">
+            </div>
+            <div class="brand-logo">
+              <img src="/boscotek-logo.svg" alt="Boscotek">
+            </div>
+          </div>
+          
+          <div class="quote-info">
+            <div class="quote-num">
+              <h2>Quote # ${quote.reference}</h2>
+              <p>Date: ${formatDate(quoteDate)}</p>
+            </div>
+            <div class="abn">
+              ABN 31 003 951 004<br>
+              Net 30
+            </div>
+          </div>
+          
+          <!-- Top row: Additional Notes (left) | Totals (right) -->
+        <div class="page2-top">
+          <div class="page2-notes">
+            <div class="additional-notes">
+              <h3>Additional Notes:</h3>
+              <p class="notes-text">${quote.internalNotes || '<em>Note: This Product is manufactured to order.</em>'}</p>
+              <p class="dimensions"><em>Approximate Weight & Dimensions below:</em><br>
+              ${quote.items[0]?.dimensions || '2300H x 1350W x 1050D @ 350kg.'}</p>
+            </div>
+          </div>
+          
+          <div class="page2-totals">
+            <div class="totals-box-page2">
+              <div class="totals-row">
+                <span class="label">Total (ex GST)</span>
+                <span class="amount">$${quote.totals.subtotal.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              </div>
+              <div class="totals-row">
+                <span class="label">Freight</span>
+                <span class="amount">$0.00</span>
+              </div>
+              <div class="totals-row">
+                <span class="label">GST</span>
+                <span class="amount">$${quote.totals.gst.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              </div>
+              <div class="totals-row final">
+                <span class="label">Total (inc GST)</span>
+                <span class="amount">$${quote.totals.total.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Bottom row: Card Payment (left) | Terms (right) -->
+        <div class="page2-bottom">
+          <div class="page2-card">
+            <div class="card-payment">
+              <h3>Card Payment</h3>
+              <p><a href="https://www.opiegroup.com.au/payments/">www.opiegroup.com.au/payments/</a></p>
+              <img src="/payment-cards.png" alt="Payment Methods" class="payment-icons">
+              <p class="thank-you">Thank you for your business</p>
+            </div>
+          </div>
+          
+          <div class="page2-terms">
+            <div class="terms-section">
+              <h3>For full terms and conditions see website: <a href="https://www.opiegroup.com.au/terms-of-sale/">www.opiegroup.com.au/terms-of-sale/</a></h3>
+              <ul>
+                <li>All quoted prices remain subject to rise and fall without notice.</li>
+                <li>Material availability remains subject to confirmation at time of order placement with our suppliers.</li>
+                <li>We maintain the right to adjust delivery time or cancel the order without notice or penalty if material cannot be sourced due to availability or within the budgeted price with our existing suppliers.</li>
+                <li>All lead times are provided in good faith and should be treated as an estimation only.</li>
+                <li>Please allow 1–2 days after estimated completion date for Sydney Metro delivery.</li>
+                <li>Unless expressly agreed to in writing, all thermal cutting tolerances are to ISO9013:2017-5.</li>
+                <li>All CAD files provided by the customer are treated as 1:1 scale and orientated to suit required grain direction.</li>
+                <li>Shipping is in compliance with Incoterms® 2020, or International Commercial Terms, of the globally-recognised international trade rules for the sale of goods.</li>
+                <li><strong>Delivery charges are provided as estimates only and will be adjusted to reflect the actual carrier invoice upon receipt, unless otherwise stated.</strong></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        
+          <div class="page-footer">
+            <img src="/boscotek-footer.png" alt="Boscotek Footer">
+          </div>
+        </div>
+
+        <script>window.onload = function() { window.print(); }</script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
   };
 
   if (authLoading) return <div className="min-h-screen bg-zinc-950 flex items-center justify-center text-zinc-500">Checking session...</div>;
@@ -795,18 +1241,59 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
            <div className="h-full flex gap-6">
               {/* Quotes List */}
               <div className={`flex-1 bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden flex flex-col ${selectedQuote ? 'hidden md:flex md:w-1/3 md:flex-none' : 'w-full'}`}>
-                 <div className="p-4 border-b border-zinc-800 bg-zinc-900">
-                    <h2 className="text-lg font-bold">Inbox ({quotes.length})</h2>
+                 <div className="p-4 border-b border-zinc-800 bg-zinc-900 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <h2 className="text-lg font-bold">Quotes ({quotes.length})</h2>
+                      <button
+                        onClick={() => handlePrintQuoteList()}
+                        className="text-xs bg-zinc-700 hover:bg-zinc-600 text-white px-3 py-1.5 rounded flex items-center gap-1"
+                      >
+                        🖨️ Print List
+                      </button>
+                    </div>
+                    {/* Customer Filter */}
+                    <select
+                      value={quotesCustomerFilter}
+                      onChange={(e) => setQuotesCustomerFilter(e.target.value)}
+                      className="w-full bg-zinc-800 border border-zinc-700 text-white text-sm rounded p-2 focus:border-amber-500 outline-none"
+                    >
+                      <option value="">All Customers</option>
+                      {/* Get unique distributors from quotes */}
+                      {Array.from(new Set(quotes.filter(q => q.distributor).map(q => q.distributor?.id)))
+                        .map(distId => {
+                          const dist = quotes.find(q => q.distributor?.id === distId)?.distributor;
+                          return dist ? (
+                            <option key={dist.id} value={dist.id}>
+                              {dist.companyName} ({dist.accountNumber})
+                            </option>
+                          ) : null;
+                        })
+                      }
+                      <option value="no-account">Walk-in / No Account</option>
+                    </select>
                  </div>
                  <div className="flex-1 overflow-y-auto">
-                    {quotes.map(q => (
+                    {quotes
+                      .filter(q => {
+                        if (!quotesCustomerFilter) return true;
+                        if (quotesCustomerFilter === 'no-account') return !q.distributor;
+                        return q.distributor?.id === quotesCustomerFilter;
+                      })
+                      .map(q => (
                        <button 
                           key={q.id}
                           onClick={() => setSelectedQuote(q)}
                           className={`w-full text-left p-4 border-b border-zinc-800 hover:bg-zinc-800 transition-colors ${selectedQuote?.id === q.id ? 'bg-zinc-800 border-l-4 border-l-amber-500' : ''}`}
                        >
                           <div className="flex justify-between items-start mb-1">
-                             <span className="font-bold text-white">{q.customer.name}</span>
+                             <div>
+                               <span className="font-bold text-white">{q.customer.name}</span>
+                               {q.distributor && (
+                                 <div className="text-xs text-green-400 mt-0.5">
+                                   🏢 {q.distributor.companyName}
+                                 </div>
+                               )}
+                             </div>
                              <span className="text-xs text-zinc-500">{new Date(q.createdAt).toLocaleDateString()}</span>
                           </div>
                           <div className="text-xs font-mono text-amber-500 mb-1">{q.reference}</div>
@@ -831,7 +1318,13 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                              Submitted: {new Date(selectedQuote.createdAt).toLocaleString()}
                           </div>
                        </div>
-                       <div className="text-right">
+                       <div className="flex items-center gap-3">
+                          <button
+                             onClick={() => handlePrintQuote(selectedQuote)}
+                             className="bg-zinc-700 hover:bg-zinc-600 text-white text-sm px-4 py-2 rounded flex items-center gap-2"
+                          >
+                             🖨️ Print
+                          </button>
                           <select 
                              className="bg-zinc-800 border border-zinc-700 text-white text-sm rounded p-2 focus:border-amber-500 outline-none"
                              value={selectedQuote.status}
@@ -849,10 +1342,32 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                     </div>
 
                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                       {/* Customer Account Section */}
+                       {selectedQuote.distributor && (
+                          <div className="bg-green-950/30 border border-green-800/50 rounded-lg overflow-hidden">
+                             <div className="bg-green-900/30 px-4 py-2 border-b border-green-800/50">
+                                <h3 className="font-bold uppercase text-green-400 text-xs">🏢 Customer Account</h3>
+                             </div>
+                             <div className="p-4 flex items-center justify-between">
+                                <div>
+                                   <div className="text-white font-bold text-lg">{selectedQuote.distributor.companyName}</div>
+                                   <div className="text-green-400 font-mono text-sm">{selectedQuote.distributor.accountNumber}</div>
+                                </div>
+                                <a 
+                                  href="#"
+                                  onClick={(e) => { e.preventDefault(); setActiveStep(15); }}
+                                  className="text-xs bg-green-900/50 hover:bg-green-900 text-green-300 px-3 py-1.5 rounded"
+                                >
+                                  View Customer →
+                                </a>
+                             </div>
+                          </div>
+                       )}
+
                        {/* Customer Details Section */}
                        <div className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
                           <div className="bg-zinc-800 px-4 py-2 border-b border-zinc-700">
-                             <h3 className="font-bold uppercase text-zinc-400 text-xs">Customer Details</h3>
+                             <h3 className="font-bold uppercase text-zinc-400 text-xs">Contact Details</h3>
                           </div>
                           <div className="p-4 grid grid-cols-2 gap-4">
                              <div>
@@ -925,6 +1440,17 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ onExit }) => {
                           <div className="space-y-4">
                              {selectedQuote.items.map((item, idx) => (
                                 <div key={idx} className="bg-zinc-950 border border-zinc-800 rounded-lg overflow-hidden">
+                                   {/* Product Image */}
+                                   {item.thumbnail && (
+                                      <div className="bg-zinc-900 p-4 border-b border-zinc-800 flex justify-center">
+                                         <img 
+                                            src={item.thumbnail} 
+                                            alt={item.productName}
+                                            className="max-h-48 object-contain rounded"
+                                         />
+                                      </div>
+                                   )}
+                                   
                                    {/* Product Header */}
                                    <div className="bg-zinc-900 px-4 py-3 border-b border-zinc-800 flex justify-between items-start">
                                    <div className="flex-1">

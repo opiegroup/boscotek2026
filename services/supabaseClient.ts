@@ -25,11 +25,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     flowType: 'pkce', // Use PKCE flow for better security
   },
-  global: {
-    headers: {
-      'Content-Type': 'application/json'
-    }
-  }
+  // Note: Don't set global Content-Type header - it breaks file uploads!
+  // Supabase client handles content types automatically for each request type
 });
 
 // Check for auth tokens in URL and process them

@@ -142,6 +142,12 @@ export interface Quote {
   };
   internalNotes?: string;
   salesOrderNumber?: string; // NetSuite Sales Order number
+  distributorId?: string;
+  distributor?: {
+    id: string;
+    companyName: string;
+    accountNumber: string;
+  } | null;
 }
 
 // --- INTERIOR CONFIGURATION TYPES ---

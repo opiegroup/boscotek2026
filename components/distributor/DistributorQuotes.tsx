@@ -49,6 +49,12 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
 
 const RETAIL_MARKUP = 25; // Cash sale / retail markup %
 
+interface DistributorInfo {
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+}
+
 const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) => {
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
@@ -56,28 +62,36 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [pricingTier, setPricingTier] = useState<PricingTier | null>(null);
+  const [distributorInfo, setDistributorInfo] = useState<DistributorInfo | null>(null);
 
   useEffect(() => {
     loadQuotes();
-    loadPricingTier();
+    loadDistributorInfo();
   }, [distributorId]);
 
-  const loadPricingTier = async () => {
+  const loadDistributorInfo = async () => {
     if (!distributorId) return;
     
     try {
-      // Get distributor's pricing tier
+      // Get distributor's current info and pricing tier
       const { data: distributor } = await supabase
         .from('distributors')
-        .select('pricing_tier_id, pricing_tiers(*)')
+        .select('company_name, contact_name, contact_email, pricing_tier_id, pricing_tiers(*)')
         .eq('id', distributorId)
         .single();
       
-      if (distributor?.pricing_tiers) {
-        setPricingTier(distributor.pricing_tiers as PricingTier);
+      if (distributor) {
+        setDistributorInfo({
+          company_name: distributor.company_name,
+          contact_name: distributor.contact_name,
+          contact_email: distributor.contact_email,
+        });
+        if (distributor.pricing_tiers) {
+          setPricingTier(distributor.pricing_tiers as PricingTier);
+        }
       }
     } catch (err) {
-      console.error('Failed to load pricing tier:', err);
+      console.error('Failed to load distributor info:', err);
     }
   };
 
@@ -234,9 +248,9 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
                     </td>
                     <td className="p-4">
                       <div>
-                        <p className="text-white text-sm">{quote.customer_data?.name || '-'}</p>
-                        {quote.customer_data?.company && (
-                          <p className="text-zinc-500 text-xs">{quote.customer_data.company}</p>
+                        <p className="text-white text-sm">{distributorInfo?.company_name || '-'}</p>
+                        {distributorInfo?.contact_name && (
+                          <p className="text-zinc-500 text-xs">{distributorInfo.contact_name}</p>
                         )}
                       </div>
                     </td>
@@ -309,25 +323,25 @@ const DistributorQuotes: React.FC<DistributorQuotesProps> = ({ distributorId }) 
             </div>
 
             <div className="p-6 space-y-6">
-              {/* Customer Info */}
+              {/* Your Account Info (current) */}
               <div className="bg-zinc-800 rounded-lg p-4">
-                <h4 className="text-xs font-mono text-zinc-500 uppercase mb-3">Customer Details</h4>
+                <h4 className="text-xs font-mono text-zinc-500 uppercase mb-3">Your Account</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <span className="text-zinc-500">Name:</span>
-                    <span className="text-white ml-2">{selectedQuote.customer_data?.name || '-'}</span>
+                    <span className="text-zinc-500">Company:</span>
+                    <span className="text-white ml-2 font-medium">{distributorInfo?.company_name || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-zinc-500">Contact:</span>
+                    <span className="text-white ml-2">{distributorInfo?.contact_name || '-'}</span>
                   </div>
                   <div>
                     <span className="text-zinc-500">Email:</span>
-                    <span className="text-white ml-2">{selectedQuote.customer_data?.email || '-'}</span>
+                    <span className="text-white ml-2">{distributorInfo?.contact_email || '-'}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-500">Company:</span>
-                    <span className="text-white ml-2">{selectedQuote.customer_data?.company || '-'}</span>
-                  </div>
-                  <div>
-                    <span className="text-zinc-500">Phone:</span>
-                    <span className="text-white ml-2">{selectedQuote.customer_data?.phone || '-'}</span>
+                    <span className="text-zinc-500">Tier:</span>
+                    <span className="text-green-400 ml-2">{pricingTier?.name || 'Cash Sale'}</span>
                   </div>
                 </div>
               </div>
