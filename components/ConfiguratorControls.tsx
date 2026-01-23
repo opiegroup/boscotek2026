@@ -443,7 +443,7 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
        return <InteriorConfigurator group={group} currentConfig={currentConfig} onDrawerStackChange={onDrawerStackChange} />;
     }
 
-    const visibleDrawerOptions = group.options.filter(o => o.isVisible !== false);
+    const visibleDrawerOptions = (group.options || []).filter(o => o.isVisible !== false);
 
     return (
       <div className="bg-zinc-800/50 p-4 rounded-lg border border-zinc-700">
@@ -687,9 +687,10 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
              if (!panelOptions.includes(aboveBenchVal)) return null;
           }
           
-          const visibleOptions = group.options.filter(o => o.isVisible !== false);
+          const visibleOptions = group.options?.filter(o => o.isVisible !== false) || [];
           // Always show drawer_stack group even if options seem weird, logic inside builder handles it.
-          if (visibleOptions.length === 0 && group.type !== 'drawer_stack') return null;
+          // qty type groups don't have options, so skip this check for them
+          if (visibleOptions.length === 0 && group.type !== 'drawer_stack' && group.type !== 'qty') return null;
 
           return (
             <div key={group.id}>
@@ -971,6 +972,39 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                              )}
                            </div>
                          ))}
+                       </div>
+                    )}
+
+                    {group.type === 'qty' && (
+                       <div className="space-y-2">
+                         <div className="flex items-center gap-3">
+                           <button
+                             onClick={() => {
+                               const current = Number(config.selections[group.id]) || group.defaultValue || 1;
+                               const min = group.min ?? 1;
+                               if (current > min) onChange(group.id, current - 1);
+                             }}
+                             className="w-10 h-10 flex items-center justify-center bg-zinc-800 border border-zinc-600 rounded text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors text-xl font-bold"
+                           >
+                             −
+                           </button>
+                           <span className="text-2xl font-bold text-white min-w-[3rem] text-center">
+                             {Number(config.selections[group.id]) || group.defaultValue || 1}
+                           </span>
+                           <button
+                             onClick={() => {
+                               const current = Number(config.selections[group.id]) || group.defaultValue || 1;
+                               const max = group.max ?? 10;
+                               if (current < max) onChange(group.id, current + 1);
+                             }}
+                             className="w-10 h-10 flex items-center justify-center bg-zinc-800 border border-zinc-600 rounded text-zinc-300 hover:bg-zinc-700 hover:text-white transition-colors text-xl font-bold"
+                           >
+                             +
+                           </button>
+                         </div>
+                         {group.description && (
+                           <p className="text-xs text-zinc-500">{group.description}</p>
+                         )}
                        </div>
                     )}
 

@@ -34,14 +34,14 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
      if (product.id !== 'prod-hd-cabinet') return null;
      if (!config.customDrawers.length) return <dd className="text-zinc-500 text-right italic">No drawers</dd>;
 
-     const group = product.groups.find(g => g.type === 'drawer_stack');
-     if (!group) return null;
+     const group = product.groups?.find(g => g.type === 'drawer_stack');
+     if (!group || !group.options) return null;
 
      const counts: Record<number, number> = {};
      let totalHeight = 0;
 
      config.customDrawers.forEach(d => {
-        const opt = group.options.find(o => o.id === d.id);
+        const opt = group.options?.find(o => o.id === d.id);
         const h = opt?.meta?.front || 0;
         counts[h] = (counts[h] || 0) + 1;
         totalHeight += h;
@@ -83,7 +83,7 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
              </div>
              
              {/* Render selected options */}
-             {product.groups.map(group => {
+             {(product.groups || []).map(group => {
                if (group.type === 'drawer_stack') {
                   // For HD Cabinet, show summary
                   if (product.id === 'prod-hd-cabinet') {
@@ -119,9 +119,14 @@ const SummaryPanel: React.FC<SummaryPanelProps> = ({
                let displayVal = '';
                if (group.type === 'checkbox') {
                  displayVal = val ? 'Yes' : 'No';
-               } else {
+               } else if (group.type === 'qty') {
+                 // Quantity type - just show the number
+                 displayVal = String(val);
+               } else if (group.options) {
                  const opt = group.options.find(o => o.id === val);
                  displayVal = opt ? opt.label : String(val);
+               } else {
+                 displayVal = String(val);
                }
                
                if (displayVal.includes(': None')) return null;

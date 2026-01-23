@@ -9,6 +9,7 @@
  */
 
 import { ProductDefinition, OptionGroup, ProductAttribute } from '../../types';
+import { TOOLBOX_COLOURS } from '../../data/catalog';
 import {
   ARGENT_SERIES,
   ArgentSeriesKey,
@@ -314,6 +315,21 @@ function buildAccessoryOptions(seriesKey: ArgentSeriesKey): ProductAttribute[] {
   }));
 }
 
+/**
+ * Build paint colour options (matches HD toolbox colours)
+ */
+function buildPaintColourOptions(): ProductAttribute[] {
+  return TOOLBOX_COLOURS.map(colour => ({
+    id: colour.id,
+    label: colour.label,
+    value: colour.value,
+    code: colour.code,
+    priceDelta: colour.priceDelta,
+    meta: { hex: colour.value, finish: colour.description },
+    description: colour.description,
+  }));
+}
+
 // ============================================================================
 // OPTION GROUP BUILDERS
 // ============================================================================
@@ -452,6 +468,30 @@ function buildOptionGroups(series: ArgentSeries): OptionGroup[] {
       description: 'Select side panel configuration.',
     });
   }
+
+  // Step: Frame Colour (all series)
+  groups.push({
+    id: 'frame-colour',
+    label: 'Frame Colour',
+    type: 'color',
+    options: buildPaintColourOptions(),
+    defaultValue: 'col-bk',
+    step: step++,
+    description: 'Select the frame finish.',
+  });
+
+  // Step: Door Colour (all enclosed series)
+  if (series.key !== '40') {
+    groups.push({
+      id: 'door-colour',
+      label: 'Door Colour',
+      type: 'color',
+      options: buildPaintColourOptions(),
+      defaultValue: 'col-bk',
+      step: step++,
+      description: 'Select the door finish.',
+    });
+  }
   
   // Step: Lock Options
   const lockOptions = buildLockOptions(series.key);
@@ -466,6 +506,18 @@ function buildOptionGroups(series: ArgentSeries): OptionGroup[] {
       description: series.key === '50'
         ? 'Select the security-rated lock for this rack.'
         : 'Select the lock type.',
+    });
+    
+    // Lock Quantity - 1 for front only, 2 for front and rear
+    groups.push({
+      id: 'lock-qty',
+      label: 'Lock Quantity',
+      type: 'qty',
+      min: 1,
+      max: 2,
+      defaultValue: 1,
+      step: step++,
+      description: 'Qty 1 = Front door only. Qty 2 = Front and rear doors.',
     });
   }
   

@@ -322,16 +322,6 @@ export const DOOR_OPTIONS: DoorOption[] = [
     securityCompatible: false, // Not for Class C
   },
   {
-    id: 'door-mesh',
-    type: 'mesh',
-    label: 'Mesh Door',
-    description: 'Open mesh design for maximum airflow in hot/cold aisle configurations.',
-    applicableSeries: ['25', '40'],
-    priceDelta: 0,
-    code: 'MD',
-    securityCompatible: false,
-  },
-  {
     id: 'door-split',
     type: 'split',
     label: 'Split Hinged Doors',
@@ -539,7 +529,7 @@ export const ARGENT_ACCESSORIES: ArgentAccessory[] = [
     id: 'acc-cable-ladder',
     category: 'cable_management',
     name: 'Cable Ladder',
-    description: 'Overhead cable ladder section (600mm wide x 3m length).',
+    description: 'Provides a structured overhead pathway for routing large cable bundles from front to rear or between racks. Mounted at the top rear or internally and aligned with vertical cable paths. Textura Black powder coat to match rack frame and internal components.',
     applicableSeries: ['10', '25', '40', '50'],
     price: 185,
     code: 'CL',

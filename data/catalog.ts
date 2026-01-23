@@ -382,6 +382,9 @@ const COLORS = [
   { id: 'col-or', label: 'Orange (OR)', value: '#c67831', code: 'OR', priceDelta: 80, description: 'Finish - Gloss' },
 ];
 
+// Export for reuse (e.g. server rack colours)
+export const TOOLBOX_COLOURS = COLORS;
+
 export const CATALOG: ProductDefinition[] = [
   {
     id: 'prod-workbench-heavy',
