@@ -138,28 +138,19 @@ function buildDepthOptions(seriesKey: ArgentSeriesKey): ProductAttribute[] {
     }];
   }
   
-  // 40 series 2-post has no depth (depth = 0)
+  // 40 series - all configurations use depth (VCM cabinets need 600mm)
   if (seriesKey === '40') {
-    return [
-      {
-        id: 'depth-0',
-        label: 'N/A (2-Post)',
-        value: 0,
-        code: 'NA',
-        priceDelta: 0,
-        meta: { depthMm: 0, postType: '2-post' },
-        description: 'Not applicable for 2-post frames',
-      },
-      ...depths.filter(d => d > 0).map(d => ({
-        id: `depth-${d}`,
-        label: `${d}mm`,
-        value: d,
-        code: String(d),
-        priceDelta: 0,
-        meta: { depthMm: d, postType: '4-post' },
-        description: `${d}mm depth for 4-post frames`,
-      })),
-    ];
+    // Standard depths for 40 series: 600, 800, 1000mm
+    const standardDepths = [600, 800, 1000];
+    return standardDepths.map(d => ({
+      id: `depth-${d}`,
+      label: `${d}mm`,
+      value: d,
+      code: String(d),
+      priceDelta: 0,
+      meta: { depthMm: d },
+      description: `${d}mm depth`,
+    }));
   }
   
   return depths.map(d => ({

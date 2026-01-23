@@ -112,8 +112,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Check URL on initial load for recovery tokens
-  const [showPasswordReset, setShowPasswordReset] = useState(checkUrlForPasswordReset());
+  // Check URL on initial load for recovery tokens (lazy init to run only once)
+  const [showPasswordReset, setShowPasswordReset] = useState(() => checkUrlForPasswordReset());
 
   // Fetch user role and distributor info from database
   const fetchUserDetails = useCallback(async (supabaseUser: SupabaseUser): Promise<AuthUser> => {

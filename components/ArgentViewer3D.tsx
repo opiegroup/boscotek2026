@@ -734,42 +734,143 @@ const FingerManager = ({
 };
 
 /**
- * Vertical Cable Manager - Vertical cable duct (150mm or 300mm)
+ * Vertical Cable Manager - Full height cable duct with perforated front
+ * Like the 40 Series reference images - tall ducts with slotted fronts
  */
 const VerticalCableManager = ({
+  position = [0, 0, 0] as [number, number, number],
   height,
-  managerWidth = 0.15, // 150mm or 300mm
+  width = 0.15, // 150mm, 300mm, or 400mm
+  managerWidth, // Legacy prop alias
+  depth = 0.25, // 250mm or 450mm
+  rotation = [0, 0, 0] as [number, number, number],
   color = COLORS.MANNEX_BLACK
 }: {
+  position?: [number, number, number];
   height: number;
-  managerWidth?: number;
+  width?: number;
+  managerWidth?: number; // Legacy support
+  depth?: number;
+  rotation?: [number, number, number];
   color?: string;
 }) => {
-  const ductDepth = 0.08;
+  const actualWidth = managerWidth || width;
+  const wallThickness = 0.003;
+  const slotHeight = 0.06;
+  const slotGap = 0.015;
+  const slotCount = Math.floor((height - 0.1) / (slotHeight + slotGap));
+  
+  return (
+    <group position={position} rotation={rotation}>
+      {/* Back wall - solid */}
+      <mesh position={[0, 0, -depth/2 + wallThickness/2]}>
+        <boxGeometry args={[actualWidth, height, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Left wall - solid */}
+      <mesh position={[-actualWidth/2 + wallThickness/2, 0, 0]}>
+        <boxGeometry args={[wallThickness, height, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Right wall - solid */}
+      <mesh position={[actualWidth/2 - wallThickness/2, 0, 0]}>
+        <boxGeometry args={[wallThickness, height, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Front panel frame */}
+      <mesh position={[0, height/2 - 0.015, depth/2 - wallThickness/2]}>
+        <boxGeometry args={[actualWidth, 0.03, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      <mesh position={[0, -height/2 + 0.015, depth/2 - wallThickness/2]}>
+        <boxGeometry args={[actualWidth, 0.03, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Front perforated/slotted sections */}
+      {Array.from({ length: slotCount }).map((_, i) => {
+        const yPos = -height/2 + 0.05 + i * (slotHeight + slotGap) + slotHeight/2;
+        return (
+          <group key={`slot-section-${i}`} position={[0, yPos, depth/2 - wallThickness/2]}>
+            {/* Horizontal bars between slots */}
+            <mesh position={[0, slotHeight/2 + slotGap/2, 0]}>
+              <boxGeometry args={[actualWidth - 0.01, slotGap, wallThickness]} />
+              <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+            </mesh>
+            {/* Vertical dividers creating slot pattern */}
+            {Array.from({ length: Math.floor(actualWidth / 0.03) }).map((_, j) => (
+              <mesh key={`divider-${i}-${j}`} position={[-actualWidth/2 + 0.015 + j * 0.03, 0, 0]}>
+                <boxGeometry args={[0.004, slotHeight, wallThickness]} />
+                <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+              </mesh>
+            ))}
+          </group>
+        );
+      })}
+      {/* Top cap */}
+      <mesh position={[0, height/2 + 0.01, 0]}>
+        <boxGeometry args={[actualWidth, 0.02, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Bottom base */}
+      <mesh position={[0, -height/2 - 0.01, 0]}>
+        <boxGeometry args={[actualWidth, 0.02, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+    </group>
+  );
+};
+
+/**
+ * Cable Shield Assembly MK2 - Horizontal cable tray/shield
+ */
+const CableShieldAssembly = ({
+  position,
+  width,
+  depth,
+  color = COLORS.MANNEX_BLACK
+}: {
+  position: [number, number, number];
+  width: number;
+  depth: number;
+  color?: string;
+}) => {
+  const trayHeight = 0.1;
   const wallThickness = 0.003;
   
   return (
-    <group>
-      {/* Back wall */}
-      <mesh position={[0, 0, -ductDepth/2 + wallThickness/2]}>
-        <boxGeometry args={[managerWidth, height, wallThickness]} />
+    <group position={position}>
+      {/* Bottom panel */}
+      <mesh position={[0, -trayHeight/2, 0]}>
+        <boxGeometry args={[width, wallThickness, depth]} />
         <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
       </mesh>
       {/* Left wall */}
-      <mesh position={[-managerWidth/2 + wallThickness/2, 0, 0]}>
-        <boxGeometry args={[wallThickness, height, ductDepth]} />
+      <mesh position={[-width/2 + wallThickness/2, 0, 0]}>
+        <boxGeometry args={[wallThickness, trayHeight, depth]} />
         <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
       </mesh>
       {/* Right wall */}
-      <mesh position={[managerWidth/2 - wallThickness/2, 0, 0]}>
-        <boxGeometry args={[wallThickness, height, ductDepth]} />
+      <mesh position={[width/2 - wallThickness/2, 0, 0]}>
+        <boxGeometry args={[wallThickness, trayHeight, depth]} />
         <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
       </mesh>
-      {/* Front lip (partial cover) */}
-      <mesh position={[0, 0, ductDepth/2 - wallThickness/2]}>
-        <boxGeometry args={[managerWidth, height, wallThickness]} />
-        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} transparent opacity={0.3} />
+      {/* Front lip */}
+      <mesh position={[0, 0, depth/2 - wallThickness/2]}>
+        <boxGeometry args={[width, trayHeight * 0.6, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
       </mesh>
+      {/* Rear lip */}
+      <mesh position={[0, 0, -depth/2 + wallThickness/2]}>
+        <boxGeometry args={[width, trayHeight * 0.6, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Cross supports */}
+      {[-0.15, 0, 0.15].map((z, i) => (
+        <mesh key={`support-${i}`} position={[0, -trayHeight/2 + 0.015, z * depth/0.4]}>
+          <boxGeometry args={[width - 0.02, 0.015, 0.02]} />
+          <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+        </mesh>
+      ))}
     </group>
   );
 };
@@ -1131,7 +1232,7 @@ const Series10Rack = ({
   const depth = depthMm / 1000;
   
   const frameThickness = 0.04;
-  const panelThickness = 0.002;
+  const panelThickness = 0.02; // 20mm for quality appearance
   
   // Door types (front and rear)
   const frontDoorType = config.selections['front-door'] || 'door-perf-steel';
@@ -1160,8 +1261,8 @@ const Series10Rack = ({
   const isLeftHinge = hingeSide === 'hinge-left';
   
   // Door dimensions
-  const doorWidth = width - frameThickness * 2 - 0.01;
-  const doorHeight = height - frameThickness * 2 - 0.01;
+  const doorWidth = width - frameThickness * 2 - 0.004;
+  const doorHeight = height - frameThickness * 2 - 0.004;
   
   // Accessories
   const accessories = config.selections['accessories'] as Record<string, number> || {};
@@ -1173,8 +1274,8 @@ const Series10Rack = ({
   const hasFanTray2 = (accessories['acc-fan-tray-2'] || 0) > 0;
   const hasFanTray4 = (accessories['acc-fan-tray-4'] || 0) > 0;
   const hasFingerManager = (accessories['acc-finger-manager'] || 0) > 0;
-  const hasVCM150 = (accessories['acc-vcm-150'] || 0) > 0;
-  const hasVCM300 = (accessories['acc-vcm-300'] || 0) > 0;
+  const hasVCM150 = (accessories['acc-vcm-150-250'] || accessories['acc-vcm-150-450'] || 0) > 0;
+  const hasVCM300 = (accessories['acc-vcm-300-250'] || accessories['acc-vcm-300-450'] || 0) > 0;
   const fixedShelfCount = accessories['acc-shelf-fixed'] || 0;
   const slidingShelfCount = accessories['acc-shelf-sliding'] || 0;
   const hasBlankingPanel1U = (accessories['acc-blanking-panel-1u'] || 0) > 0;
@@ -1295,7 +1396,7 @@ const Series10Rack = ({
         position={[
           isLeftHinge ? (-width/2 + frameThickness) : (width/2 - frameThickness), 
           0, 
-          depth/2 - frameThickness/2
+          depth/2 - frameThickness/4
         ]}
       >
         <group rotation={[0, doorsOpen ? (isLeftHinge ? -Math.PI/2 : Math.PI/2) : 0, 0]}>
@@ -1542,7 +1643,7 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
   const depth = depthMm / 1000;
 
   const frameThickness = 0.04;
-  const panelThickness = 0.002;
+  const panelThickness = 0.02; // 20mm for quality appearance
 
   const frontDoorType = config.selections['front-door'] || 'door-perf-steel';
   const rearDoorType = config.selections['rear-door'] || frontDoorType;
@@ -1580,8 +1681,8 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
   const hasFanTray2 = (accessories['acc-fan-tray-2'] || 0) > 0;
   const hasFanTray4 = (accessories['acc-fan-tray-4'] || 0) > 0;
   const hasFingerManager = (accessories['acc-finger-manager'] || 0) > 0;
-  const hasVCM150 = (accessories['acc-vcm-150'] || 0) > 0;
-  const hasVCM300 = (accessories['acc-vcm-300'] || 0) > 0;
+  const hasVCM150 = (accessories['acc-vcm-150-250'] || accessories['acc-vcm-150-450'] || 0) > 0;
+  const hasVCM300 = (accessories['acc-vcm-300-250'] || accessories['acc-vcm-300-450'] || 0) > 0;
   const fixedShelfCount = accessories['acc-shelf-fixed'] || 0;
   const slidingShelfCount = accessories['acc-shelf-sliding'] || 0;
   const hasBlankingPanel1U = (accessories['acc-blanking-panel-1u'] || 0) > 0;
@@ -1593,8 +1694,8 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
   const hasBayingKit = (accessories['acc-baying-kit'] || 0) > 0;
 
   const baseHeight = hasCastors ? 0.06 : 0.04;
-  const doorWidth = width - frameThickness * 2 - 0.01;
-  const doorHeight = height - frameThickness * 2 - 0.01;
+  const doorWidth = width - frameThickness * 2 - 0.004;
+  const doorHeight = height - frameThickness * 2 - 0.004;
   const frameColor = resolveSelectedColour(product, config.selections, 'frame-colour', COLORS.MANNEX_BLACK);
   const doorColor = resolveSelectedColour(product, config.selections, 'door-colour', COLORS.MANNEX_BLACK);
 
@@ -1709,7 +1810,7 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
 
       {/* Front Door */}
       {!isFrontSplit && (
-        <group position={[isLeftHinge ? (-width/2 + frameThickness) : (width/2 - frameThickness), 0, depth/2 - frameThickness/2]}>
+        <group position={[isLeftHinge ? (-width/2 + frameThickness) : (width/2 - frameThickness), 0, depth/2 - frameThickness/4]}>
           <group rotation={[0, doorsOpen ? (isLeftHinge ? -Math.PI/2 : Math.PI/2) : 0, 0]}>
             <group position={[isLeftHinge ? doorWidth/2 : -doorWidth/2, 0, 0]}>
               <DoorPanel
@@ -1736,7 +1837,7 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
         </group>
       )}
       {isFrontSplit && (
-        <group position={[0, 0, depth/2 - frameThickness/2]}>
+        <group position={[0, 0, depth/2 - frameThickness/4]}>
           {/* Left front door */}
           <group position={[-width/2 + frameThickness, 0, 0]}>
             <group rotation={[0, doorsOpen ? -Math.PI/2 : 0, 0]}>
@@ -2068,13 +2169,144 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
 };
 
 /**
+ * Cable Chimney Component - Top-mounted cable exit (simple version)
+ */
+const CableChimney = ({ 
+  position, 
+  width = 0.3, 
+  depth = 0.25,
+  color = COLORS.MANNEX_BLACK 
+}: { 
+  position: [number, number, number];
+  width?: number;
+  depth?: number;
+  color?: string;
+}) => (
+  <group position={position}>
+    {/* Main chimney body - open top box */}
+    <mesh position={[0, 0.075, 0]}>
+      <boxGeometry args={[width, 0.15, depth]} />
+      <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+    </mesh>
+    {/* Opening cutout indicator */}
+    <mesh position={[0, 0.155, 0]}>
+      <boxGeometry args={[width - 0.02, 0.01, depth - 0.02]} />
+      <meshStandardMaterial color="#1a1a1a" roughness={0.8} metalness={0.1} />
+    </mesh>
+    {/* Cable entry slots */}
+    {[-1, 1].map((side, i) => (
+      <mesh key={`slot-${i}`} position={[side * (width/2 - 0.02), 0.05, 0]}>
+        <boxGeometry args={[0.01, 0.08, depth - 0.04]} />
+        <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
+      </mesh>
+    ))}
+  </group>
+);
+
+/**
+ * Corner Chimney Tower - Tall hollow post at corners for cable routing
+ * These extend above the rack and have openings for cable egress
+ */
+const CornerChimneyTower = ({ 
+  position, 
+  rackHeight,
+  towerHeight = 0.35, // Height above rack
+  size = 0.1, // Square size
+  color = COLORS.MANNEX_BLACK 
+}: { 
+  position: [number, number, number];
+  rackHeight: number;
+  towerHeight?: number;
+  size?: number;
+  color?: string;
+}) => {
+  const totalHeight = rackHeight + towerHeight;
+  const wallThickness = 0.004;
+  
+  return (
+    <group position={position}>
+      {/* Tower walls - hollow square post */}
+      {/* Front wall */}
+      <mesh position={[0, towerHeight/2, size/2 - wallThickness/2]}>
+        <boxGeometry args={[size, totalHeight, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Back wall */}
+      <mesh position={[0, towerHeight/2, -size/2 + wallThickness/2]}>
+        <boxGeometry args={[size, totalHeight, wallThickness]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Left wall */}
+      <mesh position={[-size/2 + wallThickness/2, towerHeight/2, 0]}>
+        <boxGeometry args={[wallThickness, totalHeight, size - wallThickness * 2]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Right wall */}
+      <mesh position={[size/2 - wallThickness/2, towerHeight/2, 0]}>
+        <boxGeometry args={[wallThickness, totalHeight, size - wallThickness * 2]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Top cap with opening */}
+      <mesh position={[0, totalHeight/2 + towerHeight/2 - 0.01, 0]}>
+        <boxGeometry args={[size, 0.02, size]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+      </mesh>
+      {/* Cable entry slots on sides */}
+      {[
+        [0, -rackHeight/4, size/2],
+        [0, -rackHeight/4, -size/2],
+        [size/2, -rackHeight/4, 0],
+        [-size/2, -rackHeight/4, 0],
+      ].map((pos, i) => (
+        <mesh key={`slot-${i}`} position={pos as [number, number, number]} rotation={[0, i < 2 ? 0 : Math.PI/2, 0]}>
+          <boxGeometry args={[size * 0.6, rackHeight * 0.4, 0.002]} />
+          <meshStandardMaterial color="#0a0a0a" roughness={0.9} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
+
+/**
+ * Cable Slack Spool - Cable management spool
+ */
+const SlackSpool = ({ 
+  position, 
+  diameter = 0.195,
+  color = COLORS.MANNEX_BLACK 
+}: { 
+  position: [number, number, number];
+  diameter?: number;
+  color?: string;
+}) => (
+  <group position={position}>
+    {/* Spool drum */}
+    <mesh rotation={[0, 0, Math.PI/2]}>
+      <cylinderGeometry args={[diameter/2, diameter/2, 0.04, 24]} />
+      <meshStandardMaterial color={color} roughness={0.5} metalness={0.4} />
+    </mesh>
+    {/* Spool flanges */}
+    {[-0.025, 0.025].map((x, i) => (
+      <mesh key={`flange-${i}`} position={[x, 0, 0]} rotation={[0, 0, Math.PI/2]}>
+        <cylinderGeometry args={[diameter/2 + 0.015, diameter/2 + 0.015, 0.005, 24]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.4} />
+      </mesh>
+    ))}
+    {/* Mounting bracket */}
+    <mesh position={[0.04, 0, 0]}>
+      <boxGeometry args={[0.03, 0.06, 0.03]} />
+      <meshStandardMaterial color={color} roughness={0.6} metalness={0.3} />
+    </mesh>
+  </group>
+);
+
+/**
  * 40 Series Open Frame Rack
- * Open design with posts only, no panels
+ * Open design with posts, extensive cable management options
  */
 const Series40Rack = ({ config, product, doorsOpen = false }: { config: ConfigurationState; product: ProductDefinition; doorsOpen?: boolean }) => {
-  // Note: Open frame racks typically don't have doors - doorsOpen prop included for interface consistency
-  const ruHeightMatch = String(config.selections['ru-height'] || 'ru-42').match(/ru-(\d+)/);
-  const ruHeight = ruHeightMatch ? parseInt(ruHeightMatch[1]) : 42;
+  const ruHeightMatch = String(config.selections['ru-height'] || 'ru-45').match(/ru-(\d+)/);
+  const ruHeight = ruHeightMatch ? parseInt(ruHeightMatch[1]) : 45;
   
   const widthMatch = String(config.selections['width'] || 'width-600').match(/width-(\d+)/);
   const widthMm = widthMatch ? parseInt(widthMatch[1]) : 600;
@@ -2087,77 +2319,1032 @@ const Series40Rack = ({ config, product, doorsOpen = false }: { config: Configur
   
   const height = (ruHeight * RU_HEIGHT_MM + 100) / 1000;
   const width = widthMm / 1000;
-  const depth = is2Post ? 0.1 : depthMm / 1000;
+  // Both 2-post and 4-post use selected depth (default 600mm if not set)
+  // 2-post reduced by 40% to match reference proportions
+  const baseDepth = (depthMm || 600) / 1000;
+  const depth = is2Post ? baseDepth * 0.6 : baseDepth;
   
   const postSize = 0.05;
   const frameColor = resolveSelectedColour(product, config.selections, 'frame-colour', COLORS.MANNEX_BLACK);
   
+  // Accessories
+  const accessories = config.selections['accessories'] as Record<string, number> || {};
+  
+  // VCM detection - check both depth variants for each width
+  const hasVCM150_250 = (accessories['acc-vcm-150-250'] || 0) > 0;
+  const hasVCM150_450 = (accessories['acc-vcm-150-450'] || 0) > 0;
+  const hasVCM300_250 = (accessories['acc-vcm-300-250'] || 0) > 0;
+  const hasVCM300_450 = (accessories['acc-vcm-300-450'] || 0) > 0;
+  const hasVCM400_250 = (accessories['acc-vcm-400-250'] || 0) > 0;
+  const hasVCM400_450 = (accessories['acc-vcm-400-450'] || 0) > 0;
+  
+  const hasVCM150 = hasVCM150_250 || hasVCM150_450;
+  const hasVCM300 = hasVCM300_250 || hasVCM300_450;
+  const hasVCM400 = hasVCM400_250 || hasVCM400_450;
+  
+  const cableChimneyCount = accessories['acc-chimney'] || accessories['acc-cable-chimney'] || 0;
+  const hasCableChimney = cableChimneyCount > 0;
+  const hasCableShield = (accessories['acc-cable-shield'] || 0) > 0;
+  const slackSpool195Count = accessories['acc-slack-spool-195'] || accessories['acc-slack-spool'] || 0;
+  const slackSpool125Count = accessories['acc-slack-spool-125'] || 0;
+  const hasFingerManager = (accessories['acc-finger-manager'] || 0) > 0;
+  const hasCableLadder = (accessories['acc-cable-ladder'] || 0) > 0;
+  const hasCastors = (accessories['acc-castors'] || 0) > 0;
+  const hasBoltDownBracket = (accessories['acc-bolt-down-bracket'] || 0) > 0;
+  const fixedShelfCount = accessories['acc-shelf-fixed'] || 0;
+  const slidingShelfCount = accessories['acc-shelf-sliding'] || 0;
+  const pdu6Count = accessories['acc-pdu-6'] || 0;
+  const pdu10vCount = accessories['acc-pdu-10-v'] || 0;
+  
+  // Side panel option (optional for open frame)
+  const sidePanelType = config.selections['side-panel'] || 'panel-none';
+  const hasSidePanels = sidePanelType !== 'panel-none' && !sidePanelType?.includes?.('none');
+  
+  // VCM width selection (priority: 400mm > 300mm > 150mm)
+  const vcmWidth = hasVCM400 ? 0.4 : hasVCM300 ? 0.3 : hasVCM150 ? 0.15 : 0;
+  // VCM depth based on selected variant (450mm or 250mm)
+  const vcmDepth = (hasVCM150_450 || hasVCM300_450 || hasVCM400_450) ? 0.45 : 0.25;
+  
   return (
-    <group position={[0, height/2 + 0.04, 0]}>
+    <group position={[0, height/2 + (hasCastors ? 0.06 : 0.04), 0]}>
       {/* Posts */}
       {is2Post ? (
-        // 2-Post configuration
+        // 2-Post Frame with Side VCM Cabinets
         <>
-          <mesh position={[-RACK_19_INCH_MM/2000 - postSize/2, 0, 0]} castShadow>
-            <boxGeometry args={[postSize, height, postSize]} />
-            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
-          </mesh>
-          <mesh position={[RACK_19_INCH_MM/2000 + postSize/2, 0, 0]} castShadow>
-            <boxGeometry args={[postSize, height, postSize]} />
-            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
-          </mesh>
-          {/* Mounting Rails */}
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000, 0, postSize/2 + 0.01]} />
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000, 0, postSize/2 + 0.01]} />
+          {/* Side cabinet width - VCM cabinets on each side */}
+          {(() => {
+            const sideCabinetWidth = vcmWidth > 0 ? vcmWidth + 0.05 : 0.2; // VCM width + frame, or default 200mm
+            const centerWidth = RACK_19_INCH_MM/1000 + 0.01; // 19" + minimal margin
+            const totalWidth = centerWidth + sideCabinetWidth * 2;
+            
+            return (
+              <>
+                {/* LEFT VCM CABINET */}
+                <group position={[-(centerWidth/2 + sideCabinetWidth/2), 0, 0]}>
+                  {/* Cabinet box */}
+                  {/* Outer side */}
+                  <mesh position={[-sideCabinetWidth/2 + 0.002, 0, 0]} castShadow>
+                    <boxGeometry args={[0.003, height, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Inner side */}
+                  <mesh position={[sideCabinetWidth/2 - 0.002, 0, 0]} castShadow>
+                    <boxGeometry args={[0.003, height, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Back */}
+                  <mesh position={[0, 0, -depth/2 + 0.002]}>
+                    <boxGeometry args={[sideCabinetWidth, height, 0.003]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Top - OPEN with rails around edge */}
+                  {/* Front rail */}
+                  <mesh position={[0, height/2 - 0.01, depth/2 - 0.015]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.02, 0.03]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Back rail */}
+                  <mesh position={[0, height/2 - 0.01, -depth/2 + 0.015]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.02, 0.03]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Left rail */}
+                  <mesh position={[-sideCabinetWidth/2 + 0.015, height/2 - 0.01, 0]}>
+                    <boxGeometry args={[0.03, 0.02, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Right rail */}
+                  <mesh position={[sideCabinetWidth/2 - 0.015, height/2 - 0.01, 0]}>
+                    <boxGeometry args={[0.03, 0.02, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Bottom */}
+                  <mesh position={[0, -height/2 + 0.015, 0]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.03, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Front Door */}
+                  <group 
+                    position={[-sideCabinetWidth/2 + 0.003, 0, depth/2]}
+                    rotation={[0, doorsOpen ? -Math.PI * 0.6 : 0, 0]}
+                  >
+                    <group position={[sideCabinetWidth/2, 0, 0]}>
+                      <mesh castShadow>
+                        <boxGeometry args={[sideCabinetWidth - 0.01, height - 0.02, 0.003]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                      </mesh>
+                      {/* Two small round locks - horizontal across middle, near edges */}
+                      {/* Left lock */}
+                      <group position={[-0.07, 0, 0.005]}>
+                        <mesh rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.012, 0.012, 0.008, 16]} />
+                          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} />
+                        </mesh>
+                        {/* Keyhole */}
+                        <mesh position={[0, 0, 0.005]} rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.003, 0.003, 0.003, 8]} />
+                          <meshStandardMaterial color="#c4a052" roughness={0.3} metalness={0.8} />
+                        </mesh>
+                      </group>
+                      {/* Right lock */}
+                      <group position={[0.07, 0, 0.005]}>
+                        <mesh rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.012, 0.012, 0.008, 16]} />
+                          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} />
+                        </mesh>
+                        {/* Keyhole */}
+                        <mesh position={[0, 0, 0.005]} rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.003, 0.003, 0.003, 8]} />
+                          <meshStandardMaterial color="#c4a052" roughness={0.3} metalness={0.8} />
+                        </mesh>
+                      </group>
+                    </group>
+                  </group>
+                  {/* Chimney tower on top - 50% depth, at the BACK - ALL SIDES CLOSED, TOP OPEN */}
+                  <group position={[0, height/2 + 0.2, -depth/4]}>
+                    {/* Front wall */}
+                    <mesh position={[0, 0, depth/4 - 0.002]}>
+                      <boxGeometry args={[sideCabinetWidth, 0.4, 0.003]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Back wall */}
+                    <mesh position={[0, 0, -depth/4 + 0.002]}>
+                      <boxGeometry args={[sideCabinetWidth, 0.4, 0.003]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Outer side wall (left) */}
+                    <mesh position={[-sideCabinetWidth/2 + 0.002, 0, 0]}>
+                      <boxGeometry args={[0.003, 0.4, depth/2]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Inner side wall (right) */}
+                    <mesh position={[sideCabinetWidth/2 - 0.002, 0, 0]}>
+                      <boxGeometry args={[0.003, 0.4, depth/2]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* NO top cap - open top */}
+                  </group>
+                  {/* Internal VCM finger slots */}
+                  <VerticalCableManager 
+                    position={[0, 0, 0]} 
+                    height={height - 0.1} 
+                    width={sideCabinetWidth - 0.04}
+                    depth={depth - 0.05}
+                    color={COLORS.MANNEX_BLACK}
+                  />
+                </group>
+                
+                {/* RIGHT VCM CABINET */}
+                <group position={[(centerWidth/2 + sideCabinetWidth/2), 0, 0]}>
+                  {/* Cabinet box */}
+                  {/* Inner side */}
+                  <mesh position={[-sideCabinetWidth/2 + 0.002, 0, 0]} castShadow>
+                    <boxGeometry args={[0.003, height, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Outer side */}
+                  <mesh position={[sideCabinetWidth/2 - 0.002, 0, 0]} castShadow>
+                    <boxGeometry args={[0.003, height, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Back */}
+                  <mesh position={[0, 0, -depth/2 + 0.002]}>
+                    <boxGeometry args={[sideCabinetWidth, height, 0.003]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                  </mesh>
+                  {/* Top - OPEN with rails around edge */}
+                  {/* Front rail */}
+                  <mesh position={[0, height/2 - 0.01, depth/2 - 0.015]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.02, 0.03]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Back rail */}
+                  <mesh position={[0, height/2 - 0.01, -depth/2 + 0.015]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.02, 0.03]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Left rail */}
+                  <mesh position={[-sideCabinetWidth/2 + 0.015, height/2 - 0.01, 0]}>
+                    <boxGeometry args={[0.03, 0.02, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Right rail */}
+                  <mesh position={[sideCabinetWidth/2 - 0.015, height/2 - 0.01, 0]}>
+                    <boxGeometry args={[0.03, 0.02, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Bottom */}
+                  <mesh position={[0, -height/2 + 0.015, 0]}>
+                    <boxGeometry args={[sideCabinetWidth, 0.03, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Front Door */}
+                  <group 
+                    position={[sideCabinetWidth/2 - 0.003, 0, depth/2]}
+                    rotation={[0, doorsOpen ? Math.PI * 0.6 : 0, 0]}
+                  >
+                    <group position={[-sideCabinetWidth/2, 0, 0]}>
+                      <mesh castShadow>
+                        <boxGeometry args={[sideCabinetWidth - 0.01, height - 0.02, 0.003]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                      </mesh>
+                      {/* Two small round locks - horizontal across middle, near edges */}
+                      {/* Left lock */}
+                      <group position={[-0.07, 0, 0.005]}>
+                        <mesh rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.012, 0.012, 0.008, 16]} />
+                          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} />
+                        </mesh>
+                        {/* Keyhole */}
+                        <mesh position={[0, 0, 0.005]} rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.003, 0.003, 0.003, 8]} />
+                          <meshStandardMaterial color="#c4a052" roughness={0.3} metalness={0.8} />
+                        </mesh>
+                      </group>
+                      {/* Right lock */}
+                      <group position={[0.07, 0, 0.005]}>
+                        <mesh rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.012, 0.012, 0.008, 16]} />
+                          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} />
+                        </mesh>
+                        {/* Keyhole */}
+                        <mesh position={[0, 0, 0.005]} rotation={[Math.PI/2, 0, 0]}>
+                          <cylinderGeometry args={[0.003, 0.003, 0.003, 8]} />
+                          <meshStandardMaterial color="#c4a052" roughness={0.3} metalness={0.8} />
+                        </mesh>
+                      </group>
+                    </group>
+                  </group>
+                  {/* Chimney tower on top - 50% depth, at the BACK - ALL SIDES CLOSED, TOP OPEN */}
+                  <group position={[0, height/2 + 0.2, -depth/4]}>
+                    {/* Front wall */}
+                    <mesh position={[0, 0, depth/4 - 0.002]}>
+                      <boxGeometry args={[sideCabinetWidth, 0.4, 0.003]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Back wall */}
+                    <mesh position={[0, 0, -depth/4 + 0.002]}>
+                      <boxGeometry args={[sideCabinetWidth, 0.4, 0.003]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Outer side wall (right) */}
+                    <mesh position={[sideCabinetWidth/2 - 0.002, 0, 0]}>
+                      <boxGeometry args={[0.003, 0.4, depth/2]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* Inner side wall (left) */}
+                    <mesh position={[-sideCabinetWidth/2 + 0.002, 0, 0]}>
+                      <boxGeometry args={[0.003, 0.4, depth/2]} />
+                      <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                    </mesh>
+                    {/* NO top cap - open top */}
+                  </group>
+                  {/* Internal VCM finger slots */}
+                  <VerticalCableManager 
+                    position={[0, 0, 0]} 
+                    height={height - 0.1} 
+                    width={sideCabinetWidth - 0.04}
+                    depth={depth - 0.05}
+                    color={COLORS.MANNEX_BLACK}
+                  />
+                </group>
+                
+                {/* CENTER OPEN FRAME - Cage structure with mounting rails */}
+                <group position={[0, 0, 0]}>
+                  {/* Cage vertical posts at corners - hollow tubes (4 walls, open top) */}
+                  {[
+                    [-centerWidth/2 + 0.015, depth/2 - 0.015],
+                    [centerWidth/2 - 0.015, depth/2 - 0.015],
+                    [-centerWidth/2 + 0.015, -depth/2 + 0.015],
+                    [centerWidth/2 - 0.015, -depth/2 + 0.015],
+                  ].map(([x, z], i) => (
+                    <group key={`cage-post-${i}`} position={[x, 0, z]}>
+                      {/* Front wall */}
+                      <mesh position={[0, 0, 0.014]}>
+                        <boxGeometry args={[0.03, height - 0.02, 0.002]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                      {/* Back wall */}
+                      <mesh position={[0, 0, -0.014]}>
+                        <boxGeometry args={[0.03, height - 0.02, 0.002]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                      {/* Left wall */}
+                      <mesh position={[-0.014, 0, 0]}>
+                        <boxGeometry args={[0.002, height - 0.02, 0.03]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                      {/* Right wall */}
+                      <mesh position={[0.014, 0, 0]}>
+                        <boxGeometry args={[0.002, height - 0.02, 0.03]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                      {/* NO top - open */}
+                    </group>
+                  ))}
+                  
+                  {/* NO top horizontal bars - posts open at top */}
+                  
+                  {/* Cage horizontal bars - bottom */}
+                  <mesh position={[0, -height/2 + 0.02, depth/2 - 0.015]}>
+                    <boxGeometry args={[centerWidth, 0.025, 0.025]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  <mesh position={[0, -height/2 + 0.02, -depth/2 + 0.015]}>
+                    <boxGeometry args={[centerWidth, 0.025, 0.025]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  <mesh position={[-centerWidth/2 + 0.015, -height/2 + 0.02, 0]}>
+                    <boxGeometry args={[0.025, 0.025, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  <mesh position={[centerWidth/2 - 0.015, -height/2 + 0.02, 0]}>
+                    <boxGeometry args={[0.025, 0.025, depth]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                  {/* Cage cross bar - higher and wider */}
+                  <mesh position={[0, height/4, depth/2 - 0.015]}>
+                    <boxGeometry args={[centerWidth + 0.04, 0.04, 0.04]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  <mesh position={[0, height/4, -depth/2 + 0.015]}>
+                    <boxGeometry args={[centerWidth + 0.04, 0.04, 0.04]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                  {/* Mounting Rails - 19" standard inside cage */}
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000, 0, depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000, 0, depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000, 0, -depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000, 0, -depth/4]} />
+                </group>
+                
+                {/* Cable Walkway Bridge - Upside-down U arch shape */}
+                <group position={[0, height/2 + 0.02, depth/4]}>
+                  {/* Arch top (horizontal span) */}
+                  <mesh position={[0, 0.08, 0]}>
+                    <boxGeometry args={[centerWidth + 0.02, 0.015, 0.12]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                  {/* Left vertical leg of arch */}
+                  <mesh position={[-(centerWidth/2 + 0.01), 0.04, 0]}>
+                    <boxGeometry args={[0.015, 0.1, 0.12]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                  {/* Right vertical leg of arch */}
+                  <mesh position={[(centerWidth/2 + 0.01), 0.04, 0]}>
+                    <boxGeometry args={[0.015, 0.1, 0.12]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                  {/* Front rail on arch top */}
+                  <mesh position={[0, 0.1, 0.055]}>
+                    <boxGeometry args={[centerWidth + 0.04, 0.025, 0.01]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  {/* Back rail on arch top */}
+                  <mesh position={[0, 0.1, -0.055]}>
+                    <boxGeometry args={[centerWidth + 0.04, 0.025, 0.01]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                  </mesh>
+                  
+                </group>
+              </>
+            );
+          })()}
         </>
       ) : (
-        // 4-Post configuration
+        // 4-Post Frame - 4 corner BOXES, back 2 have chimneys, solid outer panels, mesh inner panels
         <>
-          {[
-            [-width/2 + postSize/2, 0, -depth/2 + postSize/2],
-            [width/2 - postSize/2, 0, -depth/2 + postSize/2],
-            [-width/2 + postSize/2, 0, depth/2 - postSize/2],
-            [width/2 - postSize/2, 0, depth/2 - postSize/2],
-          ].map((pos, i) => (
-            <mesh key={`post-${i}`} position={pos as [number, number, number]} castShadow>
-              <boxGeometry args={[postSize, height, postSize]} />
+          {(() => {
+            const boxWidth = 0.25; // Corner box width FIXED at 250mm
+            const boxDepth = 0.25; // Corner box depth FIXED at 250mm
+            const centerWidth = RACK_19_INCH_MM/1000 + 0.01;
+            const chimneyHeight = 0.4; // Extra height for back chimneys
+            // VCM dimensions only affect the cable ladder and internal VCM - not box sizes
+            
+            // Total width from outer left to outer right
+            const totalWidth = centerWidth + boxWidth * 2;
+            
+            return (
+              <>
+                {/* === PILLAR 1: BACK-LEFT BOX with CHIMNEY and DOOR === */}
+                <group position={[-centerWidth/2 - boxWidth/2, 0, -depth/2 + boxDepth/2]}>
+                  {/* Box walls - outer side, front solid (back is door) */}
+                  <mesh position={[-boxWidth/2 + 0.002, 0, 0]} castShadow><boxGeometry args={[0.003, height, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  <mesh position={[0, 0, boxDepth/2 - 0.002]} castShadow><boxGeometry args={[boxWidth, height, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  {/* Inner wall facing gap - HORIZONTAL MESH */}
+                  <group position={[boxWidth/2 - 0.002, 0, 0]}>
+                    {Array.from({ length: Math.floor(height / 0.06) }).map((_, i) => (
+                      <mesh key={`bl-bar-${i}`} position={[0, -height/2 + 0.03 + i * 0.06, 0]}>
+                        <boxGeometry args={[0.003, 0.015, boxDepth - 0.02]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                    ))}
+                  </group>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[boxWidth, 0.03, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Top edge rails */}
+                  <mesh position={[0, height/2 - 0.01, boxDepth/2 - 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, height/2 - 0.01, -boxDepth/2 + 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[-boxWidth/2 + 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[boxWidth/2 - 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Fixed Shelf in pillar 1 */}
+                  {fixedShelfCount >= 1 && (
+                    <group position={[0, -height/4, 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color={COLORS.MANNEX_BLACK} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                  {/* Sliding Shelf in pillar 1 */}
+                  {slidingShelfCount >= 1 && (
+                    <group position={[0, height/4, doorsOpen ? -0.08 : 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color="#333333" roughness={0.5} metalness={0.4} /></mesh>
+                    </group>
+                  )}
+                  {/* PDU 10-Way Vertical in pillar 1 - inner front corner, facing center gap */}
+                  {pdu10vCount >= 1 && (
+                    <group position={[boxWidth/2 - 0.04, 0, boxDepth/2 - 0.04]} rotation={[0, Math.PI * 3/4, 0]}>
+                      <mesh><boxGeometry args={[0.03, height * 0.6, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <mesh key={`p1-outlet-${j}`} position={[0.016, -height * 0.25 + j * (height * 0.5 / 9), 0]}>
+                          <boxGeometry args={[0.002, 0.03, 0.025]} />
+                          <meshStandardMaterial color="#444444" roughness={0.5} />
+                        </mesh>
+                      ))}
+                    </group>
+                  )}
+                  {/* Back Door - hinges on outer left edge, opens outward */}
+                  <group position={[-boxWidth/2 + 0.003, 0, -boxDepth/2]} rotation={[0, doorsOpen ? Math.PI * 0.6 : 0, 0]}>
+                    <group position={[boxWidth/2, 0, 0]}>
+                      <mesh castShadow><boxGeometry args={[boxWidth - 0.01, height - 0.02, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                      <group position={[-0.07, 0, -0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                      <group position={[0.07, 0, -0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                    </group>
+                  </group>
+                  {/* Chimney on top - shows when Cable Chimney count >= 1 */}
+                  {cableChimneyCount >= 1 && (
+                    <group position={[0, height/2 + chimneyHeight/2, 0]}>
+                      <mesh position={[0, 0, boxDepth/2 - 0.002]}><boxGeometry args={[boxWidth, chimneyHeight, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[0, 0, -boxDepth/2 + 0.002]}><boxGeometry args={[boxWidth, chimneyHeight, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[-boxWidth/2 + 0.002, 0, 0]}><boxGeometry args={[0.003, chimneyHeight, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[boxWidth/2 - 0.002, 0, 0]}><boxGeometry args={[0.003, chimneyHeight, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                </group>
+                
+                {/* === PILLAR 2: BACK-RIGHT BOX with CHIMNEY and DOOR === */}
+                <group position={[centerWidth/2 + boxWidth/2, 0, -depth/2 + boxDepth/2]}>
+                  {/* Box walls - outer side, front solid (back is door) */}
+                  <mesh position={[boxWidth/2 - 0.002, 0, 0]} castShadow><boxGeometry args={[0.003, height, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  <mesh position={[0, 0, boxDepth/2 - 0.002]} castShadow><boxGeometry args={[boxWidth, height, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  {/* Inner wall facing gap - HORIZONTAL MESH */}
+                  <group position={[-boxWidth/2 + 0.002, 0, 0]}>
+                    {Array.from({ length: Math.floor(height / 0.06) }).map((_, i) => (
+                      <mesh key={`br-bar-${i}`} position={[0, -height/2 + 0.03 + i * 0.06, 0]}>
+                        <boxGeometry args={[0.003, 0.015, boxDepth - 0.02]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                    ))}
+                  </group>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[boxWidth, 0.03, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Top edge rails */}
+                  <mesh position={[0, height/2 - 0.01, boxDepth/2 - 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, height/2 - 0.01, -boxDepth/2 + 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[-boxWidth/2 + 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[boxWidth/2 - 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Fixed Shelf in pillar 2 */}
+                  {fixedShelfCount >= 2 && (
+                    <group position={[0, -height/4, 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color={COLORS.MANNEX_BLACK} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                  {/* Sliding Shelf in pillar 2 */}
+                  {slidingShelfCount >= 2 && (
+                    <group position={[0, height/4, doorsOpen ? -0.08 : 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color="#333333" roughness={0.5} metalness={0.4} /></mesh>
+                    </group>
+                  )}
+                  {/* PDU 10-Way Vertical in pillar 2 - inner front corner, facing center gap */}
+                  {pdu10vCount >= 2 && (
+                    <group position={[-boxWidth/2 + 0.04, 0, boxDepth/2 - 0.04]} rotation={[0, -Math.PI * 3/4, 0]}>
+                      <mesh><boxGeometry args={[0.03, height * 0.6, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <mesh key={`p2-outlet-${j}`} position={[-0.016, -height * 0.25 + j * (height * 0.5 / 9), 0]}>
+                          <boxGeometry args={[0.002, 0.03, 0.025]} />
+                          <meshStandardMaterial color="#444444" roughness={0.5} />
+                        </mesh>
+                      ))}
+                    </group>
+                  )}
+                  {/* Back Door - hinges on outer right edge, opens outward */}
+                  <group position={[boxWidth/2 - 0.003, 0, -boxDepth/2]} rotation={[0, doorsOpen ? -Math.PI * 0.6 : 0, 0]}>
+                    <group position={[-boxWidth/2, 0, 0]}>
+                      <mesh castShadow><boxGeometry args={[boxWidth - 0.01, height - 0.02, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                      <group position={[-0.07, 0, -0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                      <group position={[0.07, 0, -0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                    </group>
+                  </group>
+                  {/* Chimney on top - shows when Cable Chimney count >= 2 */}
+                  {cableChimneyCount >= 2 && (
+                    <group position={[0, height/2 + chimneyHeight/2, 0]}>
+                      <mesh position={[0, 0, boxDepth/2 - 0.002]}><boxGeometry args={[boxWidth, chimneyHeight, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[0, 0, -boxDepth/2 + 0.002]}><boxGeometry args={[boxWidth, chimneyHeight, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[-boxWidth/2 + 0.002, 0, 0]}><boxGeometry args={[0.003, chimneyHeight, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[boxWidth/2 - 0.002, 0, 0]}><boxGeometry args={[0.003, chimneyHeight, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                </group>
+                
+                {/* === PILLAR 3: FRONT-LEFT BOX with DOOR === */}
+                <group position={[-centerWidth/2 - boxWidth/2, 0, depth/2 - boxDepth/2]}>
+                  {/* Box body - back and outer side solid */}
+                  <mesh position={[0, 0, -boxDepth/2 + 0.002]} castShadow><boxGeometry args={[boxWidth, height, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  <mesh position={[-boxWidth/2 + 0.002, 0, 0]} castShadow><boxGeometry args={[0.003, height, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  {/* Inner wall facing gap - HORIZONTAL MESH */}
+                  <group position={[boxWidth/2 - 0.002, 0, 0]}>
+                    {Array.from({ length: Math.floor(height / 0.06) }).map((_, i) => (
+                      <mesh key={`fl-bar-${i}`} position={[0, -height/2 + 0.03 + i * 0.06, 0]}>
+                        <boxGeometry args={[0.003, 0.015, boxDepth - 0.02]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                    ))}
+                  </group>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[boxWidth, 0.03, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Top edge rails */}
+                  <mesh position={[0, height/2 - 0.01, boxDepth/2 - 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, height/2 - 0.01, -boxDepth/2 + 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[-boxWidth/2 + 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[boxWidth/2 - 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Fixed Shelf in pillar 3 */}
+                  {fixedShelfCount >= 3 && (
+                    <group position={[0, -height/4, 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color={COLORS.MANNEX_BLACK} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                  {/* Sliding Shelf in pillar 3 */}
+                  {slidingShelfCount >= 3 && (
+                    <group position={[0, height/4, doorsOpen ? 0.08 : 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color="#333333" roughness={0.5} metalness={0.4} /></mesh>
+                    </group>
+                  )}
+                  {/* PDU 10-Way Vertical in pillar 3 - back corner at 45 degrees */}
+                  {pdu10vCount >= 3 && (
+                    <group position={[-boxWidth/2 + 0.04, 0, -boxDepth/2 + 0.04]} rotation={[0, -Math.PI/4, 0]}>
+                      <mesh><boxGeometry args={[0.03, height * 0.6, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <mesh key={`p3-outlet-${j}`} position={[0.016, -height * 0.25 + j * (height * 0.5 / 9), 0]}>
+                          <boxGeometry args={[0.002, 0.03, 0.025]} />
+                          <meshStandardMaterial color="#444444" roughness={0.5} />
+                        </mesh>
+                      ))}
+                    </group>
+                  )}
+                  {/* Front Door */}
+                  <group position={[-boxWidth/2 + 0.003, 0, boxDepth/2]} rotation={[0, doorsOpen ? -Math.PI * 0.6 : 0, 0]}>
+                    <group position={[boxWidth/2, 0, 0]}>
+                      <mesh castShadow><boxGeometry args={[boxWidth - 0.01, height - 0.02, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                      {/* Circle handles */}
+                      <group position={[-0.07, 0, 0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                      <group position={[0.07, 0, 0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                    </group>
+                  </group>
+                </group>
+                
+                {/* === PILLAR 4: FRONT-RIGHT BOX with DOOR === */}
+                <group position={[centerWidth/2 + boxWidth/2, 0, depth/2 - boxDepth/2]}>
+                  {/* Box body - back and outer side solid */}
+                  <mesh position={[0, 0, -boxDepth/2 + 0.002]} castShadow><boxGeometry args={[boxWidth, height, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  <mesh position={[boxWidth/2 - 0.002, 0, 0]} castShadow><boxGeometry args={[0.003, height, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                  {/* Inner wall facing gap - HORIZONTAL MESH */}
+                  <group position={[-boxWidth/2 + 0.002, 0, 0]}>
+                    {Array.from({ length: Math.floor(height / 0.06) }).map((_, i) => (
+                      <mesh key={`fr-bar-${i}`} position={[0, -height/2 + 0.03 + i * 0.06, 0]}>
+                        <boxGeometry args={[0.003, 0.015, boxDepth - 0.02]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                      </mesh>
+                    ))}
+                  </group>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[boxWidth, 0.03, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Top edge rails */}
+                  <mesh position={[0, height/2 - 0.01, boxDepth/2 - 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, height/2 - 0.01, -boxDepth/2 + 0.015]}><boxGeometry args={[boxWidth, 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[-boxWidth/2 + 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[boxWidth/2 - 0.015, height/2 - 0.01, 0]}><boxGeometry args={[0.03, 0.02, boxDepth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Fixed Shelf in pillar 4 */}
+                  {fixedShelfCount >= 4 && (
+                    <group position={[0, -height/4, 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color={COLORS.MANNEX_BLACK} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  )}
+                  {/* Sliding Shelf in pillar 4 */}
+                  {slidingShelfCount >= 4 && (
+                    <group position={[0, height/4, doorsOpen ? 0.08 : 0]}>
+                      <mesh><boxGeometry args={[boxWidth - 0.02, 0.015, boxDepth - 0.02]} /><meshStandardMaterial color="#333333" roughness={0.5} metalness={0.4} /></mesh>
+                    </group>
+                  )}
+                  {/* PDU 10-Way Vertical in pillar 4 - back corner at 45 degrees */}
+                  {pdu10vCount >= 4 && (
+                    <group position={[boxWidth/2 - 0.04, 0, -boxDepth/2 + 0.04]} rotation={[0, Math.PI/4, 0]}>
+                      <mesh><boxGeometry args={[0.03, height * 0.6, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+                      {Array.from({ length: 10 }).map((_, j) => (
+                        <mesh key={`p4-outlet-${j}`} position={[-0.016, -height * 0.25 + j * (height * 0.5 / 9), 0]}>
+                          <boxGeometry args={[0.002, 0.03, 0.025]} />
+                          <meshStandardMaterial color="#444444" roughness={0.5} />
+                        </mesh>
+                      ))}
+                    </group>
+                  )}
+                  {/* Front Door */}
+                  <group position={[boxWidth/2 - 0.003, 0, boxDepth/2]} rotation={[0, doorsOpen ? Math.PI * 0.6 : 0, 0]}>
+                    <group position={[-boxWidth/2, 0, 0]}>
+                      <mesh castShadow><boxGeometry args={[boxWidth - 0.01, height - 0.02, 0.003]} /><meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} /></mesh>
+                      {/* Circle handles */}
+                      <group position={[-0.07, 0, 0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                      <group position={[0.07, 0, 0.005]}><mesh rotation={[Math.PI/2, 0, 0]}><cylinderGeometry args={[0.012, 0.012, 0.008, 16]} /><meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.7} /></mesh></group>
+                    </group>
+                  </group>
+                </group>
+                
+                {/* === LEFT OUTER SIDE PANEL - SOLID === */}
+                <mesh position={[-centerWidth/2 - boxWidth + 0.002, 0, 0]} castShadow>
+                  <boxGeometry args={[0.003, height, depth - boxDepth * 2]} />
+                  <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                </mesh>
+                
+                {/* === RIGHT OUTER SIDE PANEL - SOLID === */}
+                <mesh position={[centerWidth/2 + boxWidth - 0.002, 0, 0]} castShadow>
+                  <boxGeometry args={[0.003, height, depth - boxDepth * 2]} />
+                  <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+                </mesh>
+                
+                {/* === LEFT INNER MESH PANEL (facing center) === */}
+                <group position={[-centerWidth/2 - 0.002, 0, 0]}>
+                  {/* Frame */}
+                  <mesh position={[0, height/2 - 0.015, 0]}><boxGeometry args={[0.02, 0.03, depth - boxDepth * 2]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[0.02, 0.03, depth - boxDepth * 2]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, 0, (depth - boxDepth * 2)/2 - 0.015]}><boxGeometry args={[0.02, height - 0.06, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, 0, -(depth - boxDepth * 2)/2 + 0.015]}><boxGeometry args={[0.02, height - 0.06, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Perforated mesh - grid of holes */}
+                  {Array.from({ length: Math.floor((height - 0.1) / 0.05) }).map((_, row) => 
+                    Array.from({ length: Math.floor((depth - boxDepth * 2 - 0.08) / 0.05) }).map((_, col) => (
+                      <mesh key={`left-inner-hole-${row}-${col}`} position={[0, -height/2 + 0.06 + row * 0.05, -(depth - boxDepth * 2)/2 + 0.06 + col * 0.05]} rotation={[0, Math.PI/2, 0]}>
+                        <ringGeometry args={[0.008, 0.015, 6]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} side={2} />
+                      </mesh>
+                    ))
+                  ).flat()}
+                  {/* Backing mesh panel */}
+                  <mesh>
+                    <boxGeometry args={[0.002, height - 0.08, depth - boxDepth * 2 - 0.06]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.8} metalness={0.2} transparent opacity={0.4} />
+                  </mesh>
+                </group>
+                
+                {/* === RIGHT INNER MESH PANEL (facing center) === */}
+                <group position={[centerWidth/2 + 0.002, 0, 0]}>
+                  {/* Frame */}
+                  <mesh position={[0, height/2 - 0.015, 0]}><boxGeometry args={[0.02, 0.03, depth - boxDepth * 2]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, -height/2 + 0.015, 0]}><boxGeometry args={[0.02, 0.03, depth - boxDepth * 2]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, 0, (depth - boxDepth * 2)/2 - 0.015]}><boxGeometry args={[0.02, height - 0.06, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, 0, -(depth - boxDepth * 2)/2 + 0.015]}><boxGeometry args={[0.02, height - 0.06, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Perforated mesh - grid of holes */}
+                  {Array.from({ length: Math.floor((height - 0.1) / 0.05) }).map((_, row) => 
+                    Array.from({ length: Math.floor((depth - boxDepth * 2 - 0.08) / 0.05) }).map((_, col) => (
+                      <mesh key={`right-inner-hole-${row}-${col}`} position={[0, -height/2 + 0.06 + row * 0.05, -(depth - boxDepth * 2)/2 + 0.06 + col * 0.05]} rotation={[0, Math.PI/2, 0]}>
+                        <ringGeometry args={[0.008, 0.015, 6]} />
+                        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} side={2} />
+                      </mesh>
+                    ))
+                  ).flat()}
+                  {/* Backing mesh panel */}
+                  <mesh>
+                    <boxGeometry args={[0.002, height - 0.08, depth - boxDepth * 2 - 0.06]} />
+                    <meshStandardMaterial color={frameColor} roughness={0.8} metalness={0.2} transparent opacity={0.4} />
+                  </mesh>
+                </group>
+                
+                {/* === BOTTOM FRAME === */}
+                <mesh position={[0, -height/2 + 0.015, 0]}>
+                  <boxGeometry args={[centerWidth, 0.03, depth]} />
+                  <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                </mesh>
+                
+                {/* CENTER CAGE */}
+                <group position={[0, 0, 0]}>
+                  {/* Posts */}
+                  {[
+                    [-centerWidth/2 + 0.015, depth/2 - 0.015],
+                    [centerWidth/2 - 0.015, depth/2 - 0.015],
+                    [-centerWidth/2 + 0.015, -depth/2 + 0.015],
+                    [centerWidth/2 - 0.015, -depth/2 + 0.015],
+                  ].map(([x, z], i) => (
+                    <group key={`cage-post-${i}`} position={[x, 0, z]}>
+                      <mesh position={[0, 0, 0.014]}><boxGeometry args={[0.03, height - 0.02, 0.002]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[0, 0, -0.014]}><boxGeometry args={[0.03, height - 0.02, 0.002]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[-0.014, 0, 0]}><boxGeometry args={[0.002, height - 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      <mesh position={[0.014, 0, 0]}><boxGeometry args={[0.002, height - 0.02, 0.03]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                    </group>
+                  ))}
+                  {/* Bottom bars */}
+                  <mesh position={[0, -height/2 + 0.02, depth/2 - 0.015]}><boxGeometry args={[centerWidth, 0.025, 0.025]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, -height/2 + 0.02, -depth/2 + 0.015]}><boxGeometry args={[centerWidth, 0.025, 0.025]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[-centerWidth/2 + 0.015, -height/2 + 0.02, 0]}><boxGeometry args={[0.025, 0.025, depth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[centerWidth/2 - 0.015, -height/2 + 0.02, 0]}><boxGeometry args={[0.025, 0.025, depth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Cross bars */}
+                  <mesh position={[0, height/4, depth/2 - 0.015]}><boxGeometry args={[centerWidth + 0.04, 0.04, 0.04]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  <mesh position={[0, height/4, -depth/2 + 0.015]}><boxGeometry args={[centerWidth + 0.04, 0.04, 0.04]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                  {/* Mounting Rails */}
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000, 0, depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000, 0, depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000, 0, -depth/4]} />
+                  <MountingRail height={height - 0.1} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000, 0, -depth/4]} />
+                </group>
+                
+                {/* Cable Ladder - width changes with VCM selection */}
+                {(hasVCM150 || hasVCM300 || hasVCM400) && (() => {
+                  const ladderWidth = vcmWidth > 0 ? vcmWidth : 0.15; // Use VCM width or default 150mm
+                  return (
+                    <group position={[0, height/2 + 0.02, depth/4]}>
+                      {/* Top span */}
+                      <mesh position={[0, 0.08, 0]}><boxGeometry args={[centerWidth + 0.02, 0.015, ladderWidth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      {/* Left leg */}
+                      <mesh position={[-(centerWidth/2 + 0.01), 0.04, 0]}><boxGeometry args={[0.015, 0.1, ladderWidth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      {/* Right leg */}
+                      <mesh position={[(centerWidth/2 + 0.01), 0.04, 0]}><boxGeometry args={[0.015, 0.1, ladderWidth]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      {/* Front rail */}
+                      <mesh position={[0, 0.1, ladderWidth/2 - 0.005]}><boxGeometry args={[centerWidth + 0.04, 0.025, 0.01]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      {/* Back rail */}
+                      <mesh position={[0, 0.1, -ladderWidth/2 + 0.005]}><boxGeometry args={[centerWidth + 0.04, 0.025, 0.01]} /><meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} /></mesh>
+                      {/* Ladder rungs */}
+                      {Array.from({ length: Math.floor(centerWidth / 0.08) }).map((_, i) => (
+                        <mesh key={`rung-${i}`} position={[-centerWidth/2 + 0.04 + i * 0.08, 0.085, 0]}>
+                          <boxGeometry args={[0.01, 0.01, ladderWidth - 0.02]} />
+                          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                        </mesh>
+                      ))}
+                    </group>
+                  );
+                })()}
+              </>
+            );
+          })()}
+        </>
+      )}
+      
+      {/* Note: VCM is built into the corner boxes for 4-post, no separate VCM needed */}
+      
+      {/* PDU 6-Way Horizontal - distributed across 4 pillars, stacking 5-8 */}
+      {(() => {
+        const centerWidth = RACK_19_INCH_MM/1000 + 0.01;
+        const boxWidth = 0.25;
+        const boxDepth = 0.25;
+        return (
+          <>
+      {/* Pillar 1 (back-left): PDU 1 and 5 */}
+      {pdu6Count >= 1 && (
+        <group position={[-centerWidth/2 - boxWidth/2, -height/4, -depth/2 + boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p1-h-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {pdu6Count >= 5 && (
+        <group position={[-centerWidth/2 - boxWidth/2, -height/4 + 0.08, -depth/2 + boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p1-h2-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {/* Pillar 2 (back-right): PDU 2 and 6 */}
+      {pdu6Count >= 2 && (
+        <group position={[centerWidth/2 + boxWidth/2, -height/4, -depth/2 + boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p2-h-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {pdu6Count >= 6 && (
+        <group position={[centerWidth/2 + boxWidth/2, -height/4 + 0.08, -depth/2 + boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p2-h2-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {/* Pillar 3 (front-left): PDU 3 and 7 */}
+      {pdu6Count >= 3 && (
+        <group position={[-centerWidth/2 - boxWidth/2, -height/4, depth/2 - boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p3-h-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {pdu6Count >= 7 && (
+        <group position={[-centerWidth/2 - boxWidth/2, -height/4 + 0.08, depth/2 - boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p3-h2-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {/* Pillar 4 (front-right): PDU 4 and 8 */}
+      {pdu6Count >= 4 && (
+        <group position={[centerWidth/2 + boxWidth/2, -height/4, depth/2 - boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p4-h-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+      {pdu6Count >= 8 && (
+        <group position={[centerWidth/2 + boxWidth/2, -height/4 + 0.08, depth/2 - boxDepth/2]}>
+          <mesh><boxGeometry args={[boxWidth - 0.03, 0.04, 0.04]} /><meshStandardMaterial color="#1a1a1a" roughness={0.4} metalness={0.3} /></mesh>
+          {Array.from({ length: 6 }).map((_, j) => (
+            <mesh key={`p4-h2-outlet-${j}`} position={[-0.08 + j * 0.032, 0, 0.021]}><boxGeometry args={[0.025, 0.02, 0.002]} /><meshStandardMaterial color="#333333" /></mesh>
+          ))}
+        </group>
+      )}
+          </>
+        );
+      })()}
+      
+      {/* Note: PDU 10-Way Vertical units are distributed across the 4 corner pillars */}
+      
+      {/* Cable Shield Assembly MK2 - Horizontal cable tray */}
+      {!is2Post && hasCableShield && (
+        <CableShieldAssembly 
+          position={[0, height/2 - 0.08, 0]} 
+          width={width - postSize * 2}
+          depth={depth - postSize * 2}
+          color={frameColor}
+        />
+      )}
+      
+      {/* Note: Cable Chimneys are now integrated as Corner Chimney Towers above */}
+      
+      {/* Cable Slack Spools 195mm */}
+      {!is2Post && slackSpool195Count > 0 && (
+        <>
+          {Array.from({ length: Math.min(slackSpool195Count, 4) }).map((_, i) => {
+            const side = i % 2 === 0 ? -1 : 1;
+            const zPos = i < 2 ? depth/4 : -depth/4;
+            return (
+              <SlackSpool 
+                key={`spool195-${i}`}
+                position={[side * (width/2 + 0.08), height/4 - i * 0.25, zPos]}
+                diameter={0.195}
+                color={frameColor}
+              />
+            );
+          })}
+        </>
+      )}
+      
+      {/* Cable Slack Spools 125mm */}
+      {!is2Post && slackSpool125Count > 0 && (
+        <>
+          {Array.from({ length: Math.min(slackSpool125Count, 4) }).map((_, i) => {
+            const side = i % 2 === 0 ? -1 : 1;
+            const zPos = i < 2 ? -depth/4 : depth/4;
+            return (
+              <SlackSpool 
+                key={`spool125-${i}`}
+                position={[side * (width/2 + 0.06), -height/4 + i * 0.2, zPos]}
+                diameter={0.125}
+                color={frameColor}
+              />
+            );
+          })}
+        </>
+      )}
+      
+      {/* Finger Manager / Horizontal Cable Manager */}
+      {!is2Post && hasFingerManager && (
+        <FingerManager 
+          position={[0, height/2 - RU_HEIGHT_MM/1000, depth/2 - 0.1]}
+          width={RACK_19_INCH_MM/1000}
+        />
+      )}
+      
+      {/* Cable Ladder */}
+      {!is2Post && hasCableLadder && (
+        <group position={[0, height/2 - 0.02, 0]}>
+          {/* Ladder rails */}
+          {[-1, 1].map((side, i) => (
+            <mesh key={`ladder-rail-${i}`} position={[side * 0.15, 0, 0]}>
+              <boxGeometry args={[0.03, 0.02, depth - 0.1]} />
               <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
             </mesh>
           ))}
-          {/* Cross braces */}
-          {[-height/2 + 0.05, height/2 - 0.05].map((y, i) => (
-            <group key={`brace-${i}`} position={[0, y, 0]}>
-              <mesh position={[0, 0, -depth/2 + postSize/2]}>
-                <boxGeometry args={[width - postSize * 2, 0.03, 0.03]} />
+          {/* Ladder rungs */}
+          {Array.from({ length: Math.floor((depth - 0.1) / 0.1) }).map((_, i) => (
+            <mesh key={`ladder-rung-${i}`} position={[0, 0.005, -depth/2 + 0.1 + i * 0.1]}>
+              <boxGeometry args={[0.27, 0.01, 0.02]} />
+              <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      
+      {/* Optional Side Panels - Large panels between corner towers */}
+      {!is2Post && hasSidePanels && (
+        <>
+          {[-1, 1].map((side, i) => (
+            <group key={`side-panel-${i}`} position={[side * (width/2 + (hasCableChimney ? 0.05 : 0)), 0, 0]}>
+              {/* Main side panel */}
+              <mesh position={[0, 0, 0]}>
+                <boxGeometry args={[0.003, height - 0.1, depth - (hasCableChimney ? 0.2 : 0.1)]} />
+                <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.2} />
+              </mesh>
+              {/* Panel edge frame */}
+              <mesh position={[side * 0.01, 0, 0]}>
+                <boxGeometry args={[0.02, height - 0.12, 0.02]} />
                 <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
               </mesh>
-              <mesh position={[0, 0, depth/2 - postSize/2]}>
-                <boxGeometry args={[width - postSize * 2, 0.03, 0.03]} />
+              {/* Top edge */}
+              <mesh position={[side * 0.005, height/2 - 0.06, 0]}>
+                <boxGeometry args={[0.01, 0.02, depth - (hasCableChimney ? 0.22 : 0.12)]} />
+                <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              {/* Bottom edge */}
+              <mesh position={[side * 0.005, -height/2 + 0.06, 0]}>
+                <boxGeometry args={[0.01, 0.02, depth - (hasCableChimney ? 0.22 : 0.12)]} />
                 <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
               </mesh>
             </group>
           ))}
-          {/* Mounting Rails - Front */}
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000 - 0.01, 0, depth/2 - 0.08]} />
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000 + 0.01, 0, depth/2 - 0.08]} />
-          {/* Mounting Rails - Rear */}
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[-RACK_19_INCH_MM/2000 - 0.01, 0, -depth/2 + 0.08]} />
-          <MountingRail height={height - 0.05} ruCount={ruHeight} position={[RACK_19_INCH_MM/2000 + 0.01, 0, -depth/2 + 0.08]} />
         </>
       )}
       
-      {/* Levelling Feet */}
+      {/* Bolt Down Brackets - Floor mounting (fixed position based on 4-post corner box width) */}
+      {!is2Post && hasBoltDownBracket && (
+        <>
+          {[-1, 1].map((side, i) => {
+            const fixedBoxWidth = 0.25; // Match the fixed corner box width
+            const centerWidth = RACK_19_INCH_MM/1000 + 0.01;
+            return (
+              <group key={`bolt-bracket-${i}`} position={[side * (centerWidth/2 + fixedBoxWidth/2), -height/2 - 0.02, 0]}>
+                {/* L-bracket base */}
+                <mesh position={[0, 0, 0]}>
+                  <boxGeometry args={[fixedBoxWidth + 0.04, 0.01, 0.15]} />
+                  <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                </mesh>
+                {/* Vertical tab */}
+                <mesh position={[side * -0.02, 0.03, 0]}>
+                  <boxGeometry args={[0.01, 0.06, 0.15]} />
+                  <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+                </mesh>
+                {/* Bolt holes (visual) */}
+                {[-0.05, 0.05].map((z, j) => (
+                  <mesh key={`bolt-${i}-${j}`} position={[0, 0.006, z]}>
+                    <cylinderGeometry args={[0.008, 0.008, 0.002, 12]} />
+                    <meshStandardMaterial color="#333333" roughness={0.8} />
+                  </mesh>
+                ))}
+              </group>
+            );
+          })}
+        </>
+      )}
+      
+      {/* Levelling Feet or Castors */}
       {is2Post ? (
         <>
-          <LevellingFoot position={[-RACK_19_INCH_MM/2000 - postSize/2, -height/2 - 0.01, 0]} />
-          <LevellingFoot position={[RACK_19_INCH_MM/2000 + postSize/2, -height/2 - 0.01, 0]} />
+          {hasCastors ? (
+            <>
+              <Castor position={[-RACK_19_INCH_MM/2000 - postSize/2, -height/2 - 0.03, 0]} />
+              <Castor position={[RACK_19_INCH_MM/2000 + postSize/2, -height/2 - 0.03, 0]} />
+            </>
+          ) : (
+            <>
+              <LevellingFoot position={[-RACK_19_INCH_MM/2000 - postSize/2, -height/2 - 0.01, 0]} />
+              <LevellingFoot position={[RACK_19_INCH_MM/2000 + postSize/2, -height/2 - 0.01, 0]} />
+            </>
+          )}
         </>
       ) : (
         <>
-          <LevellingFoot position={[-width/2 + 0.05, -height/2 - 0.01, -depth/2 + 0.05]} />
-          <LevellingFoot position={[width/2 - 0.05, -height/2 - 0.01, -depth/2 + 0.05]} />
-          <LevellingFoot position={[-width/2 + 0.05, -height/2 - 0.01, depth/2 - 0.05]} />
-          <LevellingFoot position={[width/2 - 0.05, -height/2 - 0.01, depth/2 - 0.05]} />
+          {hasCastors ? (
+            <>
+              <Castor position={[-width/2 + 0.05, -height/2 - 0.03, -depth/2 + 0.05]} />
+              <Castor position={[width/2 - 0.05, -height/2 - 0.03, -depth/2 + 0.05]} />
+              <Castor position={[-width/2 + 0.05, -height/2 - 0.03, depth/2 - 0.05]} />
+              <Castor position={[width/2 - 0.05, -height/2 - 0.03, depth/2 - 0.05]} />
+            </>
+          ) : (
+            <>
+              <LevellingFoot position={[-width/2 + 0.05, -height/2 - 0.01, -depth/2 + 0.05]} />
+              <LevellingFoot position={[width/2 - 0.05, -height/2 - 0.01, -depth/2 + 0.05]} />
+              <LevellingFoot position={[-width/2 + 0.05, -height/2 - 0.01, depth/2 - 0.05]} />
+              <LevellingFoot position={[width/2 - 0.05, -height/2 - 0.01, depth/2 - 0.05]} />
+            </>
+          )}
         </>
       )}
     </group>
