@@ -15,6 +15,8 @@ import {
   ArgentSeriesKey,
   ArgentSeries,
   SecurityGrade,
+  SecurityContext,
+  SECURITY_CONTEXTS,
   getAvailableRuHeights,
   getAvailableWidths,
   getAvailableDepths,
@@ -28,6 +30,13 @@ import {
   generateArgentCode,
   evaluateCommercialRules,
 } from './argentConstants';
+import {
+  PANEL_WIDTHS,
+  HEIGHT_CALCULATION,
+  DOORS as CAGE_DOORS,
+  CAGE_LOCKS,
+  CAGE_COMMERCIAL_RULES,
+} from './argentDataCageConstants';
 
 // ============================================================================
 // OPTION BUILDERS
@@ -125,17 +134,46 @@ function buildWidthOptions(seriesKey: ArgentSeriesKey): ProductAttribute[] {
 function buildDepthOptions(seriesKey: ArgentSeriesKey): ProductAttribute[] {
   const depths = getAvailableDepths(seriesKey);
   
-  // V50 has fixed depth
+  // V50 has adjustable depth (400-700mm to fit various rack depths)
   if (seriesKey === 'v50') {
-    return [{
-      id: 'depth-400',
-      label: '400mm',
-      value: 400,
-      code: '400',
-      priceDelta: 0,
-      meta: { depthMm: 400 },
-      description: 'Standard V50 depth',
-    }];
+    return [
+      {
+        id: 'depth-400',
+        label: '400mm',
+        value: 400,
+        code: '400',
+        priceDelta: 0,
+        meta: { depthMm: 400 },
+        description: 'Compact depth for shallow racks',
+      },
+      {
+        id: 'depth-500',
+        label: '500mm',
+        value: 500,
+        code: '500',
+        priceDelta: 45,
+        meta: { depthMm: 500 },
+        description: 'Medium depth for standard equipment',
+      },
+      {
+        id: 'depth-600',
+        label: '600mm',
+        value: 600,
+        code: '600',
+        priceDelta: 95,
+        meta: { depthMm: 600 },
+        description: 'Extended depth for larger servers',
+      },
+      {
+        id: 'depth-700',
+        label: '700mm',
+        value: 700,
+        code: '700',
+        priceDelta: 145,
+        meta: { depthMm: 700 },
+        description: 'Maximum depth for deep racks',
+      },
+    ];
   }
   
   // 40 series - all configurations use depth (VCM cabinets need 600mm)
@@ -256,6 +294,27 @@ function buildSecurityClassOptions(): ProductAttribute[] {
 }
 
 /**
+ * Build security context options (V50 and security-focused products)
+ * This is the first step in security-led configuration
+ */
+function buildSecurityContextOptions(seriesKey: ArgentSeriesKey): ProductAttribute[] {
+  const contexts = SECURITY_CONTEXTS.filter(ctx => ctx.applicableSeries.includes(seriesKey));
+  return contexts.map(ctx => ({
+    id: `context-${ctx.id}`,
+    label: ctx.label,
+    value: ctx.id,
+    code: ctx.id.toUpperCase().replace('_', ''),
+    priceDelta: 0,
+    meta: {
+      securityContext: ctx.id,
+      complianceMessages: ctx.complianceMessages,
+      defaultOptions: ctx.defaultOptions,
+    },
+    description: ctx.description,
+  }));
+}
+
+/**
  * Build post type options (40 Series only)
  */
 function buildPostTypeOptions(): ProductAttribute[] {
@@ -326,13 +385,152 @@ function buildPaintColourOptions(): ProductAttribute[] {
 // ============================================================================
 
 /**
+ * Build mount type options (50 Series only - wall mount vs free standing)
+ */
+function buildMountTypeOptions(): ProductAttribute[] {
+  return [
+    {
+      id: 'mount-wall',
+      label: 'Wall Mount',
+      value: 'wall_mount',
+      code: 'WM',
+      priceDelta: 0,
+      meta: { mountType: 'wall_mount' },
+      description: 'Wall mounted security rack. Available in 6RU, 12RU, and 18RU.',
+    },
+    {
+      id: 'mount-freestanding',
+      label: 'Free Standing',
+      value: 'free_standing',
+      code: 'FS',
+      priceDelta: 0,
+      meta: { mountType: 'free_standing' },
+      description: 'Free standing floor rack. Available in 18RU to 46RU.',
+    },
+  ];
+}
+
+/**
  * Build option groups for a specific Argent series
  */
 function buildOptionGroups(series: ArgentSeries): OptionGroup[] {
   const groups: OptionGroup[] = [];
   let step = 1;
   
-  // Step 1: RU Height
+  // ============================================================================
+  // V50 DATA VAULT - Security-led configuration flow
+  // ============================================================================
+  if (series.key === 'v50') {
+    // Step 1: Security Context (FIRST CHOICE - sets the tone)
+    const contextOptions = buildSecurityContextOptions(series.key);
+    if (contextOptions.length > 0) {
+      groups.push({
+        id: 'security-context',
+        label: 'Security Environment',
+        type: 'radio',
+        options: contextOptions,
+        defaultValue: 'context-shared_datacentre',
+        step: step++,
+        description: 'Select your security environment. This helps configure appropriate options.',
+      });
+    }
+    
+    // Step 2: RU Capacity (core variable for V50)
+    groups.push({
+      id: 'ru-height',
+      label: 'Compartment Capacity',
+      type: 'radio',
+      options: buildRuHeightOptions(series.key),
+      defaultValue: 'ru-4', // 4RU is common choice
+      step: step++,
+      description: 'Select the size of the secure compartment. Available in 2RU, 4RU, or 6RU.',
+    });
+    
+    // Step 3: Depth (adjustable for V50)
+    const depthOptions = buildDepthOptions(series.key);
+    groups.push({
+      id: 'depth',
+      label: 'Enclosure Depth',
+      type: 'radio',
+      options: depthOptions,
+      defaultValue: 'depth-500',
+      step: step++,
+      description: 'Select depth to match your rack and equipment. Depth is adjustable within range.',
+    });
+    
+    // Step 4: Lock Configuration
+    groups.push({
+      id: 'lock',
+      label: 'Lock Configuration',
+      type: 'radio',
+      options: buildLockOptions(series.key),
+      defaultValue: 'lock-key-standard',
+      step: step++,
+      description: 'Front and rear keyed locks are standard. Upgrade options available.',
+    });
+    
+    // Step 5: Accessories
+    const accessories = getAccessoriesForSeries(series.key);
+    if (accessories.length > 0) {
+      groups.push({
+        id: 'accessories',
+        label: 'Accessories',
+        type: 'accessory',
+        options: accessories.map(acc => ({
+          id: acc.id,
+          label: acc.name,
+          value: acc.id,
+          code: acc.code,
+          priceDelta: acc.price,
+          meta: {
+            category: acc.category,
+            position: acc.position,
+            includedStandard: acc.includedStandard,
+            requiresConsult: acc.requiresConsult,
+          },
+          description: acc.description,
+        })),
+        step: step++,
+        description: 'Add cable management, ventilation, and keying options.',
+      });
+    }
+    
+    return groups;
+  }
+  
+  // ============================================================================
+  // 50 SERIES - SCEC Security Racks
+  // ============================================================================
+  // Step 1: Security Classification (50 Series - FIRST CHOICE)
+  if (series.key === '50') {
+    groups.push({
+      id: 'security-class',
+      label: 'Security Classification',
+      type: 'radio',
+      options: buildSecurityClassOptions(),
+      defaultValue: 'security-class-b',
+      step: step++,
+      description: 'Select the SCEC security classification. This determines the required lock type.',
+    });
+  }
+  
+  // Step 2: Mount Type (50 Series only - wall mount vs free standing)
+  if (series.key === '50') {
+    groups.push({
+      id: 'mount-type',
+      label: 'Mount Type',
+      type: 'radio',
+      options: buildMountTypeOptions(),
+      defaultValue: 'mount-freestanding',
+      step: step++,
+      description: 'Select wall mount or free standing configuration.',
+    });
+  }
+  
+  // ============================================================================
+  // STANDARD SERIES (10, 25, 40)
+  // ============================================================================
+  // Step: RU Height
   groups.push({
     id: 'ru-height',
     label: 'Rack Units (RU)',
@@ -340,12 +538,12 @@ function buildOptionGroups(series: ArgentSeries): OptionGroup[] {
     options: buildRuHeightOptions(series.key),
     defaultValue: buildRuHeightOptions(series.key)[0]?.id,
     step: step++,
-    description: series.key === 'v50'
-      ? 'Select the size of the security compartment.'
+    description: series.key === '50'
+      ? 'Select the height of the rack. Options vary based on mount type.'
       : 'Select the height of the rack in standard rack units.',
   });
   
-  // Step 2: Frame type (40 Series only)
+  // Step: Frame type (40 Series only)
   if (series.key === '40') {
     groups.push({
       id: 'post-type',
@@ -358,50 +556,35 @@ function buildOptionGroups(series: ArgentSeries): OptionGroup[] {
     });
   }
   
-  // Step 2/3: Width (skip for V50 - fixed width)
-  if (series.key !== 'v50') {
-    const widthOptions = buildWidthOptions(series.key);
-    if (widthOptions.length > 1) {
-      groups.push({
-        id: 'width',
-        label: 'Width',
-        type: 'select',
-        options: widthOptions,
-        defaultValue: widthOptions[0]?.id,
-        step: step++,
-        description: 'Select the external width of the rack.',
-      });
-    }
-  }
-  
-  // Step 3/4: Depth (skip for V50 - fixed depth)
-  if (series.key !== 'v50') {
-    const depthOptions = buildDepthOptions(series.key);
-    if (depthOptions.length > 1) {
-      groups.push({
-        id: 'depth',
-        label: 'Depth',
-        type: 'select',
-        options: depthOptions,
-        defaultValue: depthOptions.find(d => d.value > 0)?.id || depthOptions[0]?.id,
-        step: step++,
-        description: 'Select the external depth of the rack.',
-      });
-    }
-  }
-  
-  // Step: Security Classification (50 Series only)
-  if (series.key === '50') {
+  // Step: Width
+  const widthOptions = buildWidthOptions(series.key);
+  if (widthOptions.length > 1) {
     groups.push({
-      id: 'security-class',
-      label: 'Security Classification',
-      type: 'radio',
-      options: buildSecurityClassOptions(),
-      defaultValue: 'security-class-b',
+      id: 'width',
+      label: 'Width',
+      type: 'select',
+      options: widthOptions,
+      defaultValue: widthOptions[0]?.id,
       step: step++,
-      description: 'Select the SCEC security classification for this rack.',
+      description: 'Select the external width of the rack.',
     });
   }
+  
+  // Step: Depth
+  const depthOptions = buildDepthOptions(series.key);
+  if (depthOptions.length > 1) {
+    groups.push({
+      id: 'depth',
+      label: 'Depth',
+      type: 'select',
+      options: depthOptions,
+      defaultValue: depthOptions.find(d => d.value > 0)?.id || depthOptions[0]?.id,
+      step: step++,
+      description: 'Select the external depth of the rack.',
+    });
+  }
+  
+  // Security Classification already added as first step for 50 Series
   
   // Step: Door Options (enclosure types only)
   if (['10', '25', '50'].includes(series.key)) {
@@ -568,12 +751,158 @@ function seriesToProductDefinition(series: ArgentSeries): ProductDefinition {
 // ============================================================================
 
 /**
+ * Build option groups for Data Cage (plan-based configurator)
+ */
+function buildDataCageOptionGroups(): OptionGroup[] {
+  const groups: OptionGroup[] = [];
+  let step = 1;
+  
+  // Step 1: Ceiling Height (drives infill panel calculation)
+  groups.push({
+    id: 'ceiling-height',
+    label: 'Site Ceiling Height',
+    type: 'select',
+    step: step++,
+    options: [
+      { id: 'ceiling-2500', label: '2500mm', priceDelta: 0 },
+      { id: 'ceiling-2700', label: '2700mm', priceDelta: 0 },
+      { id: 'ceiling-3000', label: '3000mm', priceDelta: 0 },
+      { id: 'ceiling-3200', label: '3200mm', priceDelta: 0 },
+      { id: 'ceiling-3500', label: '3500mm (Standard)', priceDelta: 0 },
+      { id: 'ceiling-3800', label: '3800mm', priceDelta: 0 },
+      { id: 'ceiling-4000', label: '4000mm', priceDelta: 0 },
+      { id: 'ceiling-custom', label: 'Custom Height (specify)', priceDelta: 0 },
+    ],
+    description: 'Select your site ceiling height. Panels will be calculated to fit.',
+  });
+  
+  // Step 2: Cage Length (front-to-rear)
+  groups.push({
+    id: 'cage-length',
+    label: 'Cage Length',
+    type: 'select',
+    step: step++,
+    options: [
+      { id: 'length-1800', label: '1800mm (2 panels)', priceDelta: 0 },
+      { id: 'length-2700', label: '2700mm (3 panels)', priceDelta: 0 },
+      { id: 'length-3600', label: '3600mm (4 panels)', priceDelta: 0 },
+      { id: 'length-4500', label: '4500mm (5 panels)', priceDelta: 0 },
+      { id: 'length-5400', label: '5400mm (6 panels)', priceDelta: 0 },
+      { id: 'length-6300', label: '6300mm (7 panels)', priceDelta: 0 },
+      { id: 'length-7200', label: '7200mm (8 panels)', priceDelta: 0 },
+      { id: 'length-custom', label: 'Custom Length (specify)', priceDelta: 0 },
+    ],
+    description: 'Select cage length (front-to-rear depth). Snaps to 900mm panel modules.',
+  });
+  
+  // Step 3: Cage Width (left-to-right)
+  groups.push({
+    id: 'cage-width',
+    label: 'Cage Width',
+    type: 'select',
+    step: step++,
+    options: [
+      { id: 'width-1800', label: '1800mm (2 panels)', priceDelta: 0 },
+      { id: 'width-2700', label: '2700mm (3 panels)', priceDelta: 0 },
+      { id: 'width-3600', label: '3600mm (4 panels)', priceDelta: 0 },
+      { id: 'width-4500', label: '4500mm (5 panels)', priceDelta: 0 },
+      { id: 'width-5400', label: '5400mm (6 panels)', priceDelta: 0 },
+      { id: 'width-6300', label: '6300mm (7 panels)', priceDelta: 0 },
+      { id: 'width-7200', label: '7200mm (8 panels)', priceDelta: 0 },
+      { id: 'width-custom', label: 'Custom Width (specify)', priceDelta: 0 },
+    ],
+    description: 'Select cage width (left-to-right span). Snaps to 900mm panel modules.',
+  });
+  
+  // Step 4: Door Location
+  groups.push({
+    id: 'door-face',
+    label: 'Primary Door Location',
+    type: 'radio',
+    step: step++,
+    options: [
+      { id: 'door-front', label: 'Front Face', priceDelta: 0 },
+      { id: 'door-rear', label: 'Rear Face', priceDelta: 0 },
+      { id: 'door-left', label: 'Left Side', priceDelta: 0 },
+      { id: 'door-right', label: 'Right Side', priceDelta: 0 },
+    ],
+    description: 'Select which face the primary door will be installed on.',
+  });
+  
+  // Step 5: Additional Doors
+  groups.push({
+    id: 'additional-doors',
+    label: 'Additional Doors',
+    type: 'select',
+    step: step++,
+    options: [
+      { id: 'doors-0', label: 'No additional doors', priceDelta: 0 },
+      { id: 'doors-1', label: '1 additional door', priceDelta: CAGE_DOORS[0].price },
+      { id: 'doors-2', label: '2 additional doors', priceDelta: CAGE_DOORS[0].price * 2 },
+      { id: 'doors-3', label: '3 additional doors', priceDelta: CAGE_DOORS[0].price * 3 },
+    ],
+    description: 'Add extra door openings for multiple access points.',
+  });
+  
+  // Step 6: Lock Type
+  groups.push({
+    id: 'lock-type',
+    label: 'Lock Type',
+    type: 'radio',
+    step: step++,
+    options: CAGE_LOCKS.map(lock => ({
+      id: lock.id,
+      label: lock.name,
+      priceDelta: lock.price,
+    })),
+    description: 'Select lock type for all door assemblies.',
+  });
+  
+  // Step 7: Installation Notes
+  groups.push({
+    id: 'installation-notes',
+    label: 'Site & Installation Notes',
+    type: 'text',
+    step: step++,
+    options: [],
+    description: 'Provide any site-specific requirements, access constraints, or installation notes.',
+  });
+  
+  return groups;
+}
+
+/**
+ * Create the Data Cage product definition
+ */
+function createDataCageProduct(): ProductDefinition {
+  return {
+    id: 'argent-data-cage',
+    name: 'Argent Commercial Data Cage',
+    description: 'Modular floor-mounted security enclosure for server racks. Creates controlled access zones in shared data centres and enterprise facilities. Plan-based configuration with posts, panels, and doors.',
+    basePrice: 0, // Quote-driven
+    image: '/argent-data-cage.jpg',
+    groups: buildDataCageOptionGroups(),
+    series: 'data-cage',
+    // Custom flags for plan-based configurator
+    isDataCage: true,
+    isPlanBased: true,
+    requiresQuote: true,
+  } as ProductDefinition & { isDataCage: boolean; isPlanBased: boolean; requiresQuote: boolean };
+}
+
+/**
  * Get all Argent products as ProductDefinitions
  */
 export function getArgentProducts(): ProductDefinition[] {
-  return ARGENT_SERIES
+  // Get standard series-based products
+  const seriesProducts = ARGENT_SERIES
     .filter(s => s.isActive)
     .map(seriesToProductDefinition);
+  
+  // Add Data Cage as a special product
+  const dataCageProduct = createDataCageProduct();
+  
+  return [...seriesProducts, dataCageProduct];
 }
 
 /**

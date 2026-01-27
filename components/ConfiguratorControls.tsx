@@ -35,6 +35,9 @@ interface ConfiguratorControlsProps {
   // Logo upload for Lectrum products
   onLogoChange?: (logoUrl: string | undefined) => void;
   onLogoTransformChange?: (transform: LogoTransform) => void;
+  // V50 Data Vault integration for 50 Series
+  onConfigureV50?: () => void;
+  v50CountInQuote?: number;
 }
 
 const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({ 
@@ -48,7 +51,9 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
   onEmbeddedCabinetChange,
   isEditingCartItem = false,
   onLogoChange,
-  onLogoTransformChange
+  onLogoTransformChange,
+  onConfigureV50,
+  v50CountInQuote = 0
 }) => {
   
   const { interiors, products } = useCatalog();
@@ -710,7 +715,9 @@ const ConfiguratorControls: React.FC<ConfiguratorControlsProps> = ({
                   <QtyListField 
                     group={group} 
                     values={(config.selections[group.id] as Record<string, number>) || {}} 
-                    onChange={(vals) => onChange(group.id, vals)} 
+                    onChange={(vals) => onChange(group.id, vals)}
+                    onConfigureV50={product.series === '50' ? onConfigureV50 : undefined}
+                    v50Count={product.series === '50' ? v50CountInQuote : undefined}
                   />
                   {/* Logo upload for Lectrum products with logo accessories */}
                   {product.id.startsWith('lectrum-') && group.id === 'accessories' && onLogoChange && (

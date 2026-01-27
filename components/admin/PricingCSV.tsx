@@ -25,7 +25,7 @@ const PricingCSV: React.FC = () => {
     const rows: PriceRow[] = [];
 
     // Add product base prices
-    products.forEach(product => {
+    (products || []).forEach(product => {
       rows.push({
         type: 'BASE_PRICE',
         product_id: product.id,
@@ -59,7 +59,7 @@ const PricingCSV: React.FC = () => {
     });
 
     // Add interior prices
-    interiors.forEach(interior => {
+    (interiors || []).forEach(interior => {
       rows.push({
         type: 'INTERIOR',
         product_id: '',
@@ -274,7 +274,7 @@ const PricingCSV: React.FC = () => {
           Download Pricing CSV
         </button>
         <p className="text-xs text-zinc-500 mt-3">
-          Contains {products.length} products, {products.reduce((sum, p) => sum + p.groups.reduce((gs, g) => gs + g.options.length, 0), 0)} options, and {interiors.length} drawer interiors.
+          Contains {products?.length || 0} products, {products?.reduce((sum, p) => sum + p.groups.reduce((gs, g) => gs + (g.options?.length || 0), 0), 0) || 0} options, and {interiors?.length || 0} drawer interiors.
         </p>
       </div>
 

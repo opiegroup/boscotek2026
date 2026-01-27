@@ -175,6 +175,8 @@ type QtyListFieldProps = {
   group: OptionGroup;
   values: Record<string, number>;
   onChange: (val: Record<string, number>) => void;
+  onConfigureV50?: () => void; // Callback to launch V50 Data Vault configurator
+  v50Count?: number; // Number of V50 Data Vaults already in quote
 };
 
 // Logo accessory IDs that require image upload
@@ -187,7 +189,10 @@ const LOGO_ACCESSORY_IDS = [
   'crystalite-logo-classic'
 ];
 
-export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onChange }) => {
+// Data Security Cage accessory that links to V50 Data Vault
+const DATA_SECURITY_CAGE_ID = 'acc-data-security-cage';
+
+export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onChange, onConfigureV50, v50Count = 0 }) => {
   const handleQtyChange = (itemId: string, delta: number) => {
     const currentQty = values[itemId] || 0;
     const newQty = Math.max(0, currentQty + delta);
@@ -200,12 +205,16 @@ export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onCha
 
   // Check if any logo accessory is selected
   const hasLogoAccessorySelected = LOGO_ACCESSORY_IDS.some(id => (values[id] || 0) > 0);
+  
+  // Check if Data Security Cage is selected
+  const hasDataSecurityCageSelected = (values[DATA_SECURITY_CAGE_ID] || 0) > 0;
 
   return (
     <div className="space-y-2">
       {group.options.map(opt => {
         const qty = values[opt.id] || 0;
         const isLogoAccessory = LOGO_ACCESSORY_IDS.includes(opt.id);
+        const isDataSecurityCage = opt.id === DATA_SECURITY_CAGE_ID;
         
         return (
           <div key={opt.id} className={`flex items-center justify-between p-3 rounded border transition-colors ${qty > 0 ? 'bg-zinc-800 border-amber-500/50' : 'bg-zinc-900 border-zinc-700'}`}>
@@ -213,8 +222,12 @@ export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onCha
                 <div className={`text-sm font-medium ${qty > 0 ? 'text-white' : 'text-zinc-400'}`}>
                   {opt.label}
                   {isLogoAccessory && <span className="ml-2 text-xs text-blue-400">📷</span>}
+                  {isDataSecurityCage && <span className="ml-2 text-xs text-emerald-400">🔐</span>}
                 </div>
                 <div className="text-xs text-amber-500 font-bold">+${opt.priceDelta} ea</div>
+                {isDataSecurityCage && (
+                  <div className="text-xs text-emerald-400 mt-1">Configurable V50 Data Vault available</div>
+                )}
              </div>
              
              <div className="flex items-center gap-3 bg-zinc-950 rounded px-2 py-1 border border-zinc-800">
@@ -236,6 +249,38 @@ export const QtyListField: React.FC<QtyListFieldProps> = ({ group, values, onCha
           </div>
         );
       })}
+      
+      {/* Show V50 Data Vault configuration prompt when Data Security Cage is selected */}
+      {hasDataSecurityCageSelected && (
+        <div className="mt-3 p-4 bg-emerald-900/20 border border-emerald-500/30 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-emerald-400">🔐</span>
+            <span className="text-sm font-medium text-emerald-300">V50 Data Vault Configuration</span>
+          </div>
+          <p className="text-xs text-zinc-400 mb-3">
+            The Data Security Cage is a basic internal enclosure. For fully configurable in-rack security with adjustable RU height, depth options, and clamshell door access, configure a <strong className="text-emerald-400">V50 Data Vault</strong> instead.
+          </p>
+          <div className="flex flex-col gap-2">
+            {onConfigureV50 && (
+              <button
+                onClick={onConfigureV50}
+                className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded transition-colors flex items-center justify-center gap-2"
+              >
+                <span>Configure V50 Data Vault</span>
+                <span>→</span>
+              </button>
+            )}
+            {v50Count > 0 && (
+              <div className="text-xs text-emerald-400 text-center">
+                {v50Count} V50 Data Vault{v50Count > 1 ? 's' : ''} already in quote
+              </div>
+            )}
+          </div>
+          <p className="text-xs text-zinc-500 mt-2 italic">
+            Tip: You can add multiple V50 Data Vaults with different configurations to your quote.
+          </p>
+        </div>
+      )}
       
       {/* Show logo upload prompt when any logo accessory is selected */}
       {hasLogoAccessorySelected && (

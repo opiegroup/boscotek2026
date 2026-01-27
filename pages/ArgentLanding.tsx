@@ -90,19 +90,19 @@ const ArgentLanding: React.FC = () => {
                 <BrandLogo className="h-12 mx-auto lg:mx-0" showText={true} />
               </div>
               <h1 className="text-3xl md:text-4xl font-bold mb-4 text-white">
-                Secure Server Racks &<br />Data Infrastructure
+                Lock. Guard.<br />Defend Data.
               </h1>
               <p className="text-lg text-slate-400 max-w-xl mb-6">
-                Australian-designed and manufactured server racks, network cabinets, 
-                and SCEC-approved security systems for enterprise, government, and defence.
+                Australian-designed and manufactured SCEC-approved security server racks for defence, 
+                government bodies, and secure data infrastructure. IEC 60297 compliant.
               </p>
               
               {/* Trust Indicators */}
               <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
-                <TrustBadge icon="shield" text="SCEC Approved" />
-                <TrustBadge icon="flag" text="Australian Made" />
-                <TrustBadge icon="certificate" text="ISO 9001" />
-                <TrustBadge icon="clock" text="75+ Years" />
+                <TrustBadge icon="shield" text="SCEC Approved June 2016" />
+                <TrustBadge icon="flag" text="Australian Design & Manufacturing" />
+                <TrustBadge icon="certificate" text="ISO 9001 Accredited" />
+                <TrustBadge icon="clock" text="Opie Manufacturing Group - Est. 1962" />
               </div>
             </div>
             
@@ -174,18 +174,29 @@ const ArgentLanding: React.FC = () => {
               </div>
             </div>
             <div className="flex-1">
-              <h3 className="font-semibold text-white mb-1">Security-Rated Configurations</h3>
-              <p className="text-sm text-slate-400">
-                SCEC Class B and Class C configurations may require verification and consultation. 
-                For government and defence projects, please contact our security solutions team directly.
+              <h3 className="font-semibold text-white mb-1">SCEC Class B & Class C Security Configurations</h3>
+              <p className="text-sm text-slate-400 mb-2">
+                SCEC-approved Class B (KABA X10 combination lock) and Class C (L-Handled Bilock) 
+                configurations require consultation for compliance verification.
+              </p>
+              <p className="text-xs text-slate-500">
+                Cable entry configuration is a key component of SCEC compliance. Contact Argent for approved cable entry options.
               </p>
             </div>
-            <a 
-              href="mailto:sales@argent.com.au" 
-              className="flex-shrink-0 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors"
-            >
-              Contact Security Team
-            </a>
+            <div className="flex flex-col gap-2 flex-shrink-0">
+              <a 
+                href="mailto:sales@argent.com.au?subject=SCEC Security Configuration Enquiry" 
+                className="px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-500 transition-colors text-center"
+              >
+                Contact Security Team
+              </a>
+              <a 
+                href="tel:0247286111" 
+                className="px-5 py-2.5 rounded-lg bg-slate-700 text-white text-sm font-medium hover:bg-slate-600 transition-colors text-center"
+              >
+                (02) 4728 6111
+              </a>
+            </div>
           </div>
         </div>
       </section>
@@ -195,22 +206,26 @@ const ArgentLanding: React.FC = () => {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BrandLogo className="h-8" showText={false} />
-            <span className="text-sm text-slate-500">
-              &copy; {new Date().getFullYear()} Wilson &amp; Gilkes Pty Ltd. Part of the Opie Manufacturing Group.
-            </span>
+            <div className="text-sm text-slate-500">
+              <p>&copy; {new Date().getFullYear()} Opie Manufacturing Group. Australian Design &amp; Manufacturing.</p>
+              <p className="text-xs text-slate-600">109 Russell Street, Emu Heights NSW 2750</p>
+            </div>
           </div>
           <div className="flex items-center gap-6 text-sm text-slate-500">
-            <a href="tel:0299140900" className="hover:text-white transition-colors flex items-center gap-2">
+            <a href="tel:0247286111" className="hover:text-white transition-colors flex items-center gap-2">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
               </svg>
-              (02) 9914 0900
+              (02) 4728 6111
             </a>
             <a href="mailto:sales@argent.com.au" className="hover:text-white transition-colors">
               sales@argent.com.au
             </a>
             <a href="https://argent.com.au" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
               argent.com.au
+            </a>
+            <a href="https://opiegroup.com.au" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">
+              opiegroup.com.au
             </a>
           </div>
         </div>
@@ -320,11 +335,14 @@ const SeriesCard: React.FC<SeriesCardProps> = ({
       onMouseEnter={() => onHover(true)}
       onMouseLeave={() => onHover(false)}
     >
-      {/* Security Badge */}
+      {/* Security Badges */}
       {isSecuritySeries && (
-        <div className="absolute top-4 right-4">
+        <div className="absolute top-4 right-4 flex flex-col gap-1">
           <span className="text-xs font-medium px-2 py-1 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
-            SCEC Approved
+            SCEC Approved June 2016
+          </span>
+          <span className="text-xs font-medium px-2 py-1 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+            IEC 60297 | ISO 9001
           </span>
         </div>
       )}

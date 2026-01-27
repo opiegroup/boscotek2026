@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet, LogoTransform } from '../types';
+import { ConfigurationState, ProductDefinition, DrawerConfiguration, PricingResult, QuoteLineItem, CustomerDetails, EmbeddedCabinet, LogoTransform, LineItem } from '../types';
 import ConfiguratorControls from '../components/ConfiguratorControls';
 import { Viewer3D, Viewer3DRef } from '../components/Viewer3D';
 import LectrumViewer3D, { LectrumViewer3DRef } from '../components/LectrumViewer3D';
 import ArgentViewer3D, { ArgentViewer3DRef } from '../components/ArgentViewer3D';
+import DataCageConfigurator from '../components/DataCageConfigurator';
 import SummaryPanel from '../components/SummaryPanel';
 import QuoteCart from '../components/QuoteCart';
+import { CageConfiguration, CageBOM } from '../services/products/argentDataCageConstants';
 import { getQuote } from '../services/pricingService';
 import { submitQuote } from '../services/mockBackend';
 import { generateReferenceCode } from '../services/referenceService';
@@ -169,6 +171,16 @@ const BrandConfigurator: React.FC = () => {
          initialSelections[g.id] = g.options[0].id;
       }
     });
+    
+    // Auto-select lock based on default security classification (50 Series)
+    if (product.id.includes('argent-50')) {
+      const securityClass = initialSelections['security-class'] || 'security-class-b';
+      if (securityClass === 'security-class-b') {
+        initialSelections['lock'] = 'lock-kaba-x10-class-b';
+      } else if (securityClass === 'security-class-c') {
+        initialSelections['lock'] = 'lock-bilock-class-c';
+      }
+    }
 
     setConfig({
       productId: product.id,
@@ -187,7 +199,19 @@ const BrandConfigurator: React.FC = () => {
 
   const handleConfigChange = (groupId: string, value: any) => {
     setConfig(prev => {
-      const nextSelections = { ...prev.selections, [groupId]: value };
+      let nextSelections = { ...prev.selections, [groupId]: value };
+      
+      // Auto-select lock based on security classification (50 Series)
+      if (groupId === 'security-class') {
+        if (value === 'security-class-b') {
+          // Class B requires KABA X10 digital combination lock
+          nextSelections = { ...nextSelections, 'lock': 'lock-kaba-x10-class-b' };
+        } else if (value === 'security-class-c') {
+          // Class C requires L-Handled Bilock
+          nextSelections = { ...nextSelections, 'lock': 'lock-bilock-class-c' };
+        }
+      }
+      
       if (groupId === 'accessories') {
         const modelId = getActiveModelId(activeProduct);
         const nextAccessories = value as Record<string, number> | undefined;
@@ -355,6 +379,21 @@ const BrandConfigurator: React.FC = () => {
     setActiveProduct(product);
     setEditingItemId(id);
     setViewMode('config');
+  };
+
+  // Count V50 Data Vaults in the current quote
+  const v50CountInQuote = quoteItems.filter(item => item.productId === 'argent-v50-series').length;
+
+  // Handler to switch to V50 Data Vault configuration
+  const handleConfigureV50 = () => {
+    // Find the V50 product (product ID is 'argent-v50-series')
+    const v50Product = products.find(p => p.id === 'argent-v50-series');
+    if (v50Product) {
+      startConfiguring(v50Product);
+    } else {
+      // Fallback: show alert if V50 not found
+      alert('V50 Data Vault product not found in catalog. Please contact support.');
+    }
   };
 
   const handleSubmitFullQuote = async (customer: CustomerDetails) => {
@@ -600,7 +639,82 @@ const BrandConfigurator: React.FC = () => {
     );
   }
 
-  // 4. CONFIGURATOR VIEW
+  // 4a. DATA CAGE CONFIGURATOR (Plan-based, special handling)
+  const isDataCage = activeProduct?.id === 'argent-data-cage';
+  
+  if (activeProduct && isDataCage) {
+    const handleDataCageConfigChange = (cageConfig: CageConfiguration) => {
+      // Store cage config in selections
+      setConfig(prev => ({
+        ...prev,
+        selections: {
+          ...prev.selections,
+          cageConfig,
+        },
+      }));
+    };
+    
+    const handleDataCageQuoteRequest = (cageConfig: CageConfiguration, bom: CageBOM) => {
+      // Build configuration code
+      const configCode = `CAGE.${cageConfig.lengthMm}.${cageConfig.widthMm}.${cageConfig.ceilingHeightMm}`;
+      
+      // Build specs summary
+      const specsSummary = [
+        `${cageConfig.lengthMm}mm × ${cageConfig.widthMm}mm`,
+        `${cageConfig.ceilingHeightMm}mm ceiling`,
+        `${bom.doors.reduce((s, d) => s + d.quantity, 0)} door${bom.doors.reduce((s, d) => s + d.quantity, 0) > 1 ? 's' : ''}`,
+        `${bom.posts.reduce((s, p) => s + p.quantity, 0)} posts`,
+        `${bom.panels.reduce((s, p) => s + p.quantity, 0)} panels`,
+      ];
+      
+      // Build breakdown for detailed view
+      const breakdown: LineItem[] = [
+        { code: 'EMBED', label: '═ STRUCTURE ═', price: 0 },
+        ...bom.posts.map(p => ({ code: p.item.code, label: `${p.item.name} ×${p.quantity}`, price: p.item.price * p.quantity })),
+        ...bom.panels.map(p => ({ code: p.item.code, label: `${p.item.name} ×${p.quantity}`, price: p.item.price * p.quantity })),
+        { code: 'EMBED', label: '═ DOORS & LOCKS ═', price: 0 },
+        ...bom.doors.map(d => ({ code: d.item.code, label: `${d.item.name} ×${d.quantity}`, price: d.item.price * d.quantity })),
+        ...bom.locks.map(l => ({ code: l.item.code, label: `${l.item.name} ×${l.quantity}`, price: l.item.price * l.quantity })),
+        { code: 'SUBTOTAL', label: 'Total (Indicative)', price: bom.totalPrice },
+      ];
+      
+      // Create quote item matching QuoteLineItem interface
+      const newItem: QuoteLineItem = {
+        id: `quote-cage-${Date.now()}`,
+        productName: activeProduct.name,
+        configurationCode: configCode,
+        configuration: {
+          productId: activeProduct.id,
+          selections: { cageConfig, bom },
+          customDrawers: [],
+          embeddedCabinets: [],
+          logoTransform: { scale: 1, offsetX: 0, offsetY: 0 },
+          notes: cageConfig.installationNotes || '',
+          internalReference: '',
+        },
+        quantity: 1,
+        unitPrice: bom.totalPrice,
+        totalPrice: bom.totalPrice,
+        specsSummary,
+        breakdown,
+      };
+      
+      setQuoteItems([...quoteItems, newItem]);
+      setViewMode('cart');
+    };
+    
+    return (
+      <EmbedWrapper showOpenLink={true}>
+        <DataCageConfigurator
+          onConfigChange={handleDataCageConfigChange}
+          onRequestQuote={handleDataCageQuoteRequest}
+          onBack={() => { setActiveProduct(null); setViewMode('catalog'); }}
+        />
+      </EmbedWrapper>
+    );
+  }
+
+  // 4b. STANDARD CONFIGURATOR VIEW
   if (activeProduct) {
     return (
       <EmbedWrapper showOpenLink={true}>
@@ -620,6 +734,8 @@ const BrandConfigurator: React.FC = () => {
               isEditingCartItem={editingItemId !== null}
               onLogoChange={handleLogoChange}
               onLogoTransformChange={handleLogoTransformChange}
+              onConfigureV50={handleConfigureV50}
+              v50CountInQuote={v50CountInQuote}
             />
           </div>
 

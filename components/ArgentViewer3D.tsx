@@ -212,6 +212,226 @@ const SolidPanel = ({
 );
 
 /**
+ * Discrete Ventilated Panel - 50 Series Security Side Panel
+ * Solid panel with discrete horizontal ventilation slots
+ * Maintains security compliance while allowing airflow
+ */
+const DiscreteVentilatedPanel = ({ 
+  width, 
+  height, 
+  depth = 0.002, 
+  color = COLORS.MANNEX_BLACK 
+}: {
+  width: number;
+  height: number;
+  depth?: number;
+  color?: string;
+}) => {
+  const slotWidth = width * 0.6; // Slots are 60% of panel width
+  const slotHeight = 0.008; // 8mm slot height
+  const slotSpacing = 0.05; // 50mm spacing between slots
+  const slotCount = Math.floor((height * 0.7) / slotSpacing); // Slots in middle 70% of panel
+  const startY = -height * 0.35; // Start from bottom third
+  
+  return (
+    <group>
+      {/* Main solid panel */}
+      <mesh castShadow receiveShadow>
+        <boxGeometry args={[width, height, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.4} />
+      </mesh>
+      
+      {/* Discrete ventilation slots - horizontal lines on BOTH sides */}
+      {Array.from({ length: slotCount }).map((_, i) => {
+        const y = startY + i * slotSpacing;
+        return (
+          <group key={`vent-slot-${i}`}>
+            {/* === FRONT SIDE (exterior) === */}
+            {/* Slot depression (darker recessed area) */}
+            <mesh position={[0, y, depth/2 + 0.0001]}>
+              <boxGeometry args={[slotWidth, slotHeight, 0.001]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
+            </mesh>
+            {/* Slot opening (actual ventilation hole) */}
+            <mesh position={[0, y, depth/2 + 0.0003]}>
+              <boxGeometry args={[slotWidth - 0.004, slotHeight - 0.002, 0.001]} />
+              <meshStandardMaterial 
+                color="#000000" 
+                transparent 
+                opacity={0.8}
+                depthWrite={false}
+              />
+            </mesh>
+            {/* Top edge highlight */}
+            <mesh position={[0, y + slotHeight/2 + 0.001, depth/2 + 0.0002]}>
+              <boxGeometry args={[slotWidth, 0.002, 0.001]} />
+              <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+            </mesh>
+            
+            {/* === BACK SIDE (interior) === */}
+            {/* Slot depression */}
+            <mesh position={[0, y, -depth/2 - 0.0001]}>
+              <boxGeometry args={[slotWidth, slotHeight, 0.001]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
+            </mesh>
+            {/* Slot opening */}
+            <mesh position={[0, y, -depth/2 - 0.0003]}>
+              <boxGeometry args={[slotWidth - 0.004, slotHeight - 0.002, 0.001]} />
+              <meshStandardMaterial 
+                color="#000000" 
+                transparent 
+                opacity={0.8}
+                depthWrite={false}
+              />
+            </mesh>
+            {/* Top edge highlight */}
+            <mesh position={[0, y + slotHeight/2 + 0.001, -depth/2 - 0.0002]}>
+              <boxGeometry args={[slotWidth, 0.002, 0.001]} />
+              <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+            </mesh>
+          </group>
+        );
+      })}
+      
+      {/* Panel frame edges - reinforced borders on BOTH sides */}
+      {/* Front side */}
+      <mesh position={[0, height/2 - 0.015, depth/2 + 0.0002]}>
+        <boxGeometry args={[width, 0.03, 0.001]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, -height/2 + 0.015, depth/2 + 0.0002]}>
+        <boxGeometry args={[width, 0.03, 0.001]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      {/* Back side */}
+      <mesh position={[0, height/2 - 0.015, -depth/2 - 0.0002]}>
+        <boxGeometry args={[width, 0.03, 0.001]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      <mesh position={[0, -height/2 + 0.015, -depth/2 - 0.0002]}>
+        <boxGeometry args={[width, 0.03, 0.001]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+    </group>
+  );
+};
+
+/**
+ * Half Perforated Panel - 50 Series Security Door
+ * VERTICAL split: Left side is perforated mesh, Right side is solid steel
+ * Per PDF specification: 50% perf / 50% steel (vertical)
+ * mirrorSides: when true, swaps perf/solid for right-hand hinged doors
+ */
+const HalfPerforatedPanel = ({ 
+  width, 
+  height, 
+  depth = 0.002, 
+  color = COLORS.MANNEX_BLACK,
+  mirrorSides = false,
+}: {
+  width: number;
+  height: number;
+  depth?: number;
+  color?: string;
+  mirrorSides?: boolean;
+}) => {
+  const frameWidth = 0.025; // Door frame border
+  const innerWidth = width - frameWidth * 2;
+  const innerHeight = height - frameWidth * 2;
+  
+  // Vertical split - 50% perforated, 50% solid
+  const perfWidth = innerWidth * 0.50;
+  const solidWidth = innerWidth * 0.50;
+  
+  const holeSpacing = 0.018; // 18mm spacing for denser pattern
+  const holeRadius = 0.004; // 4mm holes
+  
+  const cols = Math.floor((perfWidth * 0.88) / holeSpacing);
+  const rows = Math.floor((innerHeight * 0.92) / holeSpacing);
+  
+  // Position multiplier: normal = perf left/solid right, mirrored = perf right/solid left
+  const perfPosX = mirrorSides ? (innerWidth/4 + frameWidth/4) : (-innerWidth/4 - frameWidth/4);
+  const solidPosX = mirrorSides ? (-innerWidth/4 - frameWidth/4) : (innerWidth/4 + frameWidth/4);
+  
+  return (
+    <group>
+      {/* ====== OUTER FRAME ====== */}
+      {/* Top frame */}
+      <mesh position={[0, height/2 - frameWidth/2, 0]} castShadow>
+        <boxGeometry args={[width, frameWidth, depth]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      {/* Bottom frame */}
+      <mesh position={[0, -height/2 + frameWidth/2, 0]} castShadow>
+        <boxGeometry args={[width, frameWidth, depth]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      {/* Left frame */}
+      <mesh position={[-width/2 + frameWidth/2, 0, 0]} castShadow>
+        <boxGeometry args={[frameWidth, innerHeight, depth]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      {/* Right frame */}
+      <mesh position={[width/2 - frameWidth/2, 0, 0]} castShadow>
+        <boxGeometry args={[frameWidth, innerHeight, depth]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      
+      {/* ====== VERTICAL DIVIDER (between perf and solid sections) ====== */}
+      <mesh position={[0, 0, 0]} castShadow>
+        <boxGeometry args={[frameWidth, innerHeight, depth]} />
+        <meshStandardMaterial color={color} roughness={0.5} metalness={0.5} />
+      </mesh>
+      
+      {/* ====== PERFORATED SECTION ====== */}
+      <group position={[perfPosX, 0, 0]}>
+        {/* Perforated panel background - darker to show depth */}
+        <mesh castShadow receiveShadow>
+          <boxGeometry args={[perfWidth - frameWidth/2, innerHeight, depth * 0.5]} />
+          <meshStandardMaterial 
+            color={color}
+            roughness={0.8} 
+            metalness={0.2}
+            transparent
+            opacity={0.6}
+          />
+        </mesh>
+        
+        {/* Perforation holes */}
+        {Array.from({ length: Math.min(rows, 60) }).map((_, row) => 
+          Array.from({ length: Math.min(cols, 12) }).map((_, col) => {
+            const x = -(perfWidth - frameWidth) * 0.44 + col * holeSpacing + (row % 2) * (holeSpacing / 2);
+            const y = -innerHeight * 0.46 + row * holeSpacing;
+            if (Math.abs(x) > (perfWidth - frameWidth) * 0.46 || Math.abs(y) > innerHeight * 0.46) return null;
+            return (
+              <mesh 
+                key={`hole-${row}-${col}`} 
+                position={[x, y, depth/2 + 0.0001]}
+              >
+                <circleGeometry args={[holeRadius, 8]} />
+                <meshStandardMaterial 
+                  color="#1a1a1a" 
+                  transparent 
+                  opacity={0.3}
+                  depthWrite={false}
+                />
+              </mesh>
+            );
+          })
+        )}
+      </group>
+      
+      {/* ====== SOLID STEEL SECTION ====== */}
+      <mesh position={[solidPosX, 0, 0]} castShadow receiveShadow>
+        <boxGeometry args={[solidWidth - frameWidth/2, innerHeight, depth]} />
+        <meshStandardMaterial color={color} roughness={0.6} metalness={0.4} />
+      </mesh>
+      {/* Lock/handle is provided by DoorLock component */}
+    </group>
+  );
+};
+
+/**
  * Door Panel - exterior uses door colour, interior uses frame colour
  */
 const DoorPanel = ({
@@ -220,15 +440,21 @@ const DoorPanel = ({
   depth,
   variant,
   frontColor,
+  isRightHinged = false,
 }: {
   width: number;
   height: number;
   depth: number;
-  variant: 'perforated' | 'solid' | 'polycarbonate';
+  variant: 'perforated' | 'solid' | 'polycarbonate' | 'perforated-50';
   frontColor: string;
+  isRightHinged?: boolean;
 }) => (
   <group>
-    {variant === 'polycarbonate' ? (
+    {variant === 'perforated-50' ? (
+      // 50 Series Security Door: 50% perforated / 50% solid steel
+      // Mirror sides for right-hinged doors so lock side stays on solid steel
+      <HalfPerforatedPanel width={width} height={height} depth={depth} color={frontColor} mirrorSides={isRightHinged} />
+    ) : variant === 'polycarbonate' ? (
       <group>
         {/* Frame ring (punched-through center) */}
         {(() => {
@@ -353,18 +579,117 @@ const MountingRail = ({
 
 /**
  * Door Handle/Lock Assembly - supports different lock types
- * lockType: 'standard' | 'combination' | 'digital'
+ * lockType: 'standard' | 'combination' | 'digital' | 'kaba-x10' | 'bilock'
  */
 const DoorLock = ({ 
   position, 
   lockType = 'standard',
-  isClassC = false 
+  isClassC = false,
+  isLeftHinge = true
 }: { 
   position: [number, number, number];
-  lockType?: 'standard' | 'combination' | 'digital';
+  lockType?: 'standard' | 'combination' | 'digital' | 'kaba-x10' | 'bilock';
   isClassC?: boolean;
+  isLeftHinge?: boolean;
 }) => {
   const lockColor = '#1a1a1a'; // Dark black like reference
+  
+  // KABA X10 Digital Combination Lock - Round dial lock for 50 Series Class B
+  if (lockType === 'kaba-x10') {
+    return (
+      <group position={position}>
+        {/* Main body housing - rounded cylinder */}
+        <mesh castShadow rotation={[Math.PI/2, 0, 0]}>
+          <cylinderGeometry args={[0.035, 0.035, 0.022, 32]} />
+          <meshStandardMaterial color="#8a8a8a" roughness={0.4} metalness={0.6} />
+        </mesh>
+        {/* Back plate - flush with door */}
+        <mesh position={[0, 0, -0.011]} rotation={[Math.PI/2, 0, 0]}>
+          <cylinderGeometry args={[0.038, 0.038, 0.004, 32]} />
+          <meshStandardMaterial color="#7a7a7a" roughness={0.5} metalness={0.5} />
+        </mesh>
+        {/* Front face plate with beveled edge */}
+        <mesh position={[0, 0, 0.010]} rotation={[Math.PI/2, 0, 0]}>
+          <cylinderGeometry args={[0.033, 0.035, 0.004, 32]} />
+          <meshStandardMaterial color="#9a9a9a" roughness={0.3} metalness={0.7} />
+        </mesh>
+        {/* Display window at top */}
+        <mesh position={[0, 0.018, 0.013]}>
+          <boxGeometry args={[0.022, 0.010, 0.002]} />
+          <meshStandardMaterial color="#1a1a1a" roughness={0.9} metalness={0.1} />
+        </mesh>
+        {/* Knurled dial - lower section, clean flat design */}
+        <group position={[0, -0.012, 0.016]}>
+          {/* Dial outer ring - knurled edge */}
+          <mesh rotation={[Math.PI/2, 0, 0]}>
+            <cylinderGeometry args={[0.024, 0.024, 0.014, 48]} />
+            <meshStandardMaterial color="#7a7a7a" roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Dial face - flat front */}
+          <mesh position={[0, 0, 0.008]} rotation={[Math.PI/2, 0, 0]}>
+            <cylinderGeometry args={[0.020, 0.022, 0.004, 32]} />
+            <meshStandardMaterial color="#8a8a8a" roughness={0.4} metalness={0.5} />
+          </mesh>
+          {/* Center cap */}
+          <mesh position={[0, 0, 0.011]} rotation={[Math.PI/2, 0, 0]}>
+            <cylinderGeometry args={[0.006, 0.006, 0.002, 16]} />
+            <meshStandardMaterial color="#6a6a6a" roughness={0.5} metalness={0.6} />
+          </mesh>
+        </group>
+      </group>
+    );
+  }
+  
+  // Bilock - L-Handled Key Lock for 50 Series Class C
+  // Key cylinder positioned at top of handle, offset to side based on hinge
+  // Left hinge door: key on left side of handle
+  // Right hinge door: key on right side of handle
+  if (lockType === 'bilock') {
+    const keyOffsetX = isLeftHinge ? -0.025 : 0.025; // Key on same side as hinge
+    return (
+      <group position={position}>
+        {/* Handle backing plate - chrome/silver, flush with door surface */}
+        <mesh castShadow position={[0, 0, -0.003]}>
+          <boxGeometry args={[0.055, 0.12, 0.006]} />
+          <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.2} metalness={0.9} />
+        </mesh>
+        {/* Recessed handle area */}
+        <mesh position={[isLeftHinge ? 0.008 : -0.008, 0, 0.001]}>
+          <boxGeometry args={[0.025, 0.08, 0.004]} />
+          <meshStandardMaterial color="#e8e8e8" roughness={0.3} metalness={0.8} />
+        </mesh>
+        {/* L-Handle - vertical grip */}
+        <mesh position={[isLeftHinge ? 0.008 : -0.008, 0, 0.011]} castShadow>
+          <boxGeometry args={[0.018, 0.065, 0.016]} />
+          <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.15} metalness={0.95} />
+        </mesh>
+        {/* Handle rounded edges */}
+        <mesh position={[isLeftHinge ? 0.008 : -0.008, 0.035, 0.011]} rotation={[0, 0, Math.PI/2]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.018, 12]} />
+          <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.15} metalness={0.95} />
+        </mesh>
+        <mesh position={[isLeftHinge ? 0.008 : -0.008, -0.035, 0.011]} rotation={[0, 0, Math.PI/2]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.018, 12]} />
+          <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.15} metalness={0.95} />
+        </mesh>
+        {/* Key cylinder housing - at top, offset to side */}
+        <mesh position={[keyOffsetX, 0.025, 0.003]} rotation={[Math.PI/2, 0, 0]}>
+          <cylinderGeometry args={[0.012, 0.012, 0.012, 16]} />
+          <meshStandardMaterial color="#2a2a2a" roughness={0.4} metalness={0.6} />
+        </mesh>
+        {/* Key cylinder face */}
+        <mesh position={[keyOffsetX, 0.025, 0.010]} rotation={[Math.PI/2, 0, 0]}>
+          <cylinderGeometry args={[0.008, 0.008, 0.003, 16]} />
+          <meshStandardMaterial color={COLORS.STEEL_GREY} roughness={0.3} metalness={0.7} />
+        </mesh>
+        {/* Key slot */}
+        <mesh position={[keyOffsetX, 0.025, 0.013]}>
+          <boxGeometry args={[0.002, 0.008, 0.001]} />
+          <meshStandardMaterial color="#000000" />
+        </mesh>
+      </group>
+    );
+  }
   
   if (lockType === 'combination') {
     // Combination Lock - 4 tumbler style, same height as standard (0.09)
@@ -1238,23 +1563,32 @@ const Series10Rack = ({
   const frontDoorType = config.selections['front-door'] || 'door-perf-steel';
   const rearDoorType = config.selections['rear-door'] || frontDoorType;
   const lockTypeSelection = config.selections['lock'] || 'lock-key-standard';
-  const lockType: 'standard' | 'combination' | 'digital' = 
-    lockTypeSelection === 'lock-combo-standard' || lockTypeSelection === 'lock-combo-class-b' ? 'combination' :
+  // Lock type mapping for different lock options
+  const lockType: 'standard' | 'combination' | 'digital' | 'kaba-x10' | 'bilock' = 
+    lockTypeSelection === 'lock-combo-standard' ? 'combination' :
+    lockTypeSelection === 'lock-kaba-x10-class-b' ? 'kaba-x10' : // KABA X10 round dial lock
+    lockTypeSelection === 'lock-bilock-class-c' ? 'bilock' : // L-Handled Bilock
     lockTypeSelection === 'lock-digital' ? 'digital' : 'standard';
   const lockQty = Number(config.selections['lock-qty']) || 1;
   const hasRearLock = lockQty >= 2;
-  const doorVariant: 'perforated' | 'solid' | 'polycarbonate' =
-    frontDoorType === 'door-polycarbonate'
+  // Determine door variant based on selection
+  // 50 Series perforated doors use 'perforated-50' for half-perforated/half-solid design
+  const doorVariant: 'perforated' | 'solid' | 'polycarbonate' | 'perforated-50' =
+    frontDoorType === 'door-polycarbonate' || frontDoorType === 'door-polycarbonate-50'
       ? 'polycarbonate'
-      : frontDoorType === 'door-solid-steel'
+      : frontDoorType === 'door-solid-steel' || frontDoorType === 'door-solid-steel-50'
         ? 'solid'
-        : 'perforated';
-  const rearVariant: 'perforated' | 'solid' | 'polycarbonate' =
-    rearDoorType === 'door-polycarbonate'
+        : frontDoorType === 'door-perf-steel-50'
+          ? 'perforated-50'
+          : 'perforated';
+  const rearVariant: 'perforated' | 'solid' | 'polycarbonate' | 'perforated-50' =
+    rearDoorType === 'door-polycarbonate' || rearDoorType === 'door-polycarbonate-50'
       ? 'polycarbonate'
-      : rearDoorType === 'door-solid-steel'
+      : rearDoorType === 'door-solid-steel' || rearDoorType === 'door-solid-steel-50'
         ? 'solid'
-        : 'perforated';
+        : rearDoorType === 'door-perf-steel-50'
+          ? 'perforated-50'
+          : 'perforated';
   
   // Hinge side (left or right hand)
   const hingeSide = config.selections['hinge-side'] || 'hinge-left';
@@ -1286,11 +1620,23 @@ const Series10Rack = ({
   const hasStabiliser = (accessories['acc-stabiliser'] || 0) > 0;
   const hasBayingKit = (accessories['acc-baying-kit'] || 0) > 0;
   
-  const baseHeight = hasCastors ? 0.06 : 0.04;
+  // 50 Series specific accessories
+  const hasCableManagement50 = (accessories['acc-cable-management-50'] || 0) > 0;
+  const hasPlinth50 = (accessories['acc-plinth-50'] || 0) > 0;
+  const hasFanTop50 = (accessories['acc-fan-top-50'] || 0) > 0;
+  const hasDirectionalFanTray50 = (accessories['acc-directional-fan-tray-50'] || 0) > 0;
+  const hasColdAisleContainment = (accessories['acc-air-containment-cold-50'] || 0) > 0;
+  const hasHotAisleContainment = (accessories['acc-air-containment-hot-50'] || 0) > 0;
+  const hasPDUSinglePhase50 = (accessories['acc-pdu-single-phase-50'] || 0) > 0;
+  const hasPDUThreePhase50 = (accessories['acc-pdu-three-phase-50'] || 0) > 0;
+  const hasDataSecurityCage = (accessories['acc-data-security-cage'] || 0) > 0;
+  
+  const baseHeight = hasCastors ? 0.06 : (hasPlinth50 ? 0.08 : 0.04);
   const frameColor = resolveSelectedColour(product, config.selections, 'frame-colour', COLORS.MANNEX_BLACK);
   const doorColor = resolveSelectedColour(product, config.selections, 'door-colour', COLORS.MANNEX_BLACK);
   const sidePanelSelection = config.selections['side-panels'] || 'panel-solid-lockable';
   const showSidePanels = sidePanelSelection !== 'panel-none';
+  const isDiscreteVented = sidePanelSelection === 'panel-discrete-vented-50';
   
   return (
     <group position={[0, height/2 + baseHeight, 0]}>
@@ -1391,15 +1737,16 @@ const Series10Rack = ({
       </group>
       
       {/* Front Door - Perforated or Solid */}
-      {/* Door pivots at hinge edge, swings outward from front face */}
+      {/* Door pivots at hinge edge, moved forward to allow 180° swing without hitting cabinet */}
       <group 
         position={[
           isLeftHinge ? (-width/2 + frameThickness) : (width/2 - frameThickness), 
           0, 
-          depth/2 - frameThickness/4
+          depth/2 + panelThickness/2
         ]}
       >
-        <group rotation={[0, doorsOpen ? (isLeftHinge ? -Math.PI/2 : Math.PI/2) : 0, 0]}>
+        {/* 180° opening access - door swings fully open alongside cabinet */}
+        <group rotation={[0, doorsOpen ? (isLeftHinge ? -Math.PI : Math.PI) : 0, 0]}>
           <group position={[isLeftHinge ? doorWidth/2 : -doorWidth/2, 0, 0]}>
             <DoorPanel
               width={doorWidth}
@@ -1407,9 +1754,10 @@ const Series10Rack = ({
               depth={panelThickness}
               variant={doorVariant}
               frontColor={doorColor}
+              isRightHinged={!isLeftHinge}
             />
             {/* Door Lock - on opposite side of hinge */}
-            <DoorLock position={[isLeftHinge ? (doorWidth/2 - 0.05) : (-doorWidth/2 + 0.05), 0, panelThickness/2 + 0.01]} lockType={lockType} />
+            <DoorLock position={[isLeftHinge ? (doorWidth/2 - 0.05) : (-doorWidth/2 + 0.05), 0, panelThickness/2 + 0.01]} lockType={lockType} isLeftHinge={isLeftHinge} />
             {doorVariant !== 'solid' && (
               <DoorNotch
                 position={[
@@ -1437,15 +1785,16 @@ const Series10Rack = ({
       </group>
       
       {/* Rear Door - matches selected rear door type */}
-      {/* Rear door hinge is on opposite side from front door */}
+      {/* Rear door pivots forward, allowing 180° swing */}
       <group 
         position={[
           isLeftHinge ? (width/2 - frameThickness) : (-width/2 + frameThickness), 
           0, 
-          -depth/2 + frameThickness/2
+          -depth/2 - panelThickness/2
         ]}
       >
-        <group rotation={[0, doorsOpen ? (isLeftHinge ? Math.PI/2 : -Math.PI/2) : 0, 0]}>
+        {/* 180° opening access - door swings fully open alongside cabinet */}
+        <group rotation={[0, doorsOpen ? (isLeftHinge ? Math.PI : -Math.PI) : 0, 0]}>
           <group position={[isLeftHinge ? -doorWidth/2 : doorWidth/2, 0, 0]}>
             <DoorPanel
               width={doorWidth}
@@ -1453,11 +1802,12 @@ const Series10Rack = ({
               depth={panelThickness}
               variant={rearVariant}
               frontColor={doorColor}
+              isRightHinged={isLeftHinge}
             />
             {/* Rear Door Lock - only when lock qty >= 2 */}
             {hasRearLock && (
               <>
-                <DoorLock position={[isLeftHinge ? (-doorWidth/2 + 0.05) : (doorWidth/2 - 0.05), 0, -panelThickness/2 - 0.01]} lockType={lockType} />
+                <DoorLock position={[isLeftHinge ? (-doorWidth/2 + 0.05) : (doorWidth/2 - 0.05), 0, -panelThickness/2 - 0.01]} lockType={lockType} isLeftHinge={!isLeftHinge} />
                 {rearVariant !== 'solid' && (
                   <DoorNotch position={[isLeftHinge ? (-doorWidth/2 + 0.05) : (doorWidth/2 - 0.05), DOOR_NOTCH_OFFSET_Y, -panelThickness/2 - 0.003]} color={doorColor} doorHeight={doorHeight} />
                 )}
@@ -1467,15 +1817,24 @@ const Series10Rack = ({
         </group>
       </group>
       
-      {/* Side Panels - Solid Steel */}
+      {/* Side Panels - Solid or Discrete Ventilated */}
       {showSidePanels && [-1, 1].map((side, i) => (
         <group key={`side-${i}`} position={[side * (width/2 - 0.001), 0, 0]} rotation={[0, Math.PI/2, 0]}>
-          <SolidPanel 
-            width={depth - frameThickness * 2 - 0.01} 
-            height={height - frameThickness * 2 - 0.01}
-            depth={panelThickness}
-            color={frameColor}
-          />
+          {isDiscreteVented ? (
+            <DiscreteVentilatedPanel 
+              width={depth - frameThickness * 2 - 0.01} 
+              height={height - frameThickness * 2 - 0.01}
+              depth={panelThickness}
+              color={frameColor}
+            />
+          ) : (
+            <SolidPanel 
+              width={depth - frameThickness * 2 - 0.01} 
+              height={height - frameThickness * 2 - 0.01}
+              depth={panelThickness}
+              color={frameColor}
+            />
+          )}
         </group>
       ))}
       
@@ -1502,6 +1861,72 @@ const Series10Rack = ({
         ruCount={ruHeight}
         position={[RACK_19_INCH_MM/2000 + 0.01, 0, -depth/2 + 0.08]}
       />
+      
+      {/* ============ STANDARD INCLUSIONS (visible when doors open) ============ */}
+      
+      {/* 2× Cable Trays - horizontal trays at top and bottom */}
+      {/* Top Cable Tray */}
+      <group position={[0, height/2 - frameThickness - 0.06, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[width - frameThickness * 3, 0.003, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.3} />
+        </mesh>
+        {/* Tray side rails */}
+        <mesh position={[-width/2 + frameThickness * 1.8, 0.015, 0]}>
+          <boxGeometry args={[0.02, 0.03, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+        </mesh>
+        <mesh position={[width/2 - frameThickness * 1.8, 0.015, 0]}>
+          <boxGeometry args={[0.02, 0.03, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+        </mesh>
+      </group>
+      {/* Bottom Cable Tray */}
+      <group position={[0, -height/2 + frameThickness + 0.06, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[width - frameThickness * 3, 0.003, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.3} />
+        </mesh>
+        {/* Tray side rails */}
+        <mesh position={[-width/2 + frameThickness * 1.8, 0.015, 0]}>
+          <boxGeometry args={[0.02, 0.03, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+        </mesh>
+        <mesh position={[width/2 - frameThickness * 1.8, 0.015, 0]}>
+          <boxGeometry args={[0.02, 0.03, depth - frameThickness * 3]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+        </mesh>
+      </group>
+      
+      {/* Security Cable Baffle Kits - vertical baffles for cable security */}
+      {/* Left side baffle */}
+      <group position={[-width/2 + frameThickness + 0.03, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.002, height - frameThickness * 3, depth * 0.6]} />
+          <meshStandardMaterial color={frameColor} roughness={0.8} metalness={0.2} transparent opacity={0.8} />
+        </mesh>
+        {/* Baffle mounting brackets */}
+        {[-height/3, 0, height/3].map((y, i) => (
+          <mesh key={`left-baffle-bracket-${i}`} position={[0.01, y, 0]}>
+            <boxGeometry args={[0.02, 0.04, 0.04]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+        ))}
+      </group>
+      {/* Right side baffle */}
+      <group position={[width/2 - frameThickness - 0.03, 0, 0]}>
+        <mesh castShadow>
+          <boxGeometry args={[0.002, height - frameThickness * 3, depth * 0.6]} />
+          <meshStandardMaterial color={frameColor} roughness={0.8} metalness={0.2} transparent opacity={0.8} />
+        </mesh>
+        {/* Baffle mounting brackets */}
+        {[-height/3, 0, height/3].map((y, i) => (
+          <mesh key={`right-baffle-bracket-${i}`} position={[-0.01, y, 0]}>
+            <boxGeometry args={[0.02, 0.04, 0.04]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+        ))}
+      </group>
       
       {/* Levelling Feet or Castors */}
       {hasCastors ? (
@@ -1543,10 +1968,11 @@ const Series10Rack = ({
         </group>
       )}
 
-      {/* Fixed Shelves - stacked at RU positions from bottom */}
+      {/* Fixed Shelves - evenly distributed inside cabinet */}
       {fixedShelfCount > 0 && Array.from({ length: fixedShelfCount }).map((_, i) => {
-        const ruPosition = 5 + i * 8; // Start at RU 5, space 8 RU apart
-        const yPos = -height/2 + frameThickness + (ruPosition * RU_HEIGHT_MM / 1000);
+        const usableHeight = height - frameThickness * 2;
+        const spacing = usableHeight / (fixedShelfCount + 1);
+        const yPos = -height/2 + frameThickness + spacing * (i + 1);
         return (
           <group key={`fixed-shelf-${i}`} position={[0, yPos, 0]}>
             <FixedShelf depth={depth} color={frameColor} />
@@ -1554,10 +1980,12 @@ const Series10Rack = ({
         );
       })}
 
-      {/* Sliding Shelves - stacked at RU positions, extend when doors open */}
+      {/* Sliding Shelves - evenly distributed, offset from fixed shelves */}
       {slidingShelfCount > 0 && Array.from({ length: slidingShelfCount }).map((_, i) => {
-        const ruPosition = 10 + i * 8; // Start at RU 10, space 8 RU apart
-        const yPos = -height/2 + frameThickness + (ruPosition * RU_HEIGHT_MM / 1000);
+        const usableHeight = height - frameThickness * 2;
+        const spacing = usableHeight / (slidingShelfCount + 1);
+        const offset = fixedShelfCount > 0 ? spacing / 2 : 0;
+        const yPos = -height/2 + frameThickness + spacing * (i + 1) - offset;
         return (
           <group key={`sliding-shelf-${i}`} position={[0, yPos, 0]}>
             <SlidingShelf depth={depth} extended={doorsOpen} color={frameColor} />
@@ -1614,6 +2042,303 @@ const Series10Rack = ({
         </group>
       )}
       
+      {/* ============ 50 SERIES ACCESSORIES ============ */}
+      
+      {/* Cable Management System - vertical cable organizers on both sides */}
+      {hasCableManagement50 && (
+        <group>
+          {/* Left cable management channel */}
+          <mesh position={[-width/2 + frameThickness + 0.04, 0, 0]} castShadow>
+            <boxGeometry args={[0.06, height - frameThickness * 3, 0.08]} />
+            <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.3} />
+          </mesh>
+          {/* Right cable management channel */}
+          <mesh position={[width/2 - frameThickness - 0.04, 0, 0]} castShadow>
+            <boxGeometry args={[0.06, height - frameThickness * 3, 0.08]} />
+            <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.3} />
+          </mesh>
+        </group>
+      )}
+      
+      {/* Plinth with Levelling Feet - base platform */}
+      {hasPlinth50 && (
+        <group position={[0, -height/2 - 0.04, 0]}>
+          {/* Plinth base */}
+          <mesh castShadow>
+            <boxGeometry args={[width, 0.08, depth]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Ventilation slots on front */}
+          {[-0.15, 0, 0.15].map((x, i) => (
+            <mesh key={`plinth-vent-${i}`} position={[x, 0, depth/2 + 0.001]}>
+              <boxGeometry args={[0.08, 0.03, 0.002]} />
+              <meshStandardMaterial color="#1a1a1a" roughness={0.9} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      
+      {/* Fan Top (Thermostatic Control) - roof mounted fan unit */}
+      {hasFanTop50 && (
+        <group position={[0, height/2 + 0.025, 0]}>
+          {/* Fan housing - sits partially into top */}
+          <mesh castShadow>
+            <boxGeometry args={[width * 0.8, 0.05, depth * 0.6]} />
+            <meshStandardMaterial color="#2a2a2a" roughness={0.5} metalness={0.5} />
+          </mesh>
+          {/* Fan grilles - flat horizontal circles recessed into housing */}
+          {[-0.12, 0.12].map((x, i) => (
+            <group key={`fan-assembly-${i}`} position={[x, 0.024, 0]}>
+              {/* Outer grille ring */}
+              <mesh rotation={[-Math.PI/2, 0, 0]}>
+                <ringGeometry args={[0.055, 0.06, 32]} />
+                <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+              </mesh>
+              {/* Inner fan disc */}
+              <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.001, 0]}>
+                <circleGeometry args={[0.055, 32]} />
+                <meshStandardMaterial color="#222" roughness={0.9} />
+              </mesh>
+              {/* Center hub */}
+              <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.002, 0]}>
+                <circleGeometry args={[0.015, 16]} />
+                <meshStandardMaterial color="#333" roughness={0.5} metalness={0.5} />
+              </mesh>
+            </group>
+          ))}
+          {/* Control panel indicator */}
+          <mesh position={[width * 0.3, 0.026, 0]}>
+            <boxGeometry args={[0.04, 0.002, 0.025]} />
+            <meshStandardMaterial color="#0a5a0a" emissive="#0f0" emissiveIntensity={0.3} />
+          </mesh>
+        </group>
+      )}
+      
+      {/* Directional Fan Tray - internal cooling */}
+      {hasDirectionalFanTray50 && (
+        <group position={[0, height/4, -depth/4]}>
+          {/* Fan tray housing */}
+          <mesh castShadow>
+            <boxGeometry args={[width * 0.7, 0.05, 0.12]} />
+            <meshStandardMaterial color="#2a2a2a" roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Fans - flat horizontal circles */}
+          {[-0.15, 0, 0.15].map((x, i) => (
+            <group key={`dir-fan-${i}`} position={[x, 0.026, 0]}>
+              {/* Outer grille ring */}
+              <mesh rotation={[-Math.PI/2, 0, 0]}>
+                <ringGeometry args={[0.032, 0.035, 24]} />
+                <meshStandardMaterial color="#1a1a1a" roughness={0.8} />
+              </mesh>
+              {/* Inner fan disc */}
+              <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.001, 0]}>
+                <circleGeometry args={[0.032, 24]} />
+                <meshStandardMaterial color="#222" roughness={0.9} />
+              </mesh>
+              {/* Center hub */}
+              <mesh rotation={[-Math.PI/2, 0, 0]} position={[0, 0.002, 0]}>
+                <circleGeometry args={[0.008, 12]} />
+                <meshStandardMaterial color="#333" roughness={0.5} metalness={0.5} />
+              </mesh>
+            </group>
+          ))}
+        </group>
+      )}
+      
+      {/* Air Containment System - Cold Aisle - funnel above unit (front) */}
+      {hasColdAisleContainment && (
+        <group position={[0, height/2 + 0.15, depth * 0.3]}>
+          {/* Funnel base (wider) */}
+          <mesh position={[0, -0.1, 0]}>
+            <boxGeometry args={[width * 0.9, 0.02, depth * 0.7]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Funnel top (narrower) */}
+          <mesh position={[0, 0.1, 0]}>
+            <boxGeometry args={[width * 0.5, 0.02, depth * 0.4]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Front angled panel */}
+          <mesh position={[0, 0, depth * 0.25]} rotation={[0.3, 0, 0]}>
+            <boxGeometry args={[width * 0.88, 0.22, 0.003]} />
+            <meshPhysicalMaterial 
+              color="#88ccff" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Back angled panel */}
+          <mesh position={[0, 0, -depth * 0.25]} rotation={[-0.3, 0, 0]}>
+            <boxGeometry args={[width * 0.88, 0.22, 0.003]} />
+            <meshPhysicalMaterial 
+              color="#88ccff" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Left angled panel */}
+          <mesh position={[-width * 0.35, 0, 0]} rotation={[0, 0, -0.3]}>
+            <boxGeometry args={[0.003, 0.22, depth * 0.68]} />
+            <meshPhysicalMaterial 
+              color="#88ccff" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Right angled panel */}
+          <mesh position={[width * 0.35, 0, 0]} rotation={[0, 0, 0.3]}>
+            <boxGeometry args={[0.003, 0.22, depth * 0.68]} />
+            <meshPhysicalMaterial 
+              color="#88ccff" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+        </group>
+      )}
+      
+      {/* Air Containment System - Hot Aisle - funnel above unit (rear) */}
+      {hasHotAisleContainment && (
+        <group position={[0, height/2 + 0.15, -depth * 0.3]}>
+          {/* Funnel base (wider) */}
+          <mesh position={[0, -0.1, 0]}>
+            <boxGeometry args={[width * 0.9, 0.02, depth * 0.7]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Funnel top (narrower) */}
+          <mesh position={[0, 0.1, 0]}>
+            <boxGeometry args={[width * 0.5, 0.02, depth * 0.4]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} />
+          </mesh>
+          {/* Front angled panel */}
+          <mesh position={[0, 0, depth * 0.25]} rotation={[0.3, 0, 0]}>
+            <boxGeometry args={[width * 0.88, 0.22, 0.003]} />
+            <meshPhysicalMaterial 
+              color="#ff6644" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Back angled panel */}
+          <mesh position={[0, 0, -depth * 0.25]} rotation={[-0.3, 0, 0]}>
+            <boxGeometry args={[width * 0.88, 0.22, 0.003]} />
+            <meshPhysicalMaterial 
+              color="#ff6644" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Left angled panel */}
+          <mesh position={[-width * 0.35, 0, 0]} rotation={[0, 0, -0.3]}>
+            <boxGeometry args={[0.003, 0.22, depth * 0.68]} />
+            <meshPhysicalMaterial 
+              color="#ff6644" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+          {/* Right angled panel */}
+          <mesh position={[width * 0.35, 0, 0]} rotation={[0, 0, 0.3]}>
+            <boxGeometry args={[0.003, 0.22, depth * 0.68]} />
+            <meshPhysicalMaterial 
+              color="#ff6644" 
+              transparent 
+              opacity={0.35} 
+              roughness={0.1}
+              metalness={0.0}
+            />
+          </mesh>
+        </group>
+      )}
+      
+      {/* PDU Single Phase (Tool-less) - vertical mount left rear */}
+      {hasPDUSinglePhase50 && (
+        <group position={[-width/2 + 0.06, 0, -depth/2 + 0.08]} rotation={[0, Math.PI/2, 0]}>
+          {/* PDU body */}
+          <mesh castShadow>
+            <boxGeometry args={[0.05, height * 0.5, 0.04]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.5} metalness={0.4} />
+          </mesh>
+          {/* Outlets */}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <mesh key={`pdu1-outlet-${i}`} position={[0, -height * 0.2 + i * 0.06, 0.021]}>
+              <boxGeometry args={[0.025, 0.02, 0.002]} />
+              <meshStandardMaterial color="#333" />
+            </mesh>
+          ))}
+          {/* Power indicator */}
+          <mesh position={[0, height * 0.22, 0.021]}>
+            <boxGeometry args={[0.01, 0.01, 0.002]} />
+            <meshStandardMaterial color="#00ff00" emissive="#0f0" emissiveIntensity={0.5} />
+          </mesh>
+        </group>
+      )}
+      
+      {/* PDU Three Phase (Tool-less) - vertical mount right rear */}
+      {hasPDUThreePhase50 && (
+        <group position={[width/2 - 0.06, 0, -depth/2 + 0.08]} rotation={[0, -Math.PI/2, 0]}>
+          {/* PDU body - larger than single phase */}
+          <mesh castShadow>
+            <boxGeometry args={[0.06, height * 0.7, 0.05]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.5} metalness={0.4} />
+          </mesh>
+          {/* Outlets - more outlets */}
+          {Array.from({ length: 12 }).map((_, i) => (
+            <mesh key={`pdu3-outlet-${i}`} position={[0, -height * 0.3 + i * 0.045, 0.026]}>
+              <boxGeometry args={[0.03, 0.018, 0.002]} />
+              <meshStandardMaterial color="#333" />
+            </mesh>
+          ))}
+          {/* Power indicators - 3 phase */}
+          {[-0.012, 0, 0.012].map((x, i) => (
+            <mesh key={`pdu3-led-${i}`} position={[x, height * 0.32, 0.026]}>
+              <boxGeometry args={[0.008, 0.008, 0.002]} />
+              <meshStandardMaterial color={['#ff0000', '#ffff00', '#0000ff'][i]} emissive={['#f00', '#ff0', '#00f'][i]} emissiveIntensity={0.5} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      
+      {/* Data Security Cage - internal locked enclosure */}
+      {hasDataSecurityCage && (
+        <group position={[0, 0, 0]}>
+          {/* Cage frame - internal secure compartment */}
+          <mesh castShadow>
+            <boxGeometry args={[width * 0.85, height * 0.4, depth * 0.6]} />
+            <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.4} transparent opacity={0.3} />
+          </mesh>
+          {/* Cage door (mesh) */}
+          <mesh position={[0, 0, depth * 0.3 + 0.01]}>
+            <boxGeometry args={[width * 0.8, height * 0.38, 0.003]} />
+            <meshStandardMaterial color={frameColor} roughness={0.7} metalness={0.3} transparent opacity={0.5} />
+          </mesh>
+          {/* Cage lock */}
+          <mesh position={[width * 0.35, 0, depth * 0.3 + 0.015]}>
+            <boxGeometry args={[0.03, 0.06, 0.01]} />
+            <meshStandardMaterial color="#333" roughness={0.4} metalness={0.6} />
+          </mesh>
+          {/* Security label */}
+          <mesh position={[0, height * 0.18, depth * 0.3 + 0.015]}>
+            <boxGeometry args={[0.1, 0.02, 0.001]} />
+            <meshStandardMaterial color="#cc0000" />
+          </mesh>
+        </group>
+      )}
+      
       {/* Argent Logo on front (subtle) */}
       <mesh position={[0, height/2 - 0.06, depth/2 + 0.003]}>
         <planeGeometry args={[0.08, 0.015]} />
@@ -1648,8 +2373,11 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
   const frontDoorType = config.selections['front-door'] || 'door-perf-steel';
   const rearDoorType = config.selections['rear-door'] || frontDoorType;
   const lockTypeSelection = config.selections['lock'] || 'lock-key-standard';
-  const lockType: 'standard' | 'combination' | 'digital' = 
-    lockTypeSelection === 'lock-combo-standard' || lockTypeSelection === 'lock-combo-class-b' ? 'combination' :
+  // Lock type mapping for different lock options
+  const lockType: 'standard' | 'combination' | 'digital' | 'kaba-x10' | 'bilock' = 
+    lockTypeSelection === 'lock-combo-standard' ? 'combination' :
+    lockTypeSelection === 'lock-kaba-x10-class-b' ? 'kaba-x10' : // KABA X10 round dial lock
+    lockTypeSelection === 'lock-bilock-class-c' ? 'bilock' : // L-Handled Bilock
     lockTypeSelection === 'lock-digital' ? 'digital' : 'standard';
   const lockQty = Number(config.selections['lock-qty']) || 1;
   const hasRearLock = lockQty >= 2;
@@ -1820,7 +2548,7 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
                 variant={frontVariant}
                 frontColor={doorColor}
               />
-              <DoorLock position={[isLeftHinge ? (doorWidth/2 - 0.05) : (-doorWidth/2 + 0.05), 0, panelThickness/2 + 0.01]} lockType={lockType} />
+              <DoorLock position={[isLeftHinge ? (doorWidth/2 - 0.05) : (-doorWidth/2 + 0.05), 0, panelThickness/2 + 0.01]} lockType={lockType} isLeftHinge={isLeftHinge} />
               {frontVariant !== 'solid' && (
                 <DoorNotch
                   position={[
@@ -2094,10 +2822,11 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
         </group>
       )}
 
-      {/* Fixed Shelves - stacked at RU positions from bottom */}
+      {/* Fixed Shelves - evenly distributed inside cabinet */}
       {fixedShelfCount > 0 && Array.from({ length: fixedShelfCount }).map((_, i) => {
-        const ruPosition = 5 + i * 8; // Start at RU 5, space 8 RU apart
-        const yPos = -height/2 + frameThickness + (ruPosition * RU_HEIGHT_MM / 1000);
+        const usableHeight = height - frameThickness * 2;
+        const spacing = usableHeight / (fixedShelfCount + 1);
+        const yPos = -height/2 + frameThickness + spacing * (i + 1);
         return (
           <group key={`fixed-shelf-${i}`} position={[0, yPos, 0]}>
             <FixedShelf depth={depth} color={frameColor} />
@@ -2105,10 +2834,12 @@ const Series25Rack = ({ config, product, doorsOpen = false }: { config: Configur
         );
       })}
 
-      {/* Sliding Shelves - stacked at RU positions, extend when doors open */}
+      {/* Sliding Shelves - evenly distributed, offset from fixed shelves */}
       {slidingShelfCount > 0 && Array.from({ length: slidingShelfCount }).map((_, i) => {
-        const ruPosition = 10 + i * 8; // Start at RU 10, space 8 RU apart
-        const yPos = -height/2 + frameThickness + (ruPosition * RU_HEIGHT_MM / 1000);
+        const usableHeight = height - frameThickness * 2;
+        const spacing = usableHeight / (slidingShelfCount + 1);
+        const offset = fixedShelfCount > 0 ? spacing / 2 : 0;
+        const yPos = -height/2 + frameThickness + spacing * (i + 1) - offset;
         return (
           <group key={`sliding-shelf-${i}`} position={[0, yPos, 0]}>
             <SlidingShelf depth={depth} extended={doorsOpen} color={frameColor} />
@@ -3356,66 +4087,443 @@ const Series40Rack = ({ config, product, doorsOpen = false }: { config: Configur
  * Enhanced security features, heavier construction
  */
 const Series50Rack = ({ config, product, doorsOpen = false }: { config: ConfigurationState; product: ProductDefinition; doorsOpen?: boolean }) => {
-  const securityClass = config.selections['security-class'];
-  const isClassC = securityClass === 'security-class-c';
-  
   // Use 10 Series base with security enhancements
+  // Security classification is handled in the UI badges, not the 3D model
   return (
     <group>
       <Series10Rack config={config} product={product} doorsOpen={doorsOpen} />
-      {/* Security badge */}
-      <mesh position={[0, 1.0, 0.35]}>
-        <planeGeometry args={[0.1, 0.03]} />
-        <meshBasicMaterial color={isClassC ? '#dc2626' : '#f59e0b'} />
-      </mesh>
     </group>
   );
 };
 
 /**
- * V50 Data Vault - In-rack security enclosure
- */
+* V50 Data Vault - In-rack security enclosure
+* Two-part construction:
+* 1. OUTER SHELL - 90% depth, SOLID top/sides WITH perforated grills, NO cavity cutout
+* 2. INNER MODULE - Slides in/out, has TOP cavity cutout, radiused slot cutouts on sides
+* Doors: Left/right perforated mesh (true cut-through), solid center for lock
+* When "open" = module slides forward + doors flip down 180°
+*/
 const V50DataVault = ({ config, product, doorsOpen = false }: { config: ConfigurationState; product: ProductDefinition; doorsOpen?: boolean }) => {
+  // Parse RU height (2, 4, or 6 RU)
   const ruHeightMatch = String(config.selections['ru-height'] || 'ru-4').match(/ru-(\d+)/);
   const ruHeight = ruHeightMatch ? parseInt(ruHeightMatch[1]) : 4;
   
+  // Parse depth selection (400-700mm adjustable)
+  const depthMatch = String(config.selections['depth'] || 'depth-500').match(/depth-(\d+)/);
+  const depthMm = depthMatch ? parseInt(depthMatch[1]) : 500;
+  
+  // Convert to meters
   const height = (ruHeight * RU_HEIGHT_MM) / 1000;
-  const width = RACK_19_INCH_MM / 1000; // Standard 19" width
-  const depth = 0.4; // 400mm depth
+  const width = 0.493; // 493mm full width
+  const depth = depthMm / 1000;
+  const panelThickness = 0.003;
+  
+  // OUTER SHELL - 90% of depth, terminates just before doors
+  const shellDepth = depth * 0.90;
+  const shellOffset = -(depth - shellDepth) / 2; // Center shell relative to full depth
+  
+  // Top grill dimensions for outer shell
+  const topGrillWidth = width * 0.28; // Each grill section width
+  const topGrillDepth = shellDepth * 0.70; // Length of grill
+  const topGrillSpacing = width * 0.15; // Gap between the two grills
+  
+  // Side grill dimensions for outer shell
+  const sideGrillHeight = height * 0.50; // Height of side grill area
+  const sideGrillDepth = shellDepth * 0.60; // Length of side grill
+  
+  // INNER MODULE - fits inside shell, slides out, has top cavity
+  const moduleWidth = width * 0.96; // Tight fit inside shell (tighter)
+  const topCavityHeight = 0.015; // Height of inner shell top cavity
+  const moduleHeight = height - topCavityHeight - panelThickness;
+  const moduleDepth = depth; // Full depth (doors extend past shell)
+  const innerCavityWidth = moduleWidth * 0.80; // Width of cavity cutout in inner shell top
+  
+  // Door dimensions
+  const doorLipDepth = 0.018;
+  const doorLipThickness = 0.004;
+  const doorFaceThickness = 0.003;
+  
+  // Slide distance when "open"
+  const slideDistance = doorsOpen ? depth * 0.35 : 0;
+  
+  // Inner shell side cutouts - positioned at TOP and BOTTOM (30% from edges)
+  const sideCutoutWidth = moduleDepth * 0.85; // 85% of depth for horizontal span
+  const sideCutoutHeight = 0.010; // Height of each cutout
+  const sideCutoutRadius = sideCutoutHeight / 2;
+  
   const frameColor = resolveSelectedColour(product, config.selections, 'frame-colour', COLORS.MANNEX_BLACK);
-  const doorColor = resolveSelectedColour(product, config.selections, 'door-colour', COLORS.MANNEX_BLACK);
+  const panelColor = COLORS.MANNEX_BLACK;
   
   return (
     <group position={[0, height/2 + 0.02, 0]}>
-      {/* Main enclosure body */}
-      <mesh castShadow>
-        <boxGeometry args={[width, height, depth]} />
+      {/* ============================================================ */}
+      {/* OUTER SHELL - 90% depth                                      */}
+      {/* Solid top/sides WITH perforated grill sections               */}
+      {/* NO cavity cutout in outer shell                              */}
+      {/* ============================================================ */}
+      
+      {/* Shell bottom panel - solid */}
+      <mesh position={[0, -height/2 + panelThickness/2, shellOffset]} castShadow>
+        <boxGeometry args={[width, panelThickness, shellDepth]} />
         <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
       </mesh>
       
-      {/* Front door - perforated - hinged on left, swings outward */}
-      <group position={[-width/2 + 0.01, 0, depth/2]}>
-        <group rotation={[0, doorsOpen ? -Math.PI/2 : 0, 0]}>
-          <group position={[(width - 0.02) / 2, 0, 0]}>
-          <DoorPanel
-            width={width - 0.02}
-            height={height - 0.02}
-            depth={0.002}
-            variant={'perforated'}
-            frontColor={doorColor}
-          />
-            <DoorLock position={[(width - 0.02) / 2 - 0.03, 0, 0.01]} />
+      {/* Shell top panel - SOLID (no cavity cutout) */}
+      <mesh position={[0, height/2 - panelThickness/2, shellOffset]} castShadow>
+        <boxGeometry args={[width, panelThickness, shellDepth]} />
+        <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+      </mesh>
+      
+      {/* TOP GRILLS - Two rectangular perforated sections on outer shell top */}
+      {/* Left grill section */}
+      <group position={[-topGrillSpacing/2 - topGrillWidth/2, height/2, shellOffset]}>
+        {Array.from({ length: Math.floor(topGrillDepth / 0.012) }).map((_, row) =>
+          Array.from({ length: Math.floor(topGrillWidth / 0.012) }).map((_, col) => (
+            <mesh key={`top-grill-l-${row}-${col}`}
+              position={[-topGrillWidth/2 + 0.006 + col * 0.012, 0.001, -topGrillDepth/2 + 0.006 + row * 0.012]}
+              rotation={[0, Math.PI/4, 0]}>
+              <boxGeometry args={[0.008, 0.002, 0.003]} />
+              <meshStandardMaterial color="#0a0a0a" />
+            </mesh>
+          ))
+        )}
+      </group>
+      {/* Right grill section */}
+      <group position={[topGrillSpacing/2 + topGrillWidth/2, height/2, shellOffset]}>
+        {Array.from({ length: Math.floor(topGrillDepth / 0.012) }).map((_, row) =>
+          Array.from({ length: Math.floor(topGrillWidth / 0.012) }).map((_, col) => (
+            <mesh key={`top-grill-r-${row}-${col}`}
+              position={[-topGrillWidth/2 + 0.006 + col * 0.012, 0.001, -topGrillDepth/2 + 0.006 + row * 0.012]}
+              rotation={[0, Math.PI/4, 0]}>
+              <boxGeometry args={[0.008, 0.002, 0.003]} />
+              <meshStandardMaterial color="#0a0a0a" />
+            </mesh>
+          ))
+        )}
+      </group>
+      
+      {/* Shell left side panel - solid */}
+      <mesh position={[-width/2 + panelThickness/2, 0, shellOffset]} castShadow>
+        <boxGeometry args={[panelThickness, height - panelThickness * 2, shellDepth]} />
+        <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+      </mesh>
+      
+      {/* LEFT SIDE GRILL - Perforated section on outer shell left side */}
+      <group position={[-width/2, 0, shellOffset]}>
+        {Array.from({ length: Math.floor(sideGrillHeight / 0.012) }).map((_, row) =>
+          Array.from({ length: Math.floor(sideGrillDepth / 0.012) }).map((_, col) => (
+            <mesh key={`side-grill-l-${row}-${col}`}
+              position={[-0.001, -sideGrillHeight/2 + 0.006 + row * 0.012, -sideGrillDepth/2 + 0.006 + col * 0.012]}
+              rotation={[Math.PI/4, 0, 0]}>
+              <boxGeometry args={[0.002, 0.008, 0.003]} />
+              <meshStandardMaterial color="#0a0a0a" />
+            </mesh>
+          ))
+        )}
+      </group>
+      
+      {/* Shell right side panel - solid */}
+      <mesh position={[width/2 - panelThickness/2, 0, shellOffset]} castShadow>
+        <boxGeometry args={[panelThickness, height - panelThickness * 2, shellDepth]} />
+        <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+      </mesh>
+      
+      {/* RIGHT SIDE GRILL - Perforated section on outer shell right side */}
+      <group position={[width/2, 0, shellOffset]}>
+        {Array.from({ length: Math.floor(sideGrillHeight / 0.012) }).map((_, row) =>
+          Array.from({ length: Math.floor(sideGrillDepth / 0.012) }).map((_, col) => (
+            <mesh key={`side-grill-r-${row}-${col}`}
+              position={[0.001, -sideGrillHeight/2 + 0.006 + row * 0.012, -sideGrillDepth/2 + 0.006 + col * 0.012]}
+              rotation={[Math.PI/4, 0, 0]}>
+              <boxGeometry args={[0.002, 0.008, 0.003]} />
+              <meshStandardMaterial color="#0a0a0a" />
+            </mesh>
+          ))
+        )}
+      </group>
+      
+      {/* ============================================================ */}
+      {/* INNER MODULE - Slides in/out of shell                        */}
+      {/* Has TOP CAVITY CUTOUT                                        */}
+      {/* Has radiused slot cutouts on sides                           */}
+      {/* ============================================================ */}
+      <group position={[0, -topCavityHeight/2, slideDistance]}>
+        {/* Inner module bottom - solid */}
+        <mesh position={[0, -moduleHeight/2 + panelThickness/2, 0]} castShadow>
+          <boxGeometry args={[moduleWidth, panelThickness, moduleDepth]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        
+        {/* Inner module top - WITH CAVITY CUTOUT */}
+        {/* Left portion */}
+        <mesh position={[-(moduleWidth + innerCavityWidth)/4, moduleHeight/2 - panelThickness/2, 0]} castShadow>
+          <boxGeometry args={[(moduleWidth - innerCavityWidth)/2, panelThickness, moduleDepth]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        {/* Right portion */}
+        <mesh position={[(moduleWidth + innerCavityWidth)/4, moduleHeight/2 - panelThickness/2, 0]} castShadow>
+          <boxGeometry args={[(moduleWidth - innerCavityWidth)/2, panelThickness, moduleDepth]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        {/* Front edge */}
+        <mesh position={[0, moduleHeight/2 - panelThickness/2, moduleDepth/2 - 0.015]} castShadow>
+          <boxGeometry args={[innerCavityWidth, panelThickness, 0.030]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        {/* Rear edge */}
+        <mesh position={[0, moduleHeight/2 - panelThickness/2, -moduleDepth/2 + 0.015]} castShadow>
+          <boxGeometry args={[innerCavityWidth, panelThickness, 0.030]} />
+          <meshStandardMaterial color={frameColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        
+        {/* Inner module left side - solid */}
+        <mesh position={[-moduleWidth/2 + panelThickness/2, 0, 0]} castShadow>
+          <boxGeometry args={[panelThickness, moduleHeight - panelThickness * 2, moduleDepth]} />
+          <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        
+        {/* Left side - 2 horizontal radiused slot cutouts at TOP and BOTTOM (30% from edges) */}
+        {/* TOP cutout */}
+        <group position={[-moduleWidth/2, moduleHeight/2 - moduleHeight * 0.30, 0]}>
+          <mesh>
+            <boxGeometry args={[0.008, sideCutoutHeight, sideCutoutWidth - sideCutoutHeight]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, (sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, -(sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+        </group>
+        {/* BOTTOM cutout */}
+        <group position={[-moduleWidth/2, -moduleHeight/2 + moduleHeight * 0.30, 0]}>
+          <mesh>
+            <boxGeometry args={[0.008, sideCutoutHeight, sideCutoutWidth - sideCutoutHeight]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, (sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, -(sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+        </group>
+        
+        {/* Inner module right side - solid */}
+        <mesh position={[moduleWidth/2 - panelThickness/2, 0, 0]} castShadow>
+          <boxGeometry args={[panelThickness, moduleHeight - panelThickness * 2, moduleDepth]} />
+          <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+        </mesh>
+        
+        {/* Right side - 2 horizontal radiused slot cutouts at TOP and BOTTOM (30% from edges) */}
+        {/* TOP cutout */}
+        <group position={[moduleWidth/2, moduleHeight/2 - moduleHeight * 0.30, 0]}>
+          <mesh>
+            <boxGeometry args={[0.008, sideCutoutHeight, sideCutoutWidth - sideCutoutHeight]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, (sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, -(sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+        </group>
+        {/* BOTTOM cutout */}
+        <group position={[moduleWidth/2, -moduleHeight/2 + moduleHeight * 0.30, 0]}>
+          <mesh>
+            <boxGeometry args={[0.008, sideCutoutHeight, sideCutoutWidth - sideCutoutHeight]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, (sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+          <mesh position={[0, 0, -(sideCutoutWidth - sideCutoutHeight)/2]} rotation={[0, 0, Math.PI/2]}>
+            <cylinderGeometry args={[sideCutoutRadius, sideCutoutRadius, 0.008, 16]} />
+            <meshStandardMaterial color="#050505" />
+          </mesh>
+        </group>
+        
+        {/* ============== FRONT CLAMSHELL DOOR ============== */}
+        <group position={[0, -moduleHeight/2, moduleDepth/2]}>
+          <group rotation={[doorsOpen ? Math.PI : 0, 0, 0]}>
+            <group position={[0, moduleHeight/2, 0]}>
+              {/* ONE SOLID DOOR PANEL - full face */}
+              <mesh position={[0, 0, doorFaceThickness/2]} castShadow>
+                <boxGeometry args={[moduleWidth, moduleHeight, doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              
+              {/* Perforations - LEFT side (avoid center lock area) */}
+              {(() => {
+                const holeSpacing = 0.008;
+                const holeRadius = 0.0028;
+                const grillHeight = moduleHeight - 0.040;
+                const lockWidth = moduleWidth * 0.18;
+                const grillWidth = (moduleWidth - lockWidth) / 2 - 0.020;
+                const leftOffset = -moduleWidth/4 - lockWidth/8;
+                return Array.from({ length: Math.floor(grillHeight / holeSpacing) }).map((_, row) =>
+                  Array.from({ length: Math.floor(grillWidth / holeSpacing) }).map((_, col) => (
+                    <mesh key={`hole-fl-${row}-${col}`}
+                      position={[
+                        leftOffset - grillWidth/2 + 0.004 + col * holeSpacing + (row % 2 ? 0.004 : 0),
+                        -grillHeight/2 + 0.004 + row * holeSpacing,
+                        doorFaceThickness + 0.0005
+                      ]}
+                      rotation={[Math.PI/2, 0, 0]}>
+                      <cylinderGeometry args={[holeRadius, holeRadius, doorFaceThickness + 0.002, 8]} />
+                      <meshStandardMaterial color="#030303" roughness={0.95} metalness={0} />
+                    </mesh>
+                  ))
+                );
+              })()}
+              
+              {/* Perforations - RIGHT side (avoid center lock area) */}
+              {(() => {
+                const holeSpacing = 0.008;
+                const holeRadius = 0.0028;
+                const grillHeight = moduleHeight - 0.040;
+                const lockWidth = moduleWidth * 0.18;
+                const grillWidth = (moduleWidth - lockWidth) / 2 - 0.020;
+                const rightOffset = moduleWidth/4 + lockWidth/8;
+                return Array.from({ length: Math.floor(grillHeight / holeSpacing) }).map((_, row) =>
+                  Array.from({ length: Math.floor(grillWidth / holeSpacing) }).map((_, col) => (
+                    <mesh key={`hole-fr-${row}-${col}`}
+                      position={[
+                        rightOffset - grillWidth/2 + 0.004 + col * holeSpacing + (row % 2 ? 0.004 : 0),
+                        -grillHeight/2 + 0.004 + row * holeSpacing,
+                        doorFaceThickness + 0.0005
+                      ]}
+                      rotation={[Math.PI/2, 0, 0]}>
+                      <cylinderGeometry args={[holeRadius, holeRadius, doorFaceThickness + 0.002, 8]} />
+                      <meshStandardMaterial color="#030303" roughness={0.95} metalness={0} />
+                    </mesh>
+                  ))
+                );
+              })()}
+              
+              {/* Clamshell lips (wrap around inner module) */}
+              <mesh position={[0, moduleHeight/2 + doorLipThickness/2, -doorLipDepth/2]} castShadow>
+                <boxGeometry args={[moduleWidth + doorLipThickness * 2, doorLipThickness, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              <mesh position={[-moduleWidth/2 - doorLipThickness/2, 0, -doorLipDepth/2]} castShadow>
+                <boxGeometry args={[doorLipThickness, moduleHeight, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              <mesh position={[moduleWidth/2 + doorLipThickness/2, 0, -doorLipDepth/2]} castShadow>
+                <boxGeometry args={[doorLipThickness, moduleHeight, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              
+              {/* Lock at top center */}
+              <mesh position={[0, moduleHeight/2 - 0.018, doorFaceThickness + 0.002]} rotation={[Math.PI/2, 0, 0]}>
+                <cylinderGeometry args={[0.010, 0.010, 0.004, 16]} />
+                <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.3} metalness={0.8} />
+              </mesh>
+              <mesh position={[0, moduleHeight/2 - 0.018, doorFaceThickness + 0.005]}>
+                <boxGeometry args={[0.003, 0.007, 0.001]} />
+                <meshStandardMaterial color="#111" />
+              </mesh>
+            </group>
+          </group>
+        </group>
+        
+        {/* ============== REAR CLAMSHELL DOOR ============== */}
+        {/* Rear door stays CLOSED */}
+        <group position={[0, -moduleHeight/2, -moduleDepth/2]}>
+          <group rotation={[0, 0, 0]}>
+            <group position={[0, moduleHeight/2, 0]}>
+              {/* ONE SOLID DOOR PANEL - full face */}
+              <mesh position={[0, 0, -doorFaceThickness/2]} castShadow>
+                <boxGeometry args={[moduleWidth, moduleHeight, doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              
+              {/* Perforations - LEFT side */}
+              {(() => {
+                const holeSpacing = 0.008;
+                const holeRadius = 0.0028;
+                const grillHeight = moduleHeight - 0.040;
+                const lockWidth = moduleWidth * 0.18;
+                const grillWidth = (moduleWidth - lockWidth) / 2 - 0.020;
+                const leftOffset = -moduleWidth/4 - lockWidth/8;
+                return Array.from({ length: Math.floor(grillHeight / holeSpacing) }).map((_, row) =>
+                  Array.from({ length: Math.floor(grillWidth / holeSpacing) }).map((_, col) => (
+                    <mesh key={`hole-rl-${row}-${col}`}
+                      position={[
+                        leftOffset - grillWidth/2 + 0.004 + col * holeSpacing + (row % 2 ? 0.004 : 0),
+                        -grillHeight/2 + 0.004 + row * holeSpacing,
+                        -doorFaceThickness - 0.0005
+                      ]}
+                      rotation={[Math.PI/2, 0, 0]}>
+                      <cylinderGeometry args={[holeRadius, holeRadius, doorFaceThickness + 0.002, 8]} />
+                      <meshStandardMaterial color="#030303" roughness={0.95} metalness={0} />
+                    </mesh>
+                  ))
+                );
+              })()}
+              
+              {/* Perforations - RIGHT side */}
+              {(() => {
+                const holeSpacing = 0.008;
+                const holeRadius = 0.0028;
+                const grillHeight = moduleHeight - 0.040;
+                const lockWidth = moduleWidth * 0.18;
+                const grillWidth = (moduleWidth - lockWidth) / 2 - 0.020;
+                const rightOffset = moduleWidth/4 + lockWidth/8;
+                return Array.from({ length: Math.floor(grillHeight / holeSpacing) }).map((_, row) =>
+                  Array.from({ length: Math.floor(grillWidth / holeSpacing) }).map((_, col) => (
+                    <mesh key={`hole-rr-${row}-${col}`}
+                      position={[
+                        rightOffset - grillWidth/2 + 0.004 + col * holeSpacing + (row % 2 ? 0.004 : 0),
+                        -grillHeight/2 + 0.004 + row * holeSpacing,
+                        -doorFaceThickness - 0.0005
+                      ]}
+                      rotation={[Math.PI/2, 0, 0]}>
+                      <cylinderGeometry args={[holeRadius, holeRadius, doorFaceThickness + 0.002, 8]} />
+                      <meshStandardMaterial color="#030303" roughness={0.95} metalness={0} />
+                    </mesh>
+                  ))
+                );
+              })()}
+              
+              {/* Clamshell lips */}
+              <mesh position={[0, moduleHeight/2 + doorLipThickness/2, doorLipDepth/2]} castShadow>
+                <boxGeometry args={[moduleWidth + doorLipThickness * 2, doorLipThickness, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              <mesh position={[-moduleWidth/2 - doorLipThickness/2, 0, doorLipDepth/2]} castShadow>
+                <boxGeometry args={[doorLipThickness, moduleHeight, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              <mesh position={[moduleWidth/2 + doorLipThickness/2, 0, doorLipDepth/2]} castShadow>
+                <boxGeometry args={[doorLipThickness, moduleHeight, doorLipDepth + doorFaceThickness]} />
+                <meshStandardMaterial color={panelColor} roughness={0.6} metalness={0.3} />
+              </mesh>
+              
+              {/* Lock at top center */}
+              <mesh position={[0, moduleHeight/2 - 0.018, -doorFaceThickness - 0.002]} rotation={[Math.PI/2, 0, 0]}>
+                <cylinderGeometry args={[0.010, 0.010, 0.004, 16]} />
+                <meshStandardMaterial color={COLORS.HANDLE_CHROME} roughness={0.3} metalness={0.8} />
+              </mesh>
+              <mesh position={[0, moduleHeight/2 - 0.018, -doorFaceThickness - 0.005]}>
+                <boxGeometry args={[0.003, 0.007, 0.001]} />
+                <meshStandardMaterial color="#111" />
+              </mesh>
+            </group>
           </group>
         </group>
       </group>
-      
-      {/* Mounting flanges */}
-      {[-1, 1].map((side, i) => (
-        <mesh key={`flange-${i}`} position={[side * (width/2 + 0.01), 0, 0]} castShadow>
-          <boxGeometry args={[0.02, height, 0.03]} />
-          <meshStandardMaterial color={COLORS.STEEL_GREY} roughness={0.5} metalness={0.5} />
-        </mesh>
-      ))}
     </group>
   );
 };
