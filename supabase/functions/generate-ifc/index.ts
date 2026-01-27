@@ -229,6 +229,9 @@ DATA;`;
                        configuration.selections?.mobility === 'C' ||
                        referenceCode.endsWith('-C'); // Config code ends with -C for castors
     bodyRepresentation = createWorkbenchGeometry(dimensions, createEntity, geometricContext, configuration, product, isIndustrial, hasCastors);
+  } else if (product.id.includes('argent')) {
+    // Argent Server Rack geometry (enclosure with posts, rails, doors)
+    bodyRepresentation = createArgentServerRackGeometry(dimensions, createEntity, geometricContext, configuration, product);
   } else {
     // Cabinet geometry (carcass + drawers)
     bodyRepresentation = createCabinetGeometry(dimensions, createEntity, geometricContext, configuration, product);
@@ -491,6 +494,151 @@ function createCabinetGeometry(
 // (see createCabinetGeometry function) for a consolidated LOD 200-300 representation.
 // Drawer fronts are extruded as part of the cabinet's ProductDefinitionShape.
 // Drawer metadata (heights, counts, configuration) is included in Pset_BoscotekCabinet.
+
+/**
+ * Create Argent Server Rack geometry
+ * LOD 200-300: Enclosure with corner posts, rails, panels, and doors
+ * 
+ * Geometry Components:
+ * 1. Corner posts (4 vertical posts)
+ * 2. Frame rails (horizontal connecting elements)
+ * 3. Side panels (left and right)
+ * 4. Rear panel/door
+ * 5. Front door (solid or perforated)
+ * 6. 19" mounting rails (internal)
+ */
+function createArgentServerRackGeometry(
+  dimensions: any,
+  createEntity: Function,
+  contextId: number,
+  configuration?: any,
+  product?: any
+): number {
+  const E = (value: string) => ({ __ifcEnum: value });
+  
+  // Extract dimensions - Argent uses mm in configuration
+  const widthMm = configuration?.selections?.width ? 
+    parseInt(String(configuration.selections.width).replace('width-', '')) : 
+    (dimensions.width * 1000) || 600;
+  const depthMm = configuration?.selections?.depth ?
+    parseInt(String(configuration.selections.depth).replace('depth-', '')) :
+    (dimensions.depth * 1000) || 800;
+  
+  // RU height from selection
+  const ruSelection = configuration?.selections?.['ru-height'] || configuration?.selections?.ru_height;
+  const ruHeight = ruSelection ? parseInt(String(ruSelection).replace('ru-', '')) : 42;
+  const heightMm = ruHeight * 44.45 + 100; // Add 100mm for top/bottom frames
+  
+  // Convert to meters for IFC
+  const width = widthMm / 1000;
+  const depth = depthMm / 1000;
+  const height = heightMm / 1000;
+  
+  console.log('Creating Argent Server Rack IFC geometry:', {
+    widthMm, depthMm, heightMm, ruHeight,
+    widthM: width, depthM: depth, heightM: height,
+    productId: product?.id
+  });
+  
+  const solids: number[] = [];
+  
+  // Standard rack construction dimensions (in meters)
+  const postSize = 0.05; // 50mm corner posts
+  const frameThickness = 0.003; // 3mm steel panels
+  const railWidth = 0.025; // 25mm mounting rail width
+  
+  const extrusionDir = createEntity('IFCDIRECTION', [0., 0., 1.]);
+  
+  // Helper to create extruded box
+  const createBox = (cx: number, cy: number, cz: number, w: number, d: number, h: number): number => {
+    const profilePoint = createEntity('IFCCARTESIANPOINT', [cx - w/2, cy - d/2]);
+    const profileAxis = createEntity('IFCAXIS2PLACEMENT2D', profilePoint, null);
+    const profile = createEntity('IFCRECTANGLEPROFILEDEF', E('AREA'), null, profileAxis, w, d);
+    
+    const positionPoint = createEntity('IFCCARTESIANPOINT', [0., 0., cz]);
+    const position = createEntity('IFCAXIS2PLACEMENT3D', positionPoint, null, null);
+    
+    return createEntity('IFCEXTRUDEDAREASOLID', profile, position, extrusionDir, h);
+  };
+  
+  // 1. CORNER POSTS (4 vertical posts)
+  // Front-left post
+  solids.push(createBox(-width/2 + postSize/2, depth/2 - postSize/2, 0, postSize, postSize, height));
+  // Front-right post
+  solids.push(createBox(width/2 - postSize/2, depth/2 - postSize/2, 0, postSize, postSize, height));
+  // Rear-left post
+  solids.push(createBox(-width/2 + postSize/2, -depth/2 + postSize/2, 0, postSize, postSize, height));
+  // Rear-right post
+  solids.push(createBox(width/2 - postSize/2, -depth/2 + postSize/2, 0, postSize, postSize, height));
+  
+  // 2. TOP AND BOTTOM FRAME RAILS
+  const railHeight = 0.04; // 40mm frame rails
+  
+  // Bottom frame - front
+  solids.push(createBox(0, depth/2 - postSize/2, 0, width - postSize * 2, postSize, railHeight));
+  // Bottom frame - rear
+  solids.push(createBox(0, -depth/2 + postSize/2, 0, width - postSize * 2, postSize, railHeight));
+  // Bottom frame - left
+  solids.push(createBox(-width/2 + postSize/2, 0, 0, postSize, depth - postSize * 2, railHeight));
+  // Bottom frame - right
+  solids.push(createBox(width/2 - postSize/2, 0, 0, postSize, depth - postSize * 2, railHeight));
+  
+  // Top frame - front
+  solids.push(createBox(0, depth/2 - postSize/2, height - railHeight, width - postSize * 2, postSize, railHeight));
+  // Top frame - rear
+  solids.push(createBox(0, -depth/2 + postSize/2, height - railHeight, width - postSize * 2, postSize, railHeight));
+  // Top frame - left
+  solids.push(createBox(-width/2 + postSize/2, 0, height - railHeight, postSize, depth - postSize * 2, railHeight));
+  // Top frame - right
+  solids.push(createBox(width/2 - postSize/2, 0, height - railHeight, postSize, depth - postSize * 2, railHeight));
+  
+  // 3. SIDE PANELS (solid or vented)
+  const panelHeight = height - railHeight * 2;
+  const panelZ = railHeight;
+  
+  // Left side panel
+  solids.push(createBox(-width/2 + frameThickness/2, 0, panelZ, frameThickness, depth - postSize * 2, panelHeight));
+  // Right side panel
+  solids.push(createBox(width/2 - frameThickness/2, 0, panelZ, frameThickness, depth - postSize * 2, panelHeight));
+  
+  // 4. REAR PANEL
+  solids.push(createBox(0, -depth/2 + frameThickness/2, panelZ, width - postSize * 2, frameThickness, panelHeight));
+  
+  // 5. FRONT DOOR (simplified as single panel)
+  const doorThickness = 0.004; // 4mm door
+  solids.push(createBox(0, depth/2 - doorThickness/2, panelZ, width - postSize * 2, doorThickness, panelHeight));
+  
+  // 6. TOP PANEL (roof)
+  solids.push(createBox(0, 0, height - frameThickness, width - postSize * 2, depth - postSize * 2, frameThickness));
+  
+  // 7. 19" MOUNTING RAILS (internal, front pair)
+  const railInset = 0.08; // 80mm from front
+  const railDepth = 0.025;
+  const internalRailHeight = panelHeight - 0.02;
+  
+  // Front-left mounting rail
+  solids.push(createBox(-width/2 + postSize + railWidth/2 + 0.01, depth/2 - railInset, panelZ + 0.01, railWidth, railDepth, internalRailHeight));
+  // Front-right mounting rail  
+  solids.push(createBox(width/2 - postSize - railWidth/2 - 0.01, depth/2 - railInset, panelZ + 0.01, railWidth, railDepth, internalRailHeight));
+  
+  // Rear mounting rails (if 4-post)
+  const rearRailInset = 0.08;
+  solids.push(createBox(-width/2 + postSize + railWidth/2 + 0.01, -depth/2 + rearRailInset, panelZ + 0.01, railWidth, railDepth, internalRailHeight));
+  solids.push(createBox(width/2 - postSize - railWidth/2 - 0.01, -depth/2 + rearRailInset, panelZ + 0.01, railWidth, railDepth, internalRailHeight));
+  
+  console.log(`Argent Server Rack IFC: ${solids.length} solid components created`);
+  
+  // Create composite solid from all parts
+  const shapeRepresentation = createEntity(
+    'IFCSHAPEREPRESENTATION',
+    contextId,
+    'Body',
+    'SweptSolid',
+    solids
+  );
+  
+  return createEntity('IFCPRODUCTDEFINITIONSHAPE', null, null, [shapeRepresentation]);
+}
 
 /**
  * Create Industrial Storage Cupboard geometry
